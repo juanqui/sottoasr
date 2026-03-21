@@ -3,12 +3,15 @@
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
+  import type { PermissionStatus } from '../utils/tauri';
 
-  type Step = 'welcome' | 'permissions' | 'model' | 'ready' | 'error';
+  type Step = 'welcome' | 'permissions' | 'model' | 'ready' | 'restart' | 'error';
 
   let currentStep = $state<Step>('welcome');
-  let micPermission = $state(false);
+  let micPermission = $state<string>('not_determined'); // "authorized", "denied", "not_determined", "restricted"
   let axPermission = $state(false);
+  let axFunctional = $state(false);
+  let needsRestart = $state(false);
   let backendName = $state('');
   let progressMessage = $state('');
   let progressPercent = $state(0);
@@ -18,8 +21,9 @@
   // Poll interval for permission checks
   let permissionPollInterval: ReturnType<typeof setInterval> | null = null;
 
-  // Derived: both permissions granted
-  let allPermissionsGranted = $derived(micPermission && axPermission);
+  // Derived: both permissions granted and functional
+  let micGranted = $derived(micPermission === 'authorized');
+  let allPermissionsGranted = $derived(micGranted && axPermission && axFunctional);
 
   onMount(async () => {
     try {
@@ -82,15 +86,46 @@
 
   async function checkPermissions() {
     try {
-      micPermission = await invoke<boolean>('check_microphone_permission');
-      axPermission = await invoke<boolean>('check_accessibility_permission');
+      const status = await invoke<PermissionStatus>('check_all_permissions');
+      micPermission = status.microphone;
+      axPermission = status.accessibility_api;
+      axFunctional = status.accessibility_functional;
+      needsRestart = status.needs_restart;
     } catch (e) {
       console.error('Permission check failed:', e);
     }
   }
 
+  async function requestMicrophone() {
+    try {
+      await invoke('request_microphone_permission');
+      // Recheck after prompt
+      setTimeout(checkPermissions, 500);
+    } catch (e) {
+      console.error('Microphone request failed:', e);
+    }
+  }
+
   async function requestAccessibility() {
     await invoke('request_accessibility_permission');
+  }
+
+  async function openAccessibilitySettings() {
+    await invoke('open_accessibility_settings');
+  }
+
+  async function openMicrophoneSettings() {
+    await invoke('open_microphone_settings');
+  }
+
+  async function restartApp() {
+    try {
+      await invoke('restart', {});
+    } catch {
+      // tauri-plugin-process restart
+      const { relaunch } = await import('@tauri-apps/plugin-process');
+      await relaunch();
+    }
   }
 
   function goToPermissions() {
@@ -100,6 +135,13 @@
 
   async function startSetup() {
     stopPermissionPolling();
+
+    // If accessibility needs restart, go to restart step instead
+    if (needsRestart) {
+      currentStep = 'restart';
+      return;
+    }
+
     isProcessing = true;
     currentStep = 'model';
     progressMessage = 'Initializing speech recognition...';
@@ -190,10 +232,12 @@
       <p class="subtitle">Sotto needs two permissions to work:</p>
 
       <div class="permission-list">
-        <div class="permission-item" class:granted={micPermission}>
+        <div class="permission-item" class:granted={micGranted}>
           <div class="permission-status">
-            {#if micPermission}
+            {#if micGranted}
               <span class="check">✓</span>
+            {:else if micPermission === 'denied'}
+              <span class="denied">✗</span>
             {:else}
               <span class="pending">○</span>
             {/if}
@@ -202,15 +246,23 @@
             <strong>Microphone</strong>
             <span>Required to capture your speech</span>
           </div>
-          {#if !micPermission}
-            <span class="permission-note">Will be requested on first recording</span>
+          {#if micPermission === 'not_determined'}
+            <button class="secondary small" onclick={requestMicrophone}>
+              Grant Access
+            </button>
+          {:else if micPermission === 'denied'}
+            <button class="secondary small" onclick={openMicrophoneSettings}>
+              Open Settings
+            </button>
           {/if}
         </div>
 
-        <div class="permission-item" class:granted={axPermission}>
+        <div class="permission-item" class:granted={axPermission && axFunctional}>
           <div class="permission-status">
-            {#if axPermission}
+            {#if axPermission && axFunctional}
               <span class="check">✓</span>
+            {:else if needsRestart}
+              <span class="warning-icon">!</span>
             {:else}
               <span class="pending">○</span>
             {/if}
@@ -219,8 +271,10 @@
             <strong>Accessibility</strong>
             <span>Required to paste text at your cursor</span>
           </div>
-          {#if !axPermission}
-            <button class="secondary small" onclick={requestAccessibility}>
+          {#if needsRestart}
+            <span class="permission-note restart-note">Restart required</span>
+          {:else if !axPermission}
+            <button class="secondary small" onclick={openAccessibilitySettings}>
               Open System Settings
             </button>
           {/if}
@@ -231,10 +285,18 @@
         <p class="note success-note">
           All permissions granted — you're ready to continue!
         </p>
+      {:else if needsRestart}
+        <p class="note warning-note">
+          Accessibility permission is granted but requires a <strong>restart</strong> to take effect.
+          You can continue setup and restart afterwards.
+        </p>
+      {:else if micPermission === 'denied'}
+        <p class="note">
+          Microphone access was denied. Open <strong>System Settings</strong> to grant it.
+        </p>
       {:else if !axPermission}
         <p class="note">
-          Make sure Sotto is toggled <strong>on</strong> in Accessibility settings.
-          Paste-at-cursor won't work without it.
+          Toggle Sotto <strong>on</strong> in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
         </p>
       {/if}
 
@@ -302,6 +364,30 @@
       <button class="primary" onclick={closeOnboarding}>
         Start Using Sotto
       </button>
+    </div>
+
+  <!-- Step: Restart Required -->
+  {:else if currentStep === 'restart'}
+    <div class="step">
+      <div class="icon-large warning-icon-large">!</div>
+      <h2>Restart Required</h2>
+      <p class="subtitle">
+        Accessibility permission has been granted, but macOS requires
+        an app restart for it to take full effect.
+      </p>
+      <p class="note">
+        Without restarting, Sotto won't be able to paste transcribed text
+        at your cursor. Your settings and model data will be preserved.
+      </p>
+
+      <div class="button-row">
+        <button class="secondary" onclick={closeOnboarding}>
+          Later
+        </button>
+        <button class="primary" onclick={restartApp}>
+          Restart Now
+        </button>
+      </div>
     </div>
 
   <!-- Error State -->
@@ -433,6 +519,11 @@
   }
   .check { color: #22c55e; }
   .pending { color: #666; }
+  .denied { color: #ef4444; }
+  .warning-icon { color: #f59e0b; font-weight: bold; }
+  .warning-icon-large { color: #f59e0b; }
+  .warning-note { color: #f59e0b; }
+  .restart-note { color: #f59e0b; font-weight: 500; }
   .permission-info {
     flex: 1;
   }

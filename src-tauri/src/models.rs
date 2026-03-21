@@ -4,10 +4,19 @@ use chrono::{DateTime, Utc};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
+    /// The final text (cleaned if LLM was used, raw otherwise)
     pub text: String,
     pub duration_ms: u64,
     pub created_at: DateTime<Utc>,
     pub word_count: usize,
+    #[serde(default)]
+    pub cancelled: bool,
+    /// Raw ASR output before LLM cleanup (None if LLM was not used)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_text: Option<String>,
+    /// Whether LLM cleanup was applied to this transcription
+    #[serde(default)]
+    pub llm_applied: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -15,6 +24,7 @@ pub enum AppStateEnum {
     Idle,
     Recording,
     Transcribing,
+    CleaningUp,
     Pasting,
 }
 
@@ -30,6 +40,10 @@ pub struct Settings {
     pub language: String,
     pub max_history: usize,
     pub launch_at_login: bool,
+    #[serde(default)]
+    pub llm_cleanup_enabled: bool,
+    #[serde(default)]
+    pub llm_markdown_mode: bool,
 }
 
 impl Default for Settings {
@@ -45,8 +59,21 @@ impl Default for Settings {
             language: "auto".into(),
             max_history: 500,
             launch_at_login: false,
+            llm_cleanup_enabled: false,
+            llm_markdown_mode: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmStatus {
+    pub available: bool,
+    pub unavailable_reason: Option<String>,
+    pub downloaded: bool,
+    pub downloading: bool,
+    pub loaded: bool,
+    pub model_name: String,
+    pub model_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

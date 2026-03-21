@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use crate::models::ModelStatus;
 
 /// Get the current ASR backend name at compile time.

@@ -4,6 +4,10 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [svelte()],
+  server: {
+    port: 14517,
+    strictPort: true,
+  },
   build: {
     rollupOptions: {
       input: {
@@ -12,6 +16,7 @@ export default defineConfig({
         history: resolve(__dirname, 'history.html'),
         settings: resolve(__dirname, 'settings.html'),
         onboarding: resolve(__dirname, 'onboarding.html'),
+        about: resolve(__dirname, 'about.html'),
       },
     },
   },

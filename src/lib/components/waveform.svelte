@@ -37,21 +37,28 @@
 
   // Accept new levels from parent (pushed from Tauri events)
   $effect(() => {
-    if (levels.length > 0) {
-      const latest = levels[levels.length - 1];
-      ringBuffer[writeIndex] = latest;
-      writeIndex = (writeIndex + 1) % BUFFER_SIZE;
-      sampleCount++;
-
-      // Update rolling max from the entire buffer
-      let max = 0.005; // floor
-      for (let i = 0; i < BUFFER_SIZE; i++) {
-        if (ringBuffer[i] > max) max = ringBuffer[i];
-      }
-      // Smooth the max — decay slowly so it doesn't jump
-      rollingMax = rollingMax * 0.95 + max * 0.05;
-      if (rollingMax < 0.005) rollingMax = 0.005;
+    if (levels.length === 0) {
+      // Clear ring buffer when levels are reset (new recording started)
+      ringBuffer.fill(0);
+      writeIndex = 0;
+      sampleCount = 0;
+      rollingMax = 0.005;
+      return;
     }
+
+    const latest = levels[levels.length - 1];
+    ringBuffer[writeIndex] = latest;
+    writeIndex = (writeIndex + 1) % BUFFER_SIZE;
+    sampleCount++;
+
+    // Update rolling max from the entire buffer
+    let max = 0.005; // floor
+    for (let i = 0; i < BUFFER_SIZE; i++) {
+      if (ringBuffer[i] > max) max = ringBuffer[i];
+    }
+    // Smooth the max — decay slowly so it doesn't jump
+    rollingMax = rollingMax * 0.95 + max * 0.05;
+    if (rollingMax < 0.005) rollingMax = 0.005;
   });
 
   function render() {

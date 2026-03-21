@@ -1,8 +1,9 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex as TokioMutex;
 use crate::asr::engine::AsrEngine;
 use crate::audio::capture::AudioCapture;
+use crate::llm::engine::LlmEngine;
 use crate::models::{AppStateEnum, Settings, Transcription};
 
 pub struct AppState {
@@ -18,6 +19,10 @@ pub struct AppState {
     pub audio_receiver: StdMutex<std::sync::mpsc::Receiver<Vec<f32>>>,
     // ASR engine
     pub asr_engine: TokioMutex<Box<dyn AsrEngine>>,
+    // LLM engine for transcript cleanup
+    pub llm_engine: TokioMutex<Option<LlmEngine>>,
+    // Monotonic job ID for stale-result prevention
+    pub current_job_id: AtomicU64,
 }
 
 impl AppState {
@@ -25,7 +30,7 @@ impl AppState {
         let (tx, rx) = std::sync::mpsc::channel();
         Self {
             current_state: StdMutex::new(AppStateEnum::Idle),
-            settings: TokioMutex::new(Settings::default()),
+            settings: TokioMutex::new(crate::commands::settings::load_persisted_settings()),
             last_transcription: TokioMutex::new(None),
             is_recording: AtomicBool::new(false),
             is_model_loaded: AtomicBool::new(false),
@@ -33,7 +38,21 @@ impl AppState {
             audio_sender: StdMutex::new(tx),
             audio_receiver: StdMutex::new(rx),
             asr_engine: TokioMutex::new(crate::asr::engine::create_engine()),
+            llm_engine: TokioMutex::new(None),
+            current_job_id: AtomicU64::new(0),
         }
+    }
+
+    /// Get a new job ID and set it as current.
+    pub fn new_job(&self) -> u64 {
+        let id = crate::llm::engine::next_job_id();
+        self.current_job_id.store(id, std::sync::atomic::Ordering::SeqCst);
+        id
+    }
+
+    /// Check if the given job ID is still the current one.
+    pub fn is_current_job(&self, id: u64) -> bool {
+        self.current_job_id.load(std::sync::atomic::Ordering::SeqCst) == id
     }
 
     pub fn set_state(&self, new_state: AppStateEnum) {

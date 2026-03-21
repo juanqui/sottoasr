@@ -16,6 +16,8 @@ const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
   max_history: 500,
   launch_at_login: false,
+  llm_cleanup_enabled: false,
+  llm_markdown_mode: false,
 };
 
 class SettingsStore {

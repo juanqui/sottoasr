@@ -19,6 +19,12 @@ src-tauri/gen/
 # ASR models
 models/
 
+# Benchmark artifacts (keep scripts, dataset, and prompts; ignore model cache, venv, results)
+benchmarks/llm/model_cache/
+benchmarks/llm/.venv/
+benchmarks/llm/results/
+benchmarks/llm/__pycache__/
+
 # Environment
 .env
 .env.local

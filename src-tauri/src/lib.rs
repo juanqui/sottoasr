@@ -1,8 +1,11 @@
+#![deny(warnings)]
+
 mod models;
 mod state;
 mod commands;
 mod audio;
 mod asr;
+mod llm;
 mod paste;
 mod hotkeys;
 mod tray;
@@ -28,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_nspanel::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             // Recording
@@ -39,13 +43,24 @@ pub fn run() {
             commands::transcription::get_last_transcription,
             commands::transcription::delete_transcription,
             commands::transcription::clear_transcriptions,
+            commands::transcription::export_transcriptions_csv,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::settings::apply_shortcuts,
             // Permissions
             commands::permissions::check_microphone_permission,
             commands::permissions::check_accessibility_permission,
             commands::permissions::request_accessibility_permission,
+            commands::permissions::request_microphone_permission,
+            commands::permissions::check_all_permissions,
+            commands::permissions::open_accessibility_settings,
+            commands::permissions::fix_accessibility_permission,
+            commands::permissions::open_input_monitoring_settings,
+            commands::permissions::open_microphone_settings,
+            // Key capture (for shortcut recorder)
+            commands::keycapture::start_key_capture,
+            commands::keycapture::stop_key_capture,
             // Setup / onboarding
             commands::setup::get_asr_backend,
             commands::setup::get_model_status,
@@ -53,6 +68,13 @@ pub fn run() {
             commands::setup::init_asr,
             commands::setup::download_model,
             commands::setup::complete_setup,
+            // LLM transcript cleanup
+            commands::llm::get_llm_status,
+            commands::llm::download_llm_model,
+            commands::llm::cancel_llm_download,
+            commands::llm::delete_llm_model,
+            commands::llm::load_llm_model,
+            commands::llm::unload_llm_model,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -66,68 +88,29 @@ pub fn run() {
                 log::info!("Set activation policy to Accessory (no Dock icon)");
             }
 
-            // Prompt for Accessibility permission at launch.
-            // Global shortcuts SILENTLY FAIL without it on macOS.
+            // Check Accessibility permission at launch (don't prompt — onboarding handles that).
             #[cfg(target_os = "macos")]
             {
-                let ax_trusted = unsafe {
-                    extern "C" {
-                        fn AXIsProcessTrusted() -> bool;
-                    }
-                    AXIsProcessTrusted()
-                };
+                let ax_trusted = paste::is_accessibility_trusted();
                 if !ax_trusted {
-                    log::warn!("Accessibility permission NOT granted — hotkeys will not work!");
-                    log::info!("Requesting Accessibility permission via system prompt...");
-                    // Trigger the macOS prompt that adds this app to the Accessibility list
-                    unsafe {
-                        extern "C" {
-                            fn CFStringCreateWithCString(
-                                alloc: *const std::ffi::c_void,
-                                cstr: *const std::ffi::c_char,
-                                encoding: u32,
-                            ) -> *const std::ffi::c_void;
-                            fn CFDictionaryCreate(
-                                alloc: *const std::ffi::c_void,
-                                keys: *const *const std::ffi::c_void,
-                                values: *const *const std::ffi::c_void,
-                                count: isize,
-                                key_callbacks: *const std::ffi::c_void,
-                                value_callbacks: *const std::ffi::c_void,
-                            ) -> *const std::ffi::c_void;
-                            fn AXIsProcessTrustedWithOptions(
-                                options: *const std::ffi::c_void,
-                            ) -> bool;
-                            fn CFRelease(cf: *const std::ffi::c_void);
-                            static kCFBooleanTrue: *const std::ffi::c_void;
-                            static kCFTypeDictionaryKeyCallBacks: std::ffi::c_void;
-                            static kCFTypeDictionaryValueCallBacks: std::ffi::c_void;
-                        }
-                        let key_cstr = b"AXTrustedCheckOptionPrompt\0".as_ptr() as *const std::ffi::c_char;
-                        let key = CFStringCreateWithCString(std::ptr::null(), key_cstr, 0x08000100);
-                        let keys = [key];
-                        let values = [kCFBooleanTrue];
-                        let options = CFDictionaryCreate(
-                            std::ptr::null(), keys.as_ptr(), values.as_ptr(), 1,
-                            &kCFTypeDictionaryKeyCallBacks as *const _ as *const std::ffi::c_void,
-                            &kCFTypeDictionaryValueCallBacks as *const _ as *const std::ffi::c_void,
-                        );
-                        let _ = AXIsProcessTrustedWithOptions(options);
-                        CFRelease(options);
-                        CFRelease(key);
-                    }
+                    log::warn!("Accessibility permission NOT granted — hotkeys and paste will not work!");
                 } else {
                     log::info!("Accessibility permission granted");
+                    paste::warmup_cgevent_pipeline();
                 }
             }
 
+            // Start CGEventTap thread for key capture (used by shortcut recorder)
+            // Must start after accessibility check — needs the permission to create taps
+            commands::keycapture::init_key_capture_thread(&handle);
+
             // Setup tray menu
             tray::menu::setup_tray_menu(&handle)
-                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                .map_err(|e| Box::new(std::io::Error::other(e)))?;
 
             // Setup hotkeys
             hotkeys::manager::setup_hotkeys(&handle)
-                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                .map_err(|e| Box::new(std::io::Error::other(e)))?;
 
             // Check if onboarding is needed and open the setup window
             let needs_setup = !asr::model::is_model_available();
@@ -144,7 +127,7 @@ pub fn run() {
                 .resizable(false)
                 .center()
                 .build()
-                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+                .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
             } else {
                 log::info!("Models available — ready to use");
                 // Initialize ASR in background
@@ -186,7 +169,7 @@ pub fn run() {
                 if !has_visible_windows {
                     #[cfg(target_os = "macos")]
                     {
-                        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         log::info!("All windows closed — switched back to Accessory (no Dock icon)");
                     }
                 }
@@ -195,8 +178,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Sotto")
         .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                // Only prevent exit when triggered by last window closing (code == None).
+                // Allow explicit exit via app.exit() (code == Some(0)).
+                if code.is_none() {
+                    api.prevent_exit();
+                }
             }
         });
 }

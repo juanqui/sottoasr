@@ -8,9 +8,12 @@ export interface Transcription {
   duration_ms: number;
   created_at: string;
   word_count: number;
+  cancelled?: boolean;
+  raw_text?: string;
+  llm_applied?: boolean;
 }
 
-export type AppStateEnum = 'Idle' | 'Recording' | 'Transcribing' | 'Pasting';
+export type AppStateEnum = 'Idle' | 'Recording' | 'Transcribing' | 'CleaningUp' | 'Pasting';
 
 export interface Settings {
   push_to_talk_shortcut: string;
@@ -23,6 +26,8 @@ export interface Settings {
   language: string;
   max_history: number;
   launch_at_login: boolean;
+  llm_cleanup_enabled: boolean;
+  llm_markdown_mode: boolean;
 }
 
 export interface ModelStatus {
@@ -65,6 +70,10 @@ export function clearTranscriptions(): Promise<void> {
   return invoke('clear_transcriptions');
 }
 
+export function exportTranscriptionsCsv(): Promise<string> {
+  return invoke('export_transcriptions_csv');
+}
+
 // ---- Settings commands ----
 
 export function getSettings(): Promise<Settings> {
@@ -75,7 +84,18 @@ export function updateSettings(newSettings: Settings): Promise<void> {
   return invoke('update_settings', { newSettings });
 }
 
-// ---- Permission commands ----
+// ---- Permission types and commands ----
+
+export interface PermissionStatus {
+  /** "authorized", "denied", "not_determined", or "restricted" */
+  microphone: string;
+  /** AXIsProcessTrusted() result */
+  accessibility_api: boolean;
+  /** Functional test result (AXUIElement query) */
+  accessibility_functional: boolean;
+  /** True if API says trusted but functional test fails (needs app restart) */
+  needs_restart: boolean;
+}
 
 export function checkMicrophonePermission(): Promise<boolean> {
   return invoke('check_microphone_permission');
@@ -87,6 +107,22 @@ export function checkAccessibilityPermission(): Promise<boolean> {
 
 export function requestAccessibilityPermission(): Promise<void> {
   return invoke('request_accessibility_permission');
+}
+
+export function requestMicrophonePermission(): Promise<boolean> {
+  return invoke('request_microphone_permission');
+}
+
+export function checkAllPermissions(): Promise<PermissionStatus> {
+  return invoke('check_all_permissions');
+}
+
+export function openAccessibilitySettings(): Promise<void> {
+  return invoke('open_accessibility_settings');
+}
+
+export function openMicrophoneSettings(): Promise<void> {
+  return invoke('open_microphone_settings');
 }
 
 // ---- Setup / onboarding commands ----
@@ -126,4 +162,40 @@ export function downloadModel(): Promise<void> {
 
 export function completeSetup(): Promise<SetupResult> {
   return invoke('complete_setup');
+}
+
+// ---- LLM transcript cleanup commands ----
+
+export interface LlmStatus {
+  available: boolean;
+  unavailable_reason: string | null;
+  downloaded: boolean;
+  downloading: boolean;
+  loaded: boolean;
+  model_name: string;
+  model_path: string | null;
+}
+
+export function getLlmStatus(): Promise<LlmStatus> {
+  return invoke('get_llm_status');
+}
+
+export function downloadLlmModel(): Promise<void> {
+  return invoke('download_llm_model');
+}
+
+export function cancelLlmDownload(): Promise<void> {
+  return invoke('cancel_llm_download');
+}
+
+export function deleteLlmModel(): Promise<void> {
+  return invoke('delete_llm_model');
+}
+
+export function loadLlmModel(): Promise<void> {
+  return invoke('load_llm_model');
+}
+
+export function unloadLlmModel(): Promise<void> {
+  return invoke('unload_llm_model');
 }

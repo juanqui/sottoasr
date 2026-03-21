@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, WebviewUrl,
+    AppHandle, Manager, WebviewUrl,
 };
 
 pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
@@ -45,7 +45,7 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
                     tauri::image::Image::new(&[], 1, 1)
                 }))
                 .icon_as_template(false)
-                .menu_on_left_click(true)
+                .show_menu_on_left_click(true)
                 .build(app)
                 .map_err(|e| format!("Failed to create tray icon: {}", e))?
         }
@@ -64,17 +64,10 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
                         let state: tauri::State<'_, crate::state::AppState> = app.state();
                         let last = state.last_transcription.lock().await;
                         if let Some(t) = last.as_ref() {
-                            let _ = std::process::Command::new("pbcopy")
-                                .stdin(std::process::Stdio::piped())
-                                .spawn()
-                                .and_then(|mut child| {
-                                    use std::io::Write;
-                                    if let Some(stdin) = child.stdin.as_mut() {
-                                        stdin.write_all(t.text.as_bytes())?;
-                                    }
-                                    child.wait()
-                                });
-                            log::info!("Copied to clipboard: \"{}\"", &t.text[..t.text.len().min(50)]);
+                            match crate::paste::copy_to_clipboard(&t.text) {
+                                Ok(()) => log::info!("Copied to clipboard: \"{}\"", &t.text[..t.text.len().min(50)]),
+                                Err(e) => log::error!("Failed to copy to clipboard: {}", e),
+                            }
                         } else {
                             log::info!("No transcription to copy");
                         }
@@ -90,7 +83,8 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
                 open_or_focus_window(app, "settings", "settings.html", "Sotto — Settings", 520.0, 600.0);
             }
             "about" => {
-                log::info!("About Sotto v0.1.0");
+                log::info!("Tray: Opening about window");
+                open_or_focus_window(app, "about", "about.html", "About Sotto", 480.0, 960.0);
             }
             "quit" => {
                 log::info!("Quitting Sotto");
@@ -110,7 +104,7 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
 fn open_or_focus_window(app: &AppHandle, label: &str, url: &str, title: &str, width: f64, height: f64) {
     // Switch to Regular so macOS allows us to show windows and the window appears in front
     #[cfg(target_os = "macos")]
-    app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();

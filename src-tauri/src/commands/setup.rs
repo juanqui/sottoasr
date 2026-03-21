@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use crate::asr::model;
 use crate::models::ModelStatus;

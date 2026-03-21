@@ -1,35 +1,110 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_nspanel::{tauri_panel, ManagerExt, WebviewWindowExt as _};
 use crate::models::AppStateEnum;
 use crate::state::AppState;
 
+// Define a non-activating NSPanel class for the overlay.
+// can_become_key_window: false ensures it never steals focus from the user's app.
+tauri_panel! {
+    panel!(OverlayPanel {
+        config: {
+            can_become_key_window: false,
+            is_floating_panel: true
+        }
+    })
+}
+
+/// Maximum recording duration before auto-stop (12 minutes).
+const MAX_RECORDING_SECS: u64 = 12 * 60;
+/// Seconds before max duration to show a warning (1 minute before).
+const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
+
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
+    // Load persisted settings to use saved shortcuts (not hardcoded defaults)
+    let settings = crate::commands::settings::load_persisted_settings();
+    register_shortcuts(
+        app,
+        &settings.push_to_talk_shortcut,
+        &settings.toggle_shortcut,
+        &settings.cancel_shortcut,
+    )
+}
+
+/// Re-register all shortcuts. Called at startup and when settings change.
+pub fn register_shortcuts(
+    app: &AppHandle,
+    ptt_shortcut: &str,
+    toggle_shortcut: &str,
+    cancel_shortcut: &str,
+) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    // Unregister all existing shortcuts first
+    let _ = app.global_shortcut().unregister_all();
 
     let app_handle = app.clone();
 
-    // Push-to-talk: Cmd+Shift+Space (hold to record, release to transcribe)
-    app.global_shortcut().on_shortcut("CommandOrControl+Shift+Space", move |_app, _shortcut, event| {
-        let app = app_handle.clone();
-        match event.state {
-            ShortcutState::Pressed => {
-                tauri::async_runtime::spawn(async move {
-                    handle_start_recording(&app);
-                });
-            }
-            ShortcutState::Released => {
-                tauri::async_runtime::spawn(async move {
-                    handle_stop_recording(&app).await;
-                });
-            }
+    // Extract the main (non-modifier) key from the push-to-talk shortcut for release polling.
+    // e.g., "CommandOrControl+Shift+Space" -> "Space" -> vk 0x31
+    let ptt_main_key = ptt_shortcut.split('+').next_back().unwrap_or("Space").to_string();
+
+    // Push-to-talk: start on press, poll for key release, stop when released
+    app.global_shortcut().on_shortcut(ptt_shortcut, move |_app, _shortcut, event| {
+        if event.state != ShortcutState::Pressed {
+            return;
         }
-    }).map_err(|e| format!("Failed to register push-to-talk shortcut: {}", e))?;
+        let app = app_handle.clone();
+        let main_key = ptt_main_key.clone();
+        tauri::async_runtime::spawn(async move {
+            let state: tauri::State<'_, AppState> = app.state();
+            if state.get_state() != AppStateEnum::Idle {
+                return;
+            }
+            handle_start_recording(&app);
+
+            // Poll for key release via CGEventSourceKeyState
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(vk) = crate::commands::keycapture::tauri_key_to_vk(&main_key) {
+                    let app_for_release = app.clone();
+                    std::thread::spawn(move || {
+                        // Wait briefly for the key to register as "down"
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+
+                        unsafe {
+                            extern "C" {
+                                fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
+                            }
+                            // Poll at ~30Hz until the key is released
+                            loop {
+                                std::thread::sleep(std::time::Duration::from_millis(33));
+                                // stateID 0 = kCGEventSourceStateCombinedSessionState
+                                let still_pressed = CGEventSourceKeyState(0, vk);
+                                if !still_pressed {
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Key released — stop recording
+                        let state: tauri::State<'_, AppState> = app_for_release.state();
+                        if state.get_state() == AppStateEnum::Recording {
+                            tauri::async_runtime::spawn(async move {
+                                handle_stop_recording(&app_for_release).await;
+                            });
+                        }
+                    });
+                }
+            }
+        });
+    }).map_err(|e| format!("Failed to register push-to-talk shortcut '{}': {}", ptt_shortcut, e))?;
 
     let app_handle2 = app.clone();
 
-    // Toggle mode: Cmd+Shift+D (press once to start, again to stop)
-    app.global_shortcut().on_shortcut("CommandOrControl+Shift+D", move |_app, _shortcut, event| {
+    // Toggle mode (press once to start, again to stop)
+    app.global_shortcut().on_shortcut(toggle_shortcut, move |_app, _shortcut, event| {
         if event.state == ShortcutState::Pressed {
             let app = app_handle2.clone();
             tauri::async_runtime::spawn(async move {
@@ -48,9 +123,28 @@ pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
                 }
             });
         }
-    }).map_err(|e| format!("Failed to register toggle shortcut: {}", e))?;
+    }).map_err(|e| format!("Failed to register toggle shortcut '{}': {}", toggle_shortcut, e))?;
 
-    log::info!("Hotkeys registered: Cmd+Shift+Space (push-to-talk), Cmd+Shift+D (toggle)");
+    let app_handle3 = app.clone();
+
+    // Cancel (cancel current recording)
+    app.global_shortcut().on_shortcut(cancel_shortcut, move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            let app = app_handle3.clone();
+            tauri::async_runtime::spawn(async move {
+                let state: tauri::State<'_, AppState> = app.state();
+                let current = state.get_state();
+                if current == AppStateEnum::Recording {
+                    handle_cancel_recording(&app).await;
+                }
+            });
+        }
+    }).map_err(|e| format!("Failed to register cancel shortcut '{}': {}", cancel_shortcut, e))?;
+
+    log::info!(
+        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle), '{}' (cancel)",
+        ptt_shortcut, toggle_shortcut, cancel_shortcut
+    );
     Ok(())
 }
 
@@ -100,6 +194,29 @@ fn handle_start_recording(app: &AppHandle) {
             // Show the overlay window
             show_overlay(app);
 
+            // Spawn auto-stop timer: warn at (MAX - WARNING) seconds, stop at MAX seconds
+            let app_for_timer = app.clone();
+            tokio::spawn(async move {
+                let warning_at = MAX_RECORDING_SECS - WARNING_BEFORE_LIMIT_SECS;
+                tokio::time::sleep(std::time::Duration::from_secs(warning_at)).await;
+                let state: tauri::State<'_, AppState> = app_for_timer.state();
+                if state.get_state() != AppStateEnum::Recording {
+                    return;
+                }
+                log::info!("Recording approaching limit — {}s warning", WARNING_BEFORE_LIMIT_SECS);
+                let _ = app_for_timer.emit(
+                    "recording-time-warning",
+                    serde_json::json!({ "remaining_secs": WARNING_BEFORE_LIMIT_SECS }),
+                );
+
+                tokio::time::sleep(std::time::Duration::from_secs(WARNING_BEFORE_LIMIT_SECS)).await;
+                let state: tauri::State<'_, AppState> = app_for_timer.state();
+                if state.get_state() == AppStateEnum::Recording {
+                    log::info!("Max recording duration ({}s) reached — auto-stopping", MAX_RECORDING_SECS);
+                    handle_stop_recording(&app_for_timer).await;
+                }
+            });
+
             log::info!("Recording started — microphone active");
         }
         Err(e) => {
@@ -127,8 +244,8 @@ async fn handle_stop_recording(app: &AppHandle) {
         capture.stop();
     }
 
-    // Hide the overlay
-    hide_overlay(app);
+    // Keep overlay visible through transcription and LLM cleanup.
+    // It will be hidden after paste/clipboard write completes.
 
     state.set_state(AppStateEnum::Transcribing);
     let _ = app.emit("recording-stopped", ());
@@ -199,6 +316,9 @@ async fn handle_stop_recording(app: &AppHandle) {
     let app_clone = app.clone();
     let temp_path_str = temp_path.to_string_lossy().to_string();
 
+    // Assign a job ID for stale-result prevention
+    let job_id = state.new_job();
+
     tokio::spawn(async move {
         let state: tauri::State<'_, AppState> = app_clone.state();
         let mut engine = state.asr_engine.lock().await;
@@ -206,6 +326,7 @@ async fn handle_stop_recording(app: &AppHandle) {
         log::info!("Starting transcription...");
 
         let result = engine.transcribe_file(&temp_path_str);
+        drop(engine); // Release ASR engine lock
 
         // Clean up temp file
         let _ = std::fs::remove_file(&temp_path);
@@ -214,12 +335,106 @@ async fn handle_stop_recording(app: &AppHandle) {
             Ok(asr_result) => {
                 log::info!("Transcription result: \"{}\" (RTF: {:.1}x)", &asr_result.text, asr_result.rtfx);
 
+                // Check if this job is still current (user may have started a new recording)
+                if !state.is_current_job(job_id) {
+                    log::info!("Job {} is stale, discarding transcription", job_id);
+                    return;
+                }
+
+                let raw_asr_text = asr_result.text.clone();
+                let mut final_text = asr_result.text.clone();
+                let mut llm_was_applied = false;
+
+                // LLM cleanup (if enabled and input is long enough)
+                let settings = state.settings.lock().await;
+                let llm_enabled = settings.llm_cleanup_enabled;
+                let markdown_mode = settings.llm_markdown_mode;
+                let auto_paste = settings.auto_paste;
+                let restore_clipboard = settings.restore_clipboard;
+                drop(settings);
+
+                if llm_enabled && final_text.split_whitespace().count() >= 5 {
+                    // Transition overlay to "Cleaning up..." state
+                    state.set_state(AppStateEnum::CleaningUp);
+                    let _ = app_clone.emit("state-changed", &AppStateEnum::CleaningUp);
+
+                    let mode = if markdown_mode {
+                        crate::llm::prompts::CleanupMode::Markdown
+                    } else {
+                        crate::llm::prompts::CleanupMode::Standard
+                    };
+
+                    {
+                        let mut llm_guard = state.llm_engine.lock().await;
+
+                        // Spawn sidecar on first use if not already running
+                        if llm_guard.is_none() {
+                            log::info!("Spawning LLM sidecar on first use...");
+                            match tokio::task::spawn_blocking(|| {
+                                crate::llm::engine::LlmEngine::spawn()
+                            }).await {
+                                Ok(Ok(engine)) => {
+                                    *llm_guard = Some(engine);
+                                }
+                                Ok(Err(e)) => {
+                                    log::warn!("Failed to spawn LLM sidecar: {}", e);
+                                }
+                                Err(e) => {
+                                    log::error!("LLM sidecar spawn panicked: {}", e);
+                                }
+                            }
+                        }
+
+                        // Run cleanup via sidecar (take/put pattern for spawn_blocking Send requirement)
+                        if let Some(mut llm) = llm_guard.take() {
+                            let text_for_cleanup = final_text.clone();
+
+                            let cleanup_result = tokio::time::timeout(
+                                std::time::Duration::from_secs(30),
+                                tokio::task::spawn_blocking(move || {
+                                    let result = llm.cleanup(&text_for_cleanup, mode);
+                                    (llm, result)
+                                }),
+                            ).await;
+
+                            match cleanup_result {
+                                Ok(Ok((llm_back, Ok(cleaned)))) => {
+                                    *llm_guard = Some(llm_back);
+                                    log::info!("LLM cleanup: {} → {} chars", final_text.len(), cleaned.len());
+                                    final_text = cleaned;
+                                    llm_was_applied = true;
+                                }
+                                Ok(Ok((llm_back, Err(e)))) => {
+                                    *llm_guard = Some(llm_back);
+                                    log::warn!("LLM cleanup failed: {}, using raw text", e);
+                                }
+                                Ok(Err(e)) => {
+                                    log::error!("LLM cleanup task panicked: {}, sidecar lost", e);
+                                }
+                                Err(_) => {
+                                    log::warn!("LLM cleanup timed out after 30s, using raw text");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check again if this job is still current
+                if !state.is_current_job(job_id) {
+                    log::info!("Job {} is stale after cleanup, discarding", job_id);
+                    hide_overlay(&app_clone);
+                    return;
+                }
+
                 let transcription = crate::models::Transcription {
                     id: uuid::Uuid::new_v4().to_string(),
-                    text: asr_result.text.clone(),
+                    text: final_text.clone(),
                     duration_ms: (asr_result.duration_secs * 1000.0) as u64,
                     created_at: chrono::Utc::now(),
-                    word_count: asr_result.text.split_whitespace().count(),
+                    word_count: final_text.split_whitespace().count(),
+                    cancelled: false,
+                    raw_text: if llm_was_applied { Some(raw_asr_text.clone()) } else { None },
+                    llm_applied: llm_was_applied,
                 };
 
                 // Save
@@ -231,23 +446,52 @@ async fn handle_stop_recording(app: &AppHandle) {
 
                 let _ = app_clone.emit("transcription-complete", &transcription);
 
-                // Paste at cursor
-                if !asr_result.text.trim().is_empty() {
-                    match crate::paste::paste_text(&asr_result.text) {
-                        Ok(()) => {
-                            log::info!("Text pasted at cursor");
-                            let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id }));
+                // Paste at cursor (if auto_paste is enabled), then hide overlay
+                if !final_text.trim().is_empty() {
+                    if auto_paste {
+                        let paste_result = if restore_clipboard {
+                            crate::paste::paste_text_and_restore(&final_text)
+                        } else {
+                            crate::paste::paste_text(&final_text)
+                        };
+
+                        match paste_result {
+                            Ok(()) => {
+                                log::info!("Text pasted at cursor");
+                                let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id }));
+                            }
+                            Err(e) => {
+                                log::error!("Paste failed: {}", e);
+                                let _ = app_clone.emit("paste-error", serde_json::json!({
+                                    "error": &e,
+                                    "text": &final_text,
+                                    "needs_restart": e.contains("restart"),
+                                    "needs_permission": e.contains("permission not granted"),
+                                }));
+                                let _ = crate::paste::copy_to_clipboard(&final_text);
+                                log::info!("Text copied to clipboard as fallback");
+                            }
                         }
-                        Err(e) => {
-                            log::error!("Paste failed: {}", e);
-                            let _ = app_clone.emit("paste-error", serde_json::json!({ "error": e }));
+                    } else {
+                        match crate::paste::copy_to_clipboard(&final_text) {
+                            Ok(()) => {
+                                log::info!("Text copied to clipboard (auto_paste disabled)");
+                                let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id, "clipboard_only": true }));
+                            }
+                            Err(e) => {
+                                log::error!("Clipboard copy failed: {}", e);
+                                let _ = app_clone.emit("paste-error", serde_json::json!({ "error": e }));
+                            }
                         }
                     }
                 }
+                // Hide overlay after paste/copy completes
+                hide_overlay(&app_clone);
             }
             Err(e) => {
                 log::error!("Transcription failed: {}", e);
                 let _ = app_clone.emit("transcription-error", serde_json::json!({ "error": e }));
+                hide_overlay(&app_clone);
             }
         }
 
@@ -258,76 +502,279 @@ async fn handle_stop_recording(app: &AppHandle) {
     log::info!("Recording stopped, transcription queued");
 }
 
-/// Show the floating overlay pill window. Creates it if it doesn't exist.
-fn show_overlay(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.show();
-        let _ = window.set_always_on_top(true);
-        position_overlay_bottom_center(&window);
-        log::info!("Overlay shown (existing window)");
+/// Cancel recording: stop mic, transcribe what we have, save as cancelled, don't paste.
+async fn handle_cancel_recording(app: &AppHandle) {
+    let state: tauri::State<'_, AppState> = app.state();
+    let current = state.get_state();
+
+    if current != AppStateEnum::Recording {
+        log::warn!("Cannot cancel recording: currently in {:?} state", current);
+        return;
+    }
+
+    // Stop audio capture
+    state.is_recording.store(false, Ordering::SeqCst);
+    {
+        let mut capture = state.audio_capture.lock().unwrap();
+        capture.stop();
+    }
+
+    // Hide the overlay
+    hide_overlay(app);
+
+    let _ = app.emit("recording-cancelled", ());
+    let _ = app.emit("state-changed", &AppStateEnum::Idle);
+
+    // Collect audio samples
+    let samples = {
+        let rx = state.audio_receiver.lock().unwrap();
+        let mut all = Vec::new();
+        while let Ok(chunk) = rx.try_recv() {
+            all.extend(chunk);
+        }
+        all
+    };
+
+    let sample_count = samples.len();
+    log::info!("Recording cancelled — {} samples collected", sample_count);
+
+    // If we have enough audio, transcribe it and save as cancelled
+    if sample_count >= 4000 {
+        let app_clone = app.clone();
+        let temp_path = std::env::temp_dir().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
+
+        let sample_rate = {
+            use cpal::traits::{HostTrait, DeviceTrait};
+            let host = cpal::default_host();
+            host.default_input_device()
+                .and_then(|d| d.default_input_config().ok())
+                .map(|c| c.sample_rate().0)
+                .unwrap_or(48000)
+        };
+
+        let wav_spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+
+        if let Ok(mut writer) = hound::WavWriter::create(&temp_path, wav_spec) {
+            for &sample in &samples {
+                let _ = writer.write_sample(sample);
+            }
+            let _ = writer.finalize();
+
+            let temp_path_str = temp_path.to_string_lossy().to_string();
+            tokio::spawn(async move {
+                let state: tauri::State<'_, AppState> = app_clone.state();
+                let mut engine = state.asr_engine.lock().await;
+                let result = engine.transcribe_file(&temp_path_str);
+                let _ = std::fs::remove_file(&temp_path);
+
+                if let Ok(asr_result) = result {
+                    let transcription = crate::models::Transcription {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        text: asr_result.text.clone(),
+                        duration_ms: (asr_result.duration_secs * 1000.0) as u64,
+                        created_at: chrono::Utc::now(),
+                        word_count: asr_result.text.split_whitespace().count(),
+                        cancelled: true,
+                        raw_text: None,
+                        llm_applied: false,
+                    };
+                    crate::commands::transcription::add_transcription(transcription.clone()).await;
+                    let _ = app_clone.emit("transcription-complete", &transcription);
+                    log::info!("Cancelled transcription saved: \"{}\"", &asr_result.text[..asr_result.text.len().min(50)]);
+                }
+
+                state.set_state(AppStateEnum::Idle);
+            });
+        } else {
+            state.set_state(AppStateEnum::Idle);
+        }
     } else {
-        // Create the overlay window — use non-transparent for reliability,
-        // with a dark background set in the HTML/CSS instead.
-        match tauri::webview::WebviewWindowBuilder::new(
-            app,
+        // Too short to transcribe — just save a placeholder
+        let transcription = crate::models::Transcription {
+            id: uuid::Uuid::new_v4().to_string(),
+            text: String::new(),
+            duration_ms: (sample_count as u64 * 1000) / 48000,
+            created_at: chrono::Utc::now(),
+            word_count: 0,
+            cancelled: true,
+            raw_text: None,
+            llm_applied: false,
+        };
+        crate::commands::transcription::add_transcription(transcription).await;
+        state.set_state(AppStateEnum::Idle);
+    }
+
+    log::info!("Recording cancelled");
+}
+
+/// Logical dimensions of the overlay pill window.
+const OVERLAY_WIDTH: f64 = 280.0;
+const OVERLAY_HEIGHT: f64 = 110.0;
+
+/// Show the floating overlay pill panel. Creates it if it doesn't exist.
+/// Panel operations (show/hide/create) must run on the main thread for NSPanel.
+fn show_overlay(app: &AppHandle) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        // Try to show an existing panel first
+        if let Ok(panel) = app.get_webview_panel("overlay") {
+            panel.show();
+            if let Some(window) = app.get_webview_window("overlay") {
+                if let Some(pos) = compute_overlay_position(&window) {
+                    let _ = window.set_position(pos);
+                }
+            }
+            log::info!("Overlay shown (existing panel)");
+            return;
+        }
+
+        // Create the overlay as a regular WebviewWindow first (proven to work),
+        // then convert it to an NSPanel for proper transparency.
+        let window = match tauri::webview::WebviewWindowBuilder::new(
+            &app,
             "overlay",
             tauri::WebviewUrl::App("overlay.html".into()),
         )
         .title("")
-        .inner_size(280.0, 52.0)
+        .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
         .decorations(false)
         .transparent(true)
+        .shadow(false)
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
-        .visible(true)
+        .visible(false)
         .focused(false)
         .build()
         {
-            Ok(window) => {
-                let _ = window.set_always_on_top(true);
-                position_overlay_bottom_center(&window);
-                let _ = window.show();
-                log::info!("Overlay window created and shown");
-            }
+            Ok(w) => w,
             Err(e) => {
                 log::error!("Failed to create overlay window: {}", e);
+                return;
+            }
+        };
+
+        // Position the window
+        if let Some(pos) = compute_overlay_position(&window) {
+            let _ = window.set_position(pos);
+        }
+
+        // Convert to NSPanel for true transparency.
+        match window.to_panel::<OverlayPanel>() {
+            Ok(panel) => {
+                panel.set_transparent(true);
+                panel.set_has_shadow(false);
+                panel.set_hides_on_deactivate(false);
+
+                // Synchronously clear backgrounds on ALL views in the hierarchy.
+                // with_webview() is async and may not take effect before show().
+                // Instead, walk the NSPanel's view tree directly via objc2.
+                clear_all_backgrounds(panel.as_panel());
+
+                panel.show();
+                log::info!("Overlay panel created and shown");
+            }
+            Err(e) => {
+                log::error!("Failed to convert overlay to panel: {}, showing as window", e);
+                let _ = window.show();
             }
         }
-    }
+    });
 }
 
-/// Hide the overlay window and reset its state so it's clean for next use.
+/// Hide the overlay panel (falls back to hiding the window if not a panel).
 fn hide_overlay(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.hide();
-        // Reset frontend state while hidden so the next show() has a clean canvas
-        let _ = window.eval("window.__resetOverlay && window.__resetOverlay()");
-        log::info!("Overlay hidden");
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        if let Ok(panel) = app.get_webview_panel("overlay") {
+            panel.hide();
+            log::info!("Overlay hidden");
+        } else if let Some(window) = app.get_webview_window("overlay") {
+            let _ = window.hide();
+            log::info!("Overlay hidden (window fallback)");
+        }
+    });
+}
+
+/// Synchronously clear background drawing on all views in the NSPanel hierarchy.
+/// This walks the content view tree and sets every view + the WKWebView to transparent.
+fn clear_all_backgrounds(panel: &tauri_nspanel::NSPanel) {
+    use tauri_nspanel::{objc2, objc2_app_kit, objc2_foundation};
+
+    unsafe {
+        // 1. Clear the content view background
+        let content_view: objc2::rc::Retained<objc2_app_kit::NSView> =
+            objc2::msg_send![panel, contentView];
+        let _: () = objc2::msg_send![&*content_view, setWantsLayer: true];
+        if let Some(layer) = content_view.layer() {
+            let clear: objc2::rc::Retained<objc2_foundation::NSObject> =
+                objc2::msg_send![objc2::class!(NSColor), clearColor];
+            let _: () = objc2::msg_send![&*layer, setBackgroundColor:
+                { let cg: *const std::ffi::c_void = objc2::msg_send![&*clear, CGColor]; cg }];
+        }
+
+        // 2. Walk all subviews and clear backgrounds / find WKWebView
+        let subviews: objc2::rc::Retained<objc2_foundation::NSArray<objc2_app_kit::NSView>> =
+            objc2::msg_send![&*content_view, subviews];
+        let count: usize = subviews.count();
+
+        for i in 0..count {
+            let view: objc2::rc::Retained<objc2_app_kit::NSView> =
+                objc2::msg_send![&*subviews, objectAtIndex: i];
+
+            // Check if this is a WKWebView by class name
+            let cls: *const objc2::runtime::AnyClass = objc2::msg_send![&*view, class];
+            let cls_name = std::ffi::CStr::from_ptr((*cls).name().to_bytes_with_nul().as_ptr() as *const _);
+            let cls_str = cls_name.to_str().unwrap_or("");
+
+            if cls_str.contains("WKWebView") || cls_str.contains("WebView") {
+                // Set drawsBackground = false on the WKWebView
+                let key = objc2_foundation::NSString::from_str("drawsBackground");
+                let no: objc2::rc::Retained<objc2_foundation::NSNumber> =
+                    objc2::msg_send![objc2::class!(NSNumber), numberWithBool: false];
+                let _: () = objc2::msg_send![&*view, setValue: &*no, forKey: &*key];
+                log::info!("Found {} — set drawsBackground=false", cls_str);
+            }
+
+            // Make every view non-opaque with clear layer background
+            let _: () = objc2::msg_send![&*view, setWantsLayer: true];
+            if let Some(layer) = view.layer() {
+                let clear: objc2::rc::Retained<objc2_foundation::NSObject> =
+                    objc2::msg_send![objc2::class!(NSColor), clearColor];
+                let _: () = objc2::msg_send![&*layer, setBackgroundColor:
+                    { let cg: *const std::ffi::c_void = objc2::msg_send![&*clear, CGColor]; cg }];
+            }
+        }
+        log::info!("Cleared backgrounds on {} subviews", count);
     }
 }
 
-/// Position overlay above the Dock, centered horizontally.
-/// Uses 200px from bottom to clear the Dock (~70-90px) with comfortable margin.
-/// On Retina displays, all values are in physical pixels (2x logical).
-fn position_overlay_bottom_center(window: &tauri::WebviewWindow) {
-    if let Ok(Some(monitor)) = window.primary_monitor().or_else(|_| window.current_monitor()) {
-        let screen = monitor.size();
-        let scale = monitor.scale_factor();
-        let pos = monitor.position();
+/// Compute overlay position: centered horizontally, 100 logical pixels above bottom.
+/// Uses the primary monitor (or falls back to current monitor).
+fn compute_overlay_position(window: &tauri::WebviewWindow) -> Option<tauri::PhysicalPosition<i32>> {
+    let monitor = window.primary_monitor().ok().flatten()
+        .or_else(|| window.current_monitor().ok().flatten())?;
 
-        if let Ok(win_size) = window.outer_size() {
-            let x = pos.x + (screen.width as i32 - win_size.width as i32) / 2;
-            // 100 logical pixels from bottom — just above the Dock
-            let margin_bottom = (100.0 * scale) as i32;
-            let y = pos.y + screen.height as i32 - win_size.height as i32 - margin_bottom;
-            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
-            log::info!(
-                "Overlay at ({}, {}) — screen {}x{} scale={} margin_bottom={}px",
-                x, y, screen.width, screen.height, scale, margin_bottom
-            );
-        }
-    } else {
-        log::warn!("Could not get monitor info for overlay positioning");
-    }
+    let screen = monitor.size();
+    let scale = monitor.scale_factor();
+    let pos = monitor.position();
+
+    let win_phys_w = (OVERLAY_WIDTH * scale) as i32;
+    let win_phys_h = (OVERLAY_HEIGHT * scale) as i32;
+
+    let x = pos.x + (screen.width as i32 - win_phys_w) / 2;
+    let margin_bottom = (100.0 * scale) as i32;
+    let y = pos.y + screen.height as i32 - win_phys_h - margin_bottom;
+
+    log::info!(
+        "Overlay at ({}, {}) — screen {}x{} scale={} margin_bottom={}px",
+        x, y, screen.width, screen.height, scale, margin_bottom
+    );
+
+    Some(tauri::PhysicalPosition::new(x, y))
 }

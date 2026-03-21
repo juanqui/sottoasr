@@ -3,6 +3,7 @@
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
   import { transcriptionStore } from '../stores/transcriptions.svelte';
+  import { exportTranscriptionsCsv } from '../utils/tauri';
   import HistoryItem from './history-item.svelte';
 
   import type { Transcription } from '../utils/tauri';
@@ -11,9 +12,11 @@
 
   let filteredItems = $derived(
     searchQuery.trim()
-      ? transcriptionStore.items.filter((item) =>
-          item.text.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+      ? transcriptionStore.items.filter((item) => {
+          const q = searchQuery.toLowerCase();
+          return item.text.toLowerCase().includes(q)
+            || (item.raw_text?.toLowerCase().includes(q) ?? false);
+        })
       : transcriptionStore.items
   );
 
@@ -34,6 +37,36 @@
   async function handleClearAll() {
     if (transcriptionStore.items.length === 0) return;
     await transcriptionStore.clear();
+  }
+
+  let exportFeedback = $state('');
+
+  async function handleExport() {
+    try {
+      const csv = await exportTranscriptionsCsv();
+      // Create a blob and trigger download via data URI
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sotto-transcriptions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      exportFeedback = 'Exported!';
+      setTimeout(() => { exportFeedback = ''; }, 2000);
+    } catch (err) {
+      console.error('Export failed:', err);
+      // Fallback: copy CSV to clipboard
+      try {
+        const csv = await exportTranscriptionsCsv();
+        await writeText(csv);
+        exportFeedback = 'Copied to clipboard';
+        setTimeout(() => { exportFeedback = ''; }, 2000);
+      } catch {
+        exportFeedback = 'Export failed';
+        setTimeout(() => { exportFeedback = ''; }, 2000);
+      }
+    }
   }
 
   // Load transcriptions and listen for new ones
@@ -65,9 +98,18 @@
           type="text"
           class="search-input"
           placeholder="Search transcriptions..."
+          aria-label="Search transcriptions"
           bind:value={searchQuery}
         />
       </div>
+      <button
+        class="export-btn"
+        onclick={handleExport}
+        disabled={isEmpty}
+        type="button"
+      >
+        {exportFeedback || 'Export CSV'}
+      </button>
       <button
         class="clear-all-btn"
         onclick={handleClearAll}
@@ -177,6 +219,30 @@
 
   .search-input:focus {
     border-color: var(--accent);
+  }
+
+  .export-btn {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: none;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .export-btn:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+  }
+
+  .export-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .clear-all-btn {

@@ -56,18 +56,21 @@ jobs:
 
             ### Installation
 
-            1. Download `Sotto_0.1.0_aarch64.dmg` below
+            1. Download `Sotto___VERSION___aarch64.dmg` below
             2. Open the DMG and drag Sotto to Applications
             3. Launch Sotto — it will appear in your menu bar
             4. On first launch, ~500 MB of speech recognition models will be downloaded automatically
-            5. Grant Accessibility permission when prompted (required for paste-at-cursor)
+            5. Grant Accessibility and Input Monitoring permissions when prompted
 
             ### Requirements
 
             - macOS 14 Sonoma or later
             - Apple Silicon (M1 or later)
+            - Python 3.10+ (only required for optional AI Transcript Cleanup feature)
 
             > **Note:** This is an unsigned build. On first launch, right-click the app and select "Open" to bypass Gatekeeper.
+
+            See [CHANGELOG.md](https://github.com/juanqui/sotto/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}

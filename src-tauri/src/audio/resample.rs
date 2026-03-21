@@ -1,6 +1,8 @@
 use rubato::{FftFixedIn, Resampler};
 
-/// Resample audio from source_rate to 16000 Hz mono
+/// Resample audio from source_rate to 16000 Hz mono.
+/// Currently unused but retained for future use with backends that support raw sample input.
+#[allow(dead_code)]
 pub fn resample_to_16khz(samples: &[f32], source_rate: u32) -> Result<Vec<f32>, String> {
     if source_rate == 16000 {
         return Ok(samples.to_vec());

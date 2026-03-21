@@ -1,5 +1,6 @@
 /// Unified ASR engine trait.
 /// Both FluidAudio (CoreML/ANE) and parakeet-rs (ONNX/CPU) implement this.
+#[allow(dead_code)]
 pub trait AsrEngine: Send {
     /// Initialize the engine and load/download models.
     /// For FluidAudio: triggers CoreML model download + Neural Engine compilation on first run.
