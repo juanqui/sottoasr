@@ -2,7 +2,7 @@
 name = "sotto"
 version = "0.2.0"
 description = "Local, privacy-first speech-to-text for macOS"
-authors = ["juanqui"]
+authors = ["Juan Villa <juan@villafam.com>", "Ian Scofield <iscofield@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/juanqui/sotto"
 edition = "2021"

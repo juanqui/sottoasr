@@ -1,6 +1,6 @@
 <script lang="ts">
   import appIcon from '../../assets/app-icon.png';
-  const version = '0.1.0';
+  const version = '0.2.0';
 
   const sections = [
     {
@@ -78,7 +78,7 @@
       All dependencies use permissive licenses (MIT, Apache-2.0, CC-BY-4.0).
       NVIDIA Parakeet TDT is used under CC-BY-4.0 which requires attribution.
     </p>
-    <p class="footer-copy">&copy; 2026 Juan Villa</p>
+    <p class="footer-copy">&copy; 2026 Juan Villa &amp; Ian Scofield</p>
   </div>
 </div>
 
