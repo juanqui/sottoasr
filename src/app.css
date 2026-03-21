@@ -1,0 +1,137 @@
+/* ============================================================
+   Sotto — Global Styles (Dark Theme)
+   ============================================================ */
+
+:root {
+  /* Core palette */
+  --bg: #1a1a1a;
+  --bg-elevated: #222222;
+  --card-bg: #242424;
+
+  /* Text hierarchy */
+  --text-bright: #f0f0f0;
+  --text: #c8c8c8;
+  --text-dim: #777777;
+
+  /* Borders */
+  --border: #2e2e2e;
+  --border-hover: #444444;
+
+  /* Accent */
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-bg: rgba(59, 130, 246, 0.1);
+
+  /* Inputs */
+  --input-bg: #1e1e1e;
+  --hover-bg: rgba(255, 255, 255, 0.04);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
+    system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- Reset ---- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Overlay window ---- */
+
+body.overlay {
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.overlay #app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- History window ---- */
+
+body.history {
+  background: var(--bg);
+}
+
+body.history #app {
+  height: 100vh;
+}
+
+/* ---- Settings window ---- */
+
+body.settings {
+  background: var(--bg);
+}
+
+body.settings #app {
+  height: 100vh;
+}
+
+/* ---- Scrollbar ---- */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ---- Focus visible ---- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Selection ---- */
+
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: var(--text-bright);
+}

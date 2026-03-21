@@ -1,0 +1,66 @@
+[package]
+name = "sotto"
+version = "0.1.0"
+description = "Local, privacy-first speech-to-text for macOS"
+authors = ["juanqui"]
+license = "MIT"
+repository = "https://github.com/juanqui/sotto"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "sotto_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-log = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-store = "2"
+tauri-plugin-os = "2"
+tauri-plugin-process = "2"
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+
+# Audio capture
+cpal = "0.15"
+hound = "3.5"
+rubato = "0.16"
+
+# ASR backends (selected via features)
+# FluidAudio: CoreML/ANE on macOS — ~190x RTF, near-zero CPU
+fluidaudio-rs = { git = "https://github.com/FluidInference/fluidaudio-rs.git", optional = true }
+# parakeet-rs: ONNX Runtime, cross-platform CPU — ~20-30x RTF
+parakeet-rs = { version = "0.3", optional = true }
+
+# HTTP client for model downloads (parakeet-rs backend only)
+reqwest = { version = "0.12", features = ["stream"], optional = true }
+futures-util = { version = "0.3", optional = true }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+dirs = "6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.24"
+core-foundation = "0.10"
+
+[features]
+default = ["custom-protocol", "asr-fluidaudio"]
+
+# ASR backend selection — pick ONE
+# FluidAudio: macOS only, CoreML/Apple Neural Engine, best performance
+asr-fluidaudio = ["dep:fluidaudio-rs"]
+# parakeet-rs: Cross-platform, ONNX Runtime CPU, wider compatibility
+asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:futures-util"]
+
+custom-protocol = ["tauri/custom-protocol"]
