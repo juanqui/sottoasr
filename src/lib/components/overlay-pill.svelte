@@ -8,14 +8,29 @@
   // Initialize as recording=true immediately.
   let isRecording = $state(true);
   let isTranscribing = $state(false);
-  let startTime = $state<number>(Date.now());
 
   // Audio levels — append-only, the Waveform component uses a ring buffer internally
   let audioLevels = $state<number[]>([]);
 
   let isActive = $derived(isRecording || isTranscribing);
 
+  let waveformRef: Waveform;
+
+  // Called by Rust via eval after the overlay is hidden.
+  // Clears visual state (waveform, audio levels) while invisible.
+  // Does NOT set isRecording — that must happen via state-changed event
+  // so Svelte detects an actual false→true transition and re-fires effects.
+  function resetOverlay() {
+    audioLevels = [];
+    isRecording = false;
+    isTranscribing = false;
+    waveformRef?.reset();
+  }
+
   onMount(() => {
+    // Expose reset function so Rust can call it via eval after hiding the window
+    (window as any).__resetOverlay = resetOverlay;
+
     const unlisteners: Array<() => void> = [];
 
     // Audio level events from Rust: { level: f32 } emitted ~30 times/sec
@@ -68,11 +83,11 @@
 
     <!-- Waveform bars -->
     <div class="waveform-area">
-      <Waveform levels={audioLevels} />
+      <Waveform bind:this={waveformRef} levels={audioLevels} />
     </div>
 
     <!-- Timer -->
-    <RecordingTimer {startTime} running={isRecording} />
+    <RecordingTimer running={isRecording} />
   </div>
 </div>
 

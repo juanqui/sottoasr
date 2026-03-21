@@ -2,34 +2,36 @@
   import { formatDuration } from '../utils/format';
 
   interface Props {
-    startTime: number | null;
     running: boolean;
   }
 
-  let { startTime, running }: Props = $props();
+  let { running }: Props = $props();
 
   let elapsed: number = $state(0);
   let frameId: number | null = $state(null);
+  // Captured internally when running becomes true — no external dependency
+  let internalStart: number | null = null;
 
   function tick() {
-    if (startTime != null) {
-      elapsed = Date.now() - startTime;
+    if (internalStart != null) {
+      elapsed = Date.now() - internalStart;
     }
     frameId = requestAnimationFrame(tick);
   }
 
   $effect(() => {
-    if (running && startTime != null) {
-      elapsed = Date.now() - startTime;
+    if (running) {
+      // Snapshot the start time the moment running becomes true
+      internalStart = Date.now();
+      elapsed = 0;
       frameId = requestAnimationFrame(tick);
     } else {
+      internalStart = null;
       if (frameId != null) {
         cancelAnimationFrame(frameId);
         frameId = null;
       }
-      if (!running) {
-        elapsed = 0;
-      }
+      elapsed = 0;
     }
 
     return () => {

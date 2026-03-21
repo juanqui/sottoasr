@@ -297,10 +297,12 @@ fn show_overlay(app: &AppHandle) {
     }
 }
 
-/// Hide the overlay window.
+/// Hide the overlay window and reset its state so it's clean for next use.
 fn hide_overlay(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
+        // Reset frontend state while hidden so the next show() has a clean canvas
+        let _ = window.eval("window.__resetOverlay && window.__resetOverlay()");
         log::info!("Overlay hidden");
     }
 }

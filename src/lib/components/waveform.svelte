@@ -20,6 +20,21 @@
   // Dynamic range: track rolling min/max
   let rollingMax = 0.005; // floor so we don't amplify pure silence
 
+  // Clear ring buffer and canvas — called imperatively via window.__resetOverlay
+  export function reset() {
+    ringBuffer.fill(0);
+    writeIndex = 0;
+    sampleCount = 0;
+    rollingMax = 0.005;
+    // Immediately clear the canvas so no stale frame is visible
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+  }
+
   // Accept new levels from parent (pushed from Tauri events)
   $effect(() => {
     if (levels.length > 0) {
