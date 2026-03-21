@@ -36,7 +36,8 @@
     "macOS": {
       "entitlements": "./Entitlements.plist",
       "signingIdentity": "-"
-    }
+    },
+    "resources": ["sidecar/"]
   },
   "plugins": {}
 
