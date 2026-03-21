@@ -34,6 +34,7 @@ Press a hotkey, speak, and text appears at your cursor. All processing happens o
 - [Rust](https://rustup.rs/) 1.77+ (tested with 1.94)
 - [Node.js](https://nodejs.org/) 20+ (tested with 25.4)
 - Xcode Command Line Tools: `xcode-select --install`
+- Tauri CLI: `cargo install tauri-cli --version "^2"`
 
 ### Install and Run
 
