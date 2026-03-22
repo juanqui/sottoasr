@@ -1,6 +1,31 @@
 # Changelog
 
-All notable changes to Sotto are documented in this file.
+All notable changes to SottoASR are documented in this file.
+
+## [0.2.1] — 2026-03-22
+
+A polish release: rebrand to SottoASR, new app icon, macOS-native tray icon, and a recording timer bug fix.
+
+### Changed
+
+- **Rebrand from "Sotto" to "SottoASR"** — Updated product name, bundle identifier (`com.sottoasr.app`), Rust crate name, package name, all UI strings (tray menu, onboarding, settings, about, window titles), and log file name.
+- **New app icon** — Redesigned icon across all platform sizes with an SVG source.
+- **macOS template tray icon** — Proper `tray-iconTemplate.png` with `iconAsTemplate: true` so the menu bar icon adapts to light/dark mode automatically.
+- **About page** — More complete dependency attribution (added cpal, hound, rubato, huggingface_hub, Tokio, serde). Updated license notice referencing 660+ dependencies and the new THIRD_PARTY_LICENSES file.
+
+### Fixed
+
+- **Stale auto-stop timer across recordings** — Added a recording generation counter so auto-stop timers from a previous session are discarded instead of interfering with a new recording.
+
+### Added
+
+- **THIRD_PARTY_LICENSES** file listing all 660+ transitive dependencies and their licenses.
+- **Static landing page** (`website/`) deployed via Cloudflare Pages.
+
+### Infrastructure
+
+- Updated GitHub Actions release workflow with improved release body template.
+- Updated LICENSE, README, DEVELOPMENT.md, and architecture docs to reflect the SottoASR rebrand.
 
 ## [0.2.0] — 2026-03-21
 
@@ -24,7 +49,7 @@ A major update adding AI-powered transcript cleanup, customizable shortcuts, rec
 - **Permissions system overhauled** — New `check_all_permissions` command returns structured status for microphone, accessibility (API + functional test), and input monitoring. Detects the macOS Sequoia issue where accessibility is granted but not yet functional, and guides the user to restart.
 - **Push-to-talk uses CGEventSource polling** — Key release is now detected via `CGEventSourceKeyState` at ~30 Hz instead of relying on `tauri-plugin-global-shortcut`'s release event, which was unreliable.
 - **Shortcuts are customizable and persistent** — All three shortcuts (push-to-talk, toggle, cancel) are saved to disk and loaded on startup. The settings panel uses the new shortcut recorder for configuration.
-- **Settings and transcriptions are persisted** — Settings saved to `~/Library/Application Support/com.sotto.app/settings.json`, transcriptions to `transcriptions.json`. Both loaded on startup.
+- **Settings and transcriptions are persisted** — Settings saved to `~/Library/Application Support/com.sottoasr.app/settings.json`, transcriptions to `transcriptions.json`. Both loaded on startup.
 - **Clipboard handling uses `arboard`** — Replaced `pbcopy` shell command with direct NSPasteboard access via the `arboard` crate. Clipboard is saved before paste and restored after 500 ms.
 - **CGEvent pipeline warmup** — A no-op CGEvent is posted at startup to prevent the first real Cmd+V paste from being silently dropped on macOS 15 Sequoia.
 - **Settings panel UI** — Save/Cancel buttons moved to a sticky header. Dirty detection disables Save when no changes exist. Richer permission status display with "Fix Permission" action for stale accessibility grants.

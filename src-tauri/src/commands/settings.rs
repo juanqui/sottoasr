@@ -4,10 +4,10 @@ use crate::state::AppState;
 use crate::models::Settings;
 
 /// Get the persistent settings file path.
-/// Stored alongside transcriptions in ~/Library/Application Support/com.sotto.app/
+/// Stored alongside transcriptions in ~/Library/Application Support/com.sottoasr.app/
 fn settings_path() -> Result<PathBuf, String> {
     let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    let app_dir = data_dir.join("com.sotto.app");
+    let app_dir = data_dir.join("com.sottoasr.app");
     std::fs::create_dir_all(&app_dir)
         .map_err(|e| format!("Failed to create app data dir: {}", e))?;
     Ok(app_dir.join("settings.json"))

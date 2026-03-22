@@ -4698,8 +4698,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "sotto"
-version = "0.2.0"
+name = "sottoasr"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "arboard",

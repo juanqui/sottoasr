@@ -48,17 +48,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: 'Sotto v__VERSION__'
+          releaseName: 'SottoASR v__VERSION__'
           releaseBody: |
-            ## Sotto v__VERSION__
+            ## SottoASR v__VERSION__
 
             Local, privacy-first speech-to-text for macOS.
 
             ### Installation
 
-            1. Download `Sotto___VERSION___aarch64.dmg` below
-            2. Open the DMG and drag Sotto to Applications
-            3. Launch Sotto — it will appear in your menu bar
+            1. Download `SottoASR___VERSION___aarch64.dmg` below
+            2. Open the DMG and drag SottoASR to Applications
+            3. Launch SottoASR — it will appear in your menu bar
             4. On first launch, ~500 MB of speech recognition models will be downloaded automatically
             5. Grant Accessibility and Input Monitoring permissions when prompted
 
@@ -70,7 +70,7 @@ jobs:
 
             > **Note:** This is an unsigned build. On first launch, right-click the app and select "Open" to bypass Gatekeeper.
 
-            See [CHANGELOG.md](https://github.com/juanqui/sotto/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/juanqui/sottoasr/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}

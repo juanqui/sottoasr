@@ -32,7 +32,7 @@ New samples can be added to `generate_dataset.py` and regenerated:
 python generate_dataset.py
 ```
 
-Real-world transcription samples from Sotto will be added over time as they become available. These will be placed in a separate `real_world` category to distinguish from synthetic samples.
+Real-world transcription samples from SottoASR will be added over time as they become available. These will be placed in a separate `real_world` category to distinguish from synthetic samples.
 
 ## Metrics
 
@@ -62,7 +62,7 @@ Real-world transcription samples from Sotto will be added over time as they beco
 
 ## Context Window Analysis
 
-Based on Sotto's 12-minute maximum recording limit:
+Based on SottoASR's 12-minute maximum recording limit:
 
 | Speech Rate | Words/min | 12-min Total | Tokens | 512-ctx Chunks |
 |------------|-----------|-------------|--------|----------------|

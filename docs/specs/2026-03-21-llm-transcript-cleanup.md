@@ -23,11 +23,11 @@
 
 ## 1. Summary
 
-Add an optional LLM-powered transcript cleanup stage to Sotto's pipeline. When enabled, raw ASR output is post-processed by Qwen3.5-0.8B running locally on Metal GPU via Apple's MLX framework (Python sidecar) to produce cleaner, more readable text before pasting. The feature is user-opt-in via the Settings page, includes automatic model download with progress UI, and offers two cleanup modes: **Standard** (filler/crutch word removal, self-correction resolution, false start removal, grammar fixes, misheard word correction, list formatting) and **Markdown** (experimental — structures longer dictations into Markdown with headings and lists).
+Add an optional LLM-powered transcript cleanup stage to SottoASR's pipeline. When enabled, raw ASR output is post-processed by Qwen3.5-0.8B running locally on Metal GPU via Apple's MLX framework (Python sidecar) to produce cleaner, more readable text before pasting. The feature is user-opt-in via the Settings page, includes automatic model download with progress UI, and offers two cleanup modes: **Standard** (filler/crutch word removal, self-correction resolution, false start removal, grammar fixes, misheard word correction, list formatting) and **Markdown** (experimental — structures longer dictations into Markdown with headings and lists).
 
 ## 2. Problem Statement
 
-**Who is affected:** All Sotto users.
+**Who is affected:** All SottoASR users.
 
 **The problem:** Raw ASR output from speech-to-text engines contains artifacts of natural speech that make the text hard to read and unprofessional when pasted:
 
@@ -42,7 +42,7 @@ Add an optional LLM-powered transcript cleanup stage to Sotto's pipeline. When e
 
 Users currently have to manually clean up every transcription before it's usable in emails, documents, or code reviews. This defeats much of the time savings that speech-to-text provides.
 
-**Why an on-device LLM:** Sotto's core promise is local, privacy-first processing. Sending transcriptions to a cloud LLM would violate this constraint. Qwen3.5-0.8B is small enough to run efficiently on the Apple Neural Engine (~2W power draw, ~500MB memory, 47-62 tok/s) while being capable enough for text cleanup tasks.
+**Why an on-device LLM:** SottoASR's core promise is local, privacy-first processing. Sending transcriptions to a cloud LLM would violate this constraint. Qwen3.5-0.8B is small enough to run efficiently on the Apple Neural Engine (~2W power draw, ~500MB memory, 47-62 tok/s) while being capable enough for text cleanup tasks.
 
 ## 3. Design Overview
 
@@ -100,7 +100,7 @@ Two new toggles in the Settings page:
 
 Models are stored at:
 ```
-~/Library/Application Support/com.sotto.app/models/qwen3.5-0.8b/
+~/Library/Application Support/com.sottoasr.app/models/qwen3.5-0.8b/
 ```
 
 This follows the existing pattern used by the parakeet-rs ASR backend.
@@ -208,7 +208,7 @@ paste_text(&text)?;
 
 #### Context Window
 
-With MLX and Qwen3.5-0.8B, the context window is **32,768 tokens** — large enough for any Sotto recording:
+With MLX and Qwen3.5-0.8B, the context window is **32,768 tokens** — large enough for any SottoASR recording:
 
 | Recording Length | Words (170 wpm) | Tokens | Fits in Context? |
 |-----------------|-----------------|--------|:---:|
@@ -310,7 +310,7 @@ Currently, settings are in-memory only (reset on app restart). This feature requ
 
 **Requirement:** Use `tauri-plugin-store` (already in Cargo.toml dependencies) to persist `llm_cleanup_enabled` and `llm_markdown_mode` to disk. Load persisted values on app startup. If the model is downloaded and settings indicate LLM is enabled, the model can be lazily loaded on first transcription (not at startup).
 
-If settings persistence cannot be implemented as part of this feature, the minimum viable fallback is: persist only the LLM toggle state to a simple JSON file at `~/Library/Application Support/com.sotto.app/llm-settings.json`.
+If settings persistence cannot be implemented as part of this feature, the minimum viable fallback is: persist only the LLM toggle state to a simple JSON file at `~/Library/Application Support/com.sottoasr.app/llm-settings.json`.
 
 #### Settings UI Changes
 
@@ -391,7 +391,7 @@ Events follow the naming pattern established by the existing parakeet model down
 
 ### 4.7 Interactions with Existing Settings
 
-**`auto_paste` (default: true):** When `auto_paste` is off, Sotto copies text to the clipboard without pasting. LLM cleanup still runs — the cleaned text is what gets copied. The overlay flow is identical; the only difference is the final action (copy vs paste). The overlay hides after the clipboard write, not after a paste.
+**`auto_paste` (default: true):** When `auto_paste` is off, SottoASR copies text to the clipboard without pasting. LLM cleanup still runs — the cleaned text is what gets copied. The overlay flow is identical; the only difference is the final action (copy vs paste). The overlay hides after the clipboard write, not after a paste.
 
 **`show_overlay` (default: true):** This setting is defined but not currently enforced in the recording flow. If it is wired up in the future, the LLM cleanup should respect it: no overlay during cleanup if `show_overlay` is false. The backend still emits `state-changed` events (for logging/telemetry), but the frontend suppresses overlay display.
 
@@ -402,11 +402,11 @@ Events follow the naming pattern established by the existing parakeet model down
 - `raw_text`: The original ASR output before cleanup (only set when LLM was applied)
 - `llm_applied`: Boolean flag indicating whether AI cleanup was used
 
-Storage is **durable** — transcriptions persist to `~/Library/Application Support/com.sotto.app/transcriptions.json` and survive app restarts and reinstalls. This serves as training data for future model improvements.
+Storage is **durable** — transcriptions persist to `~/Library/Application Support/com.sottoasr.app/transcriptions.json` and survive app restarts and reinstalls. This serves as training data for future model improvements.
 
 The history UI shows an "AI Cleaned" badge on transcriptions processed by the LLM, with a toggle to view the raw ASR text and a side-by-side diff view. An "Export CSV" button exports all transcriptions including both raw and cleaned text.
 
-**`restore_clipboard` timing:** When this setting is enabled, the clipboard is saved immediately **before Sotto writes to it** (after cleanup completes, just before the clipboard write), not before cleanup starts. This prevents overwriting clipboard contents the user may have copied during the multi-second cleanup window.
+**`restore_clipboard` timing:** When this setting is enabled, the clipboard is saved immediately **before SottoASR writes to it** (after cleanup completes, just before the clipboard write), not before cleanup starts. This prevents overwriting clipboard contents the user may have copied during the multi-second cleanup window.
 
 ### 4.8 Overlay UX During Cleanup
 
@@ -672,7 +672,7 @@ No migration needed — this is a new, opt-in feature. Settings default to off. 
 ### Trade-offs
 
 - **Pro:** Significantly better text quality, especially for professional use (emails, docs, code reviews)
-- **Pro:** Zero cloud dependency — maintains Sotto's privacy promise
+- **Pro:** Zero cloud dependency — maintains SottoASR's privacy promise
 - **Pro:** Very low power draw on ANE (~2W vs ~20W for GPU)
 - **Con:** 600 MB disk space for model download
 - **Con:** 500 MB additional memory when loaded

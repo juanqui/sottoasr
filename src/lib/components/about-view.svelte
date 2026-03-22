@@ -9,6 +9,9 @@
         { name: 'NVIDIA Parakeet TDT v3', desc: 'ASR model, 600M params, 25 languages', license: 'CC-BY-4.0' },
         { name: 'FluidAudio', desc: 'CoreML/ANE inference engine (Swift)', license: 'Apache-2.0' },
         { name: 'parakeet-rs', desc: 'ONNX Runtime Rust bindings', license: 'MIT' },
+        { name: 'cpal', desc: 'Cross-platform audio capture', license: 'Apache-2.0' },
+        { name: 'hound', desc: 'WAV encoding/decoding', license: 'Apache-2.0' },
+        { name: 'rubato', desc: 'Audio resampling', license: 'MIT' },
       ],
     },
     {
@@ -17,6 +20,7 @@
         { name: 'Qwen3.5-0.8B', desc: 'LLM by Alibaba Cloud (Qwen team)', license: 'Apache-2.0' },
         { name: 'Apple MLX', desc: 'Metal-native ML framework', license: 'MIT' },
         { name: 'mlx-lm', desc: 'MLX language model inference', license: 'MIT' },
+        { name: 'huggingface_hub', desc: 'Model download and caching', license: 'Apache-2.0' },
       ],
     },
     {
@@ -26,13 +30,8 @@
         { name: 'Svelte 5', desc: 'Reactive UI framework', license: 'MIT' },
         { name: 'tauri-nspanel', desc: 'macOS NSPanel overlay windows', license: 'MIT' },
         { name: 'Vite', desc: 'Frontend build tool', license: 'MIT' },
-      ],
-    },
-    {
-      title: 'Audio & Runtime',
-      items: [
-        { name: 'cpal', desc: 'Cross-platform audio capture', license: 'Apache-2.0' },
         { name: 'Tokio', desc: 'Async Rust runtime', license: 'MIT' },
+        { name: 'serde', desc: 'Serialization framework', license: 'MIT' },
       ],
     },
   ];
@@ -41,8 +40,8 @@
 <div class="about-scroll">
   <!-- Hero -->
   <div class="hero">
-    <img class="icon" src={appIcon} alt="Sotto" />
-    <h1>Sotto</h1>
+    <img class="icon" src={appIcon} alt="SottoASR" />
+    <h1>SottoASR</h1>
     <p class="version">Version {version}</p>
     <p class="tagline">Local, privacy-first speech-to-text for macOS</p>
     <p class="detail">
@@ -73,12 +72,13 @@
 
   <!-- License -->
   <div class="footer">
-    <p>Sotto is open source under the <strong>MIT License</strong></p>
+    <p>SottoASR is open source under the <strong>MIT License</strong></p>
     <p class="footer-note">
-      All dependencies use permissive licenses (MIT, Apache-2.0, CC-BY-4.0).
-      NVIDIA Parakeet TDT is used under CC-BY-4.0 which requires attribution.
+      All 660+ dependencies use permissive or weak-copyleft licenses
+      (MIT, Apache-2.0, BSD, MPL-2.0, Unicode-3.0, ISC, Zlib, CC-BY-4.0).
+      See THIRD_PARTY_LICENSES for the full list.
     </p>
-    <p class="footer-copy">&copy; 2026 Juan Villa &amp; Ian Scofield</p>
+    <p class="footer-copy">&copy; 2026 Juan Villa</p>
   </div>
 </div>
 

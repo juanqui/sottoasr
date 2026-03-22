@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Sotto needs microphone access to transcribe your speech to text.</string>
+    <string>SottoASR needs microphone access to transcribe your speech to text.</string>
     <key>LSUIElement</key>
     <true/>
 </dict>

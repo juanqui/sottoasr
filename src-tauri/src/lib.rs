@@ -19,7 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::default()
             .level(log::LevelFilter::Info)
             .target(tauri_plugin_log::Target::new(
-                tauri_plugin_log::TargetKind::LogDir { file_name: Some("sotto".into()) },
+                tauri_plugin_log::TargetKind::LogDir { file_name: Some("sottoasr".into()) },
             ))
             .target(tauri_plugin_log::Target::new(
                 tauri_plugin_log::TargetKind::Stdout,
@@ -122,7 +122,7 @@ pub fn run() {
                     "onboarding",
                     tauri::WebviewUrl::App("onboarding.html".into()),
                 )
-                .title("Welcome to Sotto")
+                .title("Welcome to SottoASR")
                 .inner_size(520.0, 600.0)
                 .resizable(false)
                 .center()
@@ -143,7 +143,7 @@ pub fn run() {
                 });
             }
 
-            log::info!("Sotto initialized (ASR backend: {})", asr::model::backend_name());
+            log::info!("SottoASR initialized (ASR backend: {})", asr::model::backend_name());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -176,7 +176,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building Sotto")
+        .expect("error while building SottoASR")
         .run(|_app, event| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
                 // Only prevent exit when triggered by last window closing (code == None).

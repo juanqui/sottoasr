@@ -93,7 +93,7 @@ const PARAKEET_MODEL_FILES: &[(&str, u64)] = &[
 pub fn get_model_dir() -> Result<PathBuf, String> {
     let data_dir = dirs::data_dir()
         .ok_or("Could not determine data directory")?;
-    Ok(data_dir.join("com.sotto.app").join("models").join(PARAKEET_MODEL_NAME))
+    Ok(data_dir.join("com.sottoasr.app").join("models").join(PARAKEET_MODEL_NAME))
 }
 
 #[cfg(feature = "asr-parakeet")]
@@ -145,7 +145,7 @@ pub async fn download_parakeet_model(app: tauri::AppHandle) -> Result<(), String
     })).map_err(|e| e.to_string())?;
 
     let client = reqwest::Client::builder()
-        .user_agent("Sotto/0.1.0")
+        .user_agent("SottoASR/0.1.0")
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
 

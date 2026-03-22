@@ -1,15 +1,15 @@
 [package]
-name = "sotto"
-version = "0.2.0"
-description = "Local, privacy-first speech-to-text for macOS"
-authors = ["Juan Villa <juan@villafam.com>", "Ian Scofield <iscofield@gmail.com>"]
+name = "sottoasr"
+version = "0.2.1"
+description = "SottoASR — Local, privacy-first speech-to-text for macOS"
+authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"
-repository = "https://github.com/juanqui/sotto"
+repository = "https://github.com/juanqui/sottoasr"
 edition = "2021"
 rust-version = "1.80.0"
 
 [lib]
-name = "sotto_lib"
+name = "sottoasr_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -1,4 +1,4 @@
-# Qwen3-0.6B Viability Assessment for Sotto Transcript Cleanup
+# Qwen3-0.6B Viability Assessment for SottoASR Transcript Cleanup
 
 **Date:** 2026-03-21
 **Model:** Qwen/Qwen3-0.6B (751M params, bfloat16)

@@ -1,10 +1,10 @@
-# Sotto
+# SottoASR
 
 **Local, privacy-first speech-to-text for macOS.**
 
 Press a hotkey, speak, and text appears at your cursor. All processing happens on-device using Apple's Neural Engine -- no audio ever leaves your machine.
 
-<!-- ![Sotto screenshot](docs/images/screenshot.png) -->
+<!-- ![SottoASR screenshot](docs/images/screenshot.png) -->
 
 ## Features
 
@@ -39,13 +39,13 @@ Press a hotkey, speak, and text appears at your cursor. All processing happens o
 ### Install and Run
 
 ```bash
-git clone https://github.com/juanqui/sotto.git
+git clone https://github.com/juanqui/sottoasr.git
 cd sotto
 npm install
 cargo tauri dev
 ```
 
-On first launch, Sotto will download the FluidAudio CoreML model (~500 MB). This takes 1--2 minutes and is cached for subsequent runs.
+On first launch, SottoASR will download the FluidAudio CoreML model (~500 MB). This takes 1--2 minutes and is cached for subsequent runs.
 
 ### Build for Production
 
@@ -53,7 +53,7 @@ On first launch, Sotto will download the FluidAudio CoreML model (~500 MB). This
 cargo tauri build
 ```
 
-This produces `Sotto.app` and a `.dmg` installer in `src-tauri/target/release/bundle/`.
+This produces `SottoASR.app` and a `.dmg` installer in `src-tauri/target/release/bundle/`.
 
 ## Default Hotkeys
 
@@ -65,7 +65,7 @@ This produces `Sotto.app` and a `.dmg` installer in `src-tauri/target/release/bu
 
 ## How It Works
 
-Sotto is a Tauri v2 application with a Rust backend and a Svelte 5 frontend.
+SottoASR is a Tauri v2 application with a Rust backend and a Svelte 5 frontend.
 
 ```
 Hotkey pressed
@@ -80,7 +80,7 @@ The frontend provides the recording overlay (floating pill with canvas-based wav
 
 ## Permissions
 
-Sotto requires two macOS permissions:
+SottoASR requires two macOS permissions:
 
 ### Microphone
 
@@ -92,9 +92,9 @@ Required for paste-at-cursor (simulated `Cmd+V`). Must be added manually:
 
 1. Open **System Settings** > **Privacy & Security** > **Accessibility**
 2. Click the **+** button
-3. Navigate to and select `Sotto.app`
+3. Navigate to and select `SottoASR.app`
 
-> **Note for developers:** Accessibility permission is tied to the app's code signature. Each development build creates a new ad-hoc signature, which invalidates the previous permission grant. You will need to remove and re-add Sotto in Accessibility settings after each rebuild. See [DEVELOPMENT.md](DEVELOPMENT.md) for workarounds.
+> **Note for developers:** Accessibility permission is tied to the app's code signature. Each development build creates a new ad-hoc signature, which invalidates the previous permission grant. You will need to remove and re-add SottoASR in Accessibility settings after each rebuild. See [DEVELOPMENT.md](DEVELOPMENT.md) for workarounds.
 
 ## Tech Stack
 
@@ -109,7 +109,7 @@ Required for paste-at-cursor (simulated `Cmd+V`). Must be added manually:
 
 ## Cross-Platform Support
 
-Sotto defaults to FluidAudio, which uses CoreML and Apple's Neural Engine for maximum performance on macOS. For future cross-platform support, an alternative backend is available via feature flags:
+SottoASR defaults to FluidAudio, which uses CoreML and Apple's Neural Engine for maximum performance on macOS. For future cross-platform support, an alternative backend is available via feature flags:
 
 | Feature Flag | Backend | Platform | Notes |
 |---|---|---|---|

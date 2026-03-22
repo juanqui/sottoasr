@@ -186,7 +186,7 @@ pub fn is_platform_supported() -> bool {
 /// Get the path to the app-managed Python venv for mlx-lm.
 pub fn venv_dir() -> Result<std::path::PathBuf, String> {
     let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    Ok(data_dir.join("com.sotto.app").join("llm-venv"))
+    Ok(data_dir.join("com.sottoasr.app").join("llm-venv"))
 }
 
 /// Get the Python executable inside the app's venv.

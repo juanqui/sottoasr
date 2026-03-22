@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SottoASR — Local, Privacy-First Speech-to-Text for macOS</title>
+        <meta
+            name="description"
+            content="Press a hotkey, speak, and text appears at your cursor. All processing happens on-device. No audio or text is ever sent to a cloud service."
+        />
+        <meta name="theme-color" content="#0a0c10" />
+
+        <!-- Open Graph -->
+        <meta
+            property="og:title"
+            content="SottoASR — Speech-to-Text for macOS"
+        />
+        <meta
+            property="og:description"
+            content="Local, privacy-first speech-to-text. Press a hotkey, speak, and text appears at your cursor."
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="assets/logo.png" />
+
+        <!-- Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="style.css" />
+        <link rel="icon" href="assets/logo.png" type="image/png" />
+    </head>
+    <body>
+        <!-- ============================================================
+       HERO
+       ============================================================ -->
+        <section class="hero">
+            <div class="hero-glow"></div>
+            <div class="container">
+                <img
+                    src="assets/logo.png"
+                    alt="SottoASR"
+                    class="hero-logo"
+                    width="120"
+                    height="120"
+                />
+                <h1 class="hero-title">SottoASR</h1>
+                <p class="hero-tagline">
+                    Local, privacy-first speech-to-text for macOS
+                </p>
+                <p class="hero-sub">
+                    Press a hotkey, speak, and text appears at your cursor.<br />
+                    All processing happens on-device — no audio or text ever
+                    leaves your Mac.
+                </p>
+                <div class="hero-actions">
+                    <a
+                        href="https://github.com/juanqui/sottoasr/releases/latest"
+                        class="btn btn-primary"
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                            />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Download Latest Release
+                    </a>
+                    <a
+                        href="https://github.com/juanqui/sottoasr"
+                        class="btn btn-ghost"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                        >
+                            <path
+                                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                            />
+                        </svg>
+                        View on GitHub
+                    </a>
+                </div>
+                <p class="coming-soon">Windows coming soon</p>
+                <div class="hero-badge">
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    Open Source &middot; MIT Licensed &middot; 100% Local
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       FEATURES
+       ============================================================ -->
+        <section class="features" id="features">
+            <div class="container">
+                <h2 class="section-label">Features</h2>
+                <p class="section-title">
+                    Everything you need, nothing you don't
+                </p>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
+                                />
+                                <path d="M9 12l2 2 4-4" />
+                            </svg>
+                        </div>
+                        <h3>Completely Private</h3>
+                        <p>
+                            All audio capture and transcription happens
+                            on-device. No cloud APIs, no telemetry, no data
+                            collection. Your words stay on your Mac.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <polygon
+                                    points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                                />
+                            </svg>
+                        </div>
+                        <h3>Blazing Fast</h3>
+                        <p>
+                            ~44x real-time transcription on Apple Silicon.
+                            Powered by CoreML and the Apple Neural Engine for
+                            hardware-accelerated inference.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
+                                />
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                <line x1="12" y1="19" x2="12" y2="23" />
+                                <line x1="8" y1="23" x2="16" y2="23" />
+                            </svg>
+                        </div>
+                        <h3>Push-to-Talk</h3>
+                        <p>
+                            Press <kbd>Cmd+Shift+Space</kbd> to talk, release to
+                            transcribe. Or use <kbd>Cmd+Shift+D</kbd> to toggle
+                            hands-free recording. All shortcuts are fully
+                            customizable.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                                />
+                                <path d="M8 10h.01" />
+                                <path d="M12 10h.01" />
+                                <path d="M16 10h.01" />
+                            </svg>
+                        </div>
+                        <h3>AI Transcript Cleanup</h3>
+                        <p>
+                            On-device LLM automatically removes filler words,
+                            fixes punctuation, and polishes your transcriptions
+                            — all locally with Qwen 3.5.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                                />
+                            </svg>
+                        </div>
+                        <h3>25 Languages</h3>
+                        <p>
+                            Multilingual speech recognition powered by NVIDIA
+                            Parakeet TDT v3 — a 600M parameter model supporting
+                            25 languages out of the box.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <rect
+                                    x="2"
+                                    y="3"
+                                    width="20"
+                                    height="14"
+                                    rx="2"
+                                    ry="2"
+                                />
+                                <line x1="8" y1="21" x2="16" y2="21" />
+                                <line x1="12" y1="17" x2="12" y2="21" />
+                            </svg>
+                        </div>
+                        <h3>Menu Bar App</h3>
+                        <p>
+                            Lives quietly in your menu bar. No dock icon, no
+                            distractions. Appears only when you need it with a
+                            beautiful floating overlay.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                <path
+                                    d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+                                />
+                            </svg>
+                        </div>
+                        <h3>Transcription History</h3>
+                        <p>
+                            Browse, search, and copy past transcriptions. Every
+                            recording is saved locally so you never lose what
+                            you said.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                                />
+                                <circle cx="12" cy="7" r="4" />
+                            </svg>
+                        </div>
+                        <h3>Paste at Cursor</h3>
+                        <p>
+                            Transcribed text is automatically pasted wherever
+                            your cursor is. Works in any app — editors,
+                            browsers, terminals, chat windows.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path d="M12 3v18" />
+                                <path d="M3 12h18" />
+                                <rect
+                                    x="3"
+                                    y="3"
+                                    width="18"
+                                    height="18"
+                                    rx="2"
+                                />
+                            </svg>
+                        </div>
+                        <h3>Lightweight</h3>
+                        <p>
+                            Just 14 MB app bundle. Models are downloaded once on
+                            first launch (~500 MB) and cached locally. Minimal
+                            resource usage when idle.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       DOWNLOAD
+       ============================================================ -->
+        <section class="download" id="download">
+            <div class="container">
+                <h2 class="section-label">Download</h2>
+                <p class="section-title">Get started in seconds</p>
+                <div class="download-card">
+                    <div class="download-info">
+                        <div class="download-version">
+                            <span class="version-badge">v0.2.1</span>
+                            <span class="version-label">Latest Release</span>
+                        </div>
+                        <div class="download-reqs">
+                            <h4>Requirements</h4>
+                            <ul>
+                                <li>macOS 14 Sonoma or later</li>
+                                <li>Apple Silicon (M1, M2, M3, M4)</li>
+                                <li>~500 MB disk space for models</li>
+                                <li>
+                                    Accessibility permission (for
+                                    paste-at-cursor)
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="download-action">
+                        <a
+                            href="https://github.com/juanqui/sottoasr/releases/latest"
+                            class="btn btn-primary btn-lg"
+                        >
+                            <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                                />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Download for macOS
+                        </a>
+                        <p class="download-note">
+                            Download the <code>.dmg</code> from the GitHub
+                            release page
+                        </p>
+                        <p class="download-note">
+                            Windows support is coming soon.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="gatekeeper-banner">
+                    <div class="gatekeeper-header">
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                            />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                        <strong>Unsigned build</strong>
+                    </div>
+                    <p>
+                        SottoASR is not yet code-signed or notarized with Apple.
+                        We're working on it. In the meantime, macOS Gatekeeper
+                        will block the app on first launch. Here's how to open it:
+                    </p>
+                    <ol>
+                        <li>
+                            Open the <code>.dmg</code> and drag SottoASR to
+                            <strong>Applications</strong> as usual.
+                        </li>
+                        <li>
+                            On first launch, you'll see
+                            <em>"SottoASR can't be opened."</em> &mdash; click
+                            <strong>OK</strong> to dismiss.
+                        </li>
+                        <li>
+                            Open <strong>System Settings &rarr; Privacy &amp;
+                            Security</strong>, scroll down, and click
+                            <strong>"Open Anyway"</strong> next to the SottoASR
+                            message.
+                        </li>
+                        <li>
+                            Alternatively, right-click (or Control-click) the app
+                            in Finder and choose <strong>Open</strong> &mdash;
+                            then click <strong>Open</strong> in the dialog.
+                        </li>
+                    </ol>
+                    <p class="gatekeeper-footer">
+                        You only need to do this once. After the first launch,
+                        macOS will remember your choice.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       OPEN SOURCE
+       ============================================================ -->
+        <section class="open-source" id="open-source">
+            <div class="container">
+                <h2 class="section-label">Open Source</h2>
+                <p class="section-title">Built in the open, for everyone</p>
+                <p class="section-desc">
+                    SottoASR is fully open source under the
+                    <strong>MIT License</strong>. Inspect the code, contribute
+                    features, report bugs, or fork it and make it your own.
+                    Privacy you can verify — not just trust.
+                </p>
+                <div class="open-source-links">
+                    <a
+                        href="https://github.com/juanqui/sottoasr"
+                        class="oss-link"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                        >
+                            <path
+                                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                            />
+                        </svg>
+                        Source Code
+                    </a>
+                    <a
+                        href="https://github.com/juanqui/sottoasr/issues"
+                        class="oss-link"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        Report Issues
+                    </a>
+                    <a
+                        href="https://github.com/juanqui/sottoasr/blob/main/LICENSE"
+                        class="oss-link"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path
+                                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                            />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                        </svg>
+                        MIT License
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       ACKNOWLEDGEMENTS
+       ============================================================ -->
+        <section class="acknowledgements" id="acknowledgements">
+            <div class="container">
+                <h2 class="section-label">Acknowledgements</h2>
+                <p class="section-title">Built on the shoulders of giants</p>
+                <p class="section-desc">
+                    SottoASR relies on outstanding open-source libraries and
+                    models. All 660+ dependencies use permissive or
+                    weak-copyleft licenses (MIT, Apache-2.0, BSD, MPL-2.0,
+                    Unicode-3.0, ISC, Zlib, CC-BY-4.0). See
+                    <a href="https://github.com/juanqui/sottoasr/blob/main/THIRD_PARTY_LICENSES">THIRD_PARTY_LICENSES</a>
+                    for the full list.
+                </p>
+
+                <div class="ack-grid">
+                    <div class="ack-group">
+                        <h3 class="ack-group-title">Speech Recognition</h3>
+                        <div class="ack-item">
+                            <div class="ack-name">NVIDIA Parakeet TDT v3</div>
+                            <div class="ack-desc">
+                                ASR model, 600M params, 25 languages
+                            </div>
+                            <span class="ack-license">CC-BY-4.0</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">FluidAudio</div>
+                            <div class="ack-desc">
+                                CoreML/ANE inference engine (Swift)
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">parakeet-rs</div>
+                            <div class="ack-desc">
+                                ONNX Runtime Rust bindings
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">cpal</div>
+                            <div class="ack-desc">
+                                Cross-platform audio capture
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">hound</div>
+                            <div class="ack-desc">
+                                WAV encoding/decoding
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">rubato</div>
+                            <div class="ack-desc">Audio resampling</div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                    </div>
+
+                    <div class="ack-group">
+                        <h3 class="ack-group-title">AI Transcript Cleanup</h3>
+                        <div class="ack-item">
+                            <div class="ack-name">Qwen3.5-0.8B</div>
+                            <div class="ack-desc">
+                                LLM by Alibaba Cloud (Qwen team)
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">Apple MLX</div>
+                            <div class="ack-desc">
+                                Metal-native ML framework
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">mlx-lm</div>
+                            <div class="ack-desc">
+                                MLX language model inference
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">huggingface_hub</div>
+                            <div class="ack-desc">
+                                Model download and caching
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
+                        </div>
+                    </div>
+
+                    <div class="ack-group">
+                        <h3 class="ack-group-title">Application Framework</h3>
+                        <div class="ack-item">
+                            <div class="ack-name">Tauri v2</div>
+                            <div class="ack-desc">
+                                Native app shell (Rust + Web)
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">Svelte 5</div>
+                            <div class="ack-desc">Reactive UI framework</div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">tauri-nspanel</div>
+                            <div class="ack-desc">
+                                macOS NSPanel overlay windows
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">Vite</div>
+                            <div class="ack-desc">Frontend build tool</div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">Tokio</div>
+                            <div class="ack-desc">Async Rust runtime</div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">serde</div>
+                            <div class="ack-desc">
+                                Serialization framework
+                            </div>
+                            <span class="ack-license">MIT</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       AUTHORS
+       ============================================================ -->
+        <section class="contributors-section" id="contributors">
+            <div class="container">
+                <div class="contributors-inner">
+                    <p class="contributors-heading">Author</p>
+                    <ul class="contributors-list">
+                        <li><strong>Juan Villa</strong></li>
+                    </ul>
+                    <p class="contributors-heading">Contributors</p>
+                    <ul class="contributors-list">
+                        <li>Ian Scofield</li>
+                    </ul>
+                    <p class="contributors-ai">
+                        Built with significant assistance from
+                        <a
+                            href="https://claude.ai"
+                            target="_blank"
+                            rel="noopener"
+                            >Claude Code</a
+                        >
+                        by Anthropic.
+                    </p>
+                    <p class="contributors-cta">
+                        Want to contribute? Check out the
+                        <a
+                            href="https://github.com/juanqui/sottoasr"
+                            target="_blank"
+                            rel="noopener"
+                            >GitHub repository</a
+                        >.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+        <footer class="site-footer">
+            <div class="container">
+                <div class="footer-content">
+                    <div class="footer-brand">
+                        <img
+                            src="assets/logo.png"
+                            alt="SottoASR"
+                            width="32"
+                            height="32"
+                            class="footer-logo"
+                        />
+                        <span class="footer-name">SottoASR</span>
+                    </div>
+                    <p class="footer-copy">
+                        &copy; 2026 Juan Villa. MIT License.
+                    </p>
+                    <div class="footer-links">
+                        <a
+                            href="https://github.com/juanqui/sottoasr"
+                            target="_blank"
+                            rel="noopener"
+                            >GitHub</a
+                        >
+                        <a
+                            href="https://github.com/juanqui/sottoasr/releases"
+                            target="_blank"
+                            rel="noopener"
+                            >Releases</a
+                        >
+                        <a
+                            href="https://github.com/juanqui/sottoasr/issues"
+                            target="_blank"
+                            rel="noopener"
+                            >Issues</a
+                        >
+                        <a
+                            href="https://github.com/juanqui/sottoasr/blob/main/LICENSE"
+                            target="_blank"
+                            rel="noopener"
+                            >License</a
+                        >
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </body>
+</html>

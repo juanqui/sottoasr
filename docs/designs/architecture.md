@@ -1,4 +1,4 @@
-# Sotto — Architecture & Design Document
+# SottoASR — Architecture & Design Document
 
 - **Version**: 2.0
 - **Date**: 2026-03-21
@@ -34,7 +34,7 @@
 
 ## 1. Summary
 
-Sotto is a local, privacy-first automatic speech recognition (ASR) application for macOS. Users press a system-wide hotkey to activate dictation, speak naturally, and transcribed text is automatically pasted wherever their cursor is positioned. All processing happens on-device using NVIDIA Parakeet models via ONNX Runtime — no audio data ever leaves the machine.
+SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. Users press a system-wide hotkey to activate dictation, speak naturally, and transcribed text is automatically pasted wherever their cursor is positioned. All processing happens on-device using NVIDIA Parakeet models via ONNX Runtime — no audio data ever leaves the machine.
 
 The application lives exclusively in the macOS menu bar (no Dock icon, no main window) and provides two dictation modes: **press-and-hold** (hold hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop and transcribe). A floating pill overlay with an audio waveform animation provides visual feedback during recording.
 
@@ -632,9 +632,9 @@ Audio is captured at the device's native sample rate (typically 48 kHz stereo on
 ### Model Download & Storage
 
 Models are stored in the platform data directory:
-- macOS: `~/Library/Application Support/com.sotto.app/models/`
+- macOS: `~/Library/Application Support/com.sottoasr.app/models/`
 
-On first launch, Sotto checks for the model file. If not present, it prompts the user to download it and shows progress via the tray menu.
+On first launch, SottoASR checks for the model file. If not present, it prompts the user to download it and shows progress via the tray menu.
 
 ### Transcription Flow
 
@@ -762,7 +762,7 @@ This prevents the user's clipboard from being permanently overwritten by each tr
 
 ### Design
 
-A borderless, transparent, always-on-top floating pill that appears at the bottom-center of the screen during recording. It provides visual feedback that Sotto is actively capturing audio.
+A borderless, transparent, always-on-top floating pill that appears at the bottom-center of the screen during recording. It provides visual feedback that SottoASR is actively capturing audio.
 
 ### Visual Specifications
 
@@ -889,7 +889,7 @@ The tray icon is a small template image (for automatic dark/light mode adaptatio
 
 ```
 ┌─────────────────────────────────┐
-│ Sotto                    v0.1.0 │
+│ SottoASR                 v0.1.0 │
 │─────────────────────────────────│
 │ Copy Last Transcription    ⌘C   │
 │ View Transcription History ⌘H   │
@@ -899,8 +899,8 @@ The tray icon is a small template image (for automatic dark/light mode adaptatio
 │ ✓ Push-to-Talk (⇧⌘Space)       │
 │   Toggle Mode  (⇧⌘D)           │
 │─────────────────────────────────│
-│ About Sotto                     │
-│ Quit Sotto                 ⌘Q   │
+│ About SottoASR                  │
+│ Quit SottoASR              ⌘Q   │
 └─────────────────────────────────┘
 ```
 
@@ -916,8 +916,8 @@ fn build_tray_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, tauri::Er
     let copy_last = MenuItem::with_id(app, "copy_last", "Copy Last Transcription", true, Some("CmdOrCtrl+C"))?;
     let view_history = MenuItem::with_id(app, "view_history", "View Transcription History", true, Some("CmdOrCtrl+H"))?;
     let settings = MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
-    let about = MenuItem::with_id(app, "about", "About Sotto", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Sotto", true, Some("CmdOrCtrl+Q"))?;
+    let about = MenuItem::with_id(app, "about", "About SottoASR", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit SottoASR", true, Some("CmdOrCtrl+Q"))?;
 
     let menu = Menu::with_items(app, &[
         &copy_last,
@@ -950,7 +950,7 @@ fn build_tray_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, tauri::Er
 ### Storage
 
 Transcription history is stored using `tauri-plugin-store` in a JSON file at:
-- macOS: `~/Library/Application Support/com.sotto.app/transcriptions.json`
+- macOS: `~/Library/Application Support/com.sottoasr.app/transcriptions.json`
 
 ### Schema
 
@@ -1008,7 +1008,7 @@ flowchart TD
     RequestMic --> CheckAx
 
     CheckAx -->|Granted| Ready["Ready to Use"]
-    CheckAx -->|Not Granted| PromptAx["Show notification:\n'Sotto needs Accessibility\npermission to paste text'"]
+    CheckAx -->|Not Granted| PromptAx["Show notification:\n'SottoASR needs Accessibility\npermission to paste text'"]
     PromptAx --> OpenSettings["Button: Open System Settings"]
     OpenSettings --> CheckAx
 ```
@@ -1277,7 +1277,7 @@ sotto/
 
 ### Privacy
 
-- **No audio/text network transmission**: Sotto never sends audio recordings or transcription text over the network. The only network access is for ASR model download on first launch (from HuggingFace Hub).
+- **No audio/text network transmission**: SottoASR never sends audio recordings or transcription text over the network. The only network access is for ASR model download on first launch (from HuggingFace Hub).
 - **Local-only ASR**: All transcription happens on-device via ONNX Runtime — no cloud API calls
 - **No telemetry**: No analytics, crash reporting, or usage tracking
 - **Clipboard handling**: Original clipboard is restored after paste (configurable)

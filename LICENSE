@@ -1,7 +1,6 @@
 MIT License
 
 Copyright (c) 2026 Juan Villa (juan@villafam.com)
-Copyright (c) 2026 Ian Scofield (iscofield@gmail.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +24,14 @@ SOFTWARE.
 THIRD-PARTY NOTICES
 ===================
 
-This software uses the following open-source components:
+SottoASR incorporates open-source software components. The principal
+dependencies and their licenses are listed below. For the comprehensive
+per-package listing (660+ packages), see the THIRD_PARTY_LICENSES file
+in the root of this repository.
+
+
+MACHINE LEARNING MODELS (downloaded at runtime)
+------------------------------------------------
 
 NVIDIA Parakeet TDT v3 (0.6B) - Speech Recognition Model
   License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
@@ -34,28 +40,116 @@ NVIDIA Parakeet TDT v3 (0.6B) - Speech Recognition Model
 
 Qwen3.5-0.8B - Language Model
   License: Apache-2.0
-  Copyright (c) Alibaba Cloud
+  Copyright (c) Alibaba Cloud (Qwen team)
   https://huggingface.co/Qwen/Qwen3.5-0.8B
 
-FluidAudio - CoreML Audio AI SDK
+
+SPEECH RECOGNITION
+------------------
+
+FluidAudio - CoreML/ANE Audio AI SDK
   License: Apache-2.0
   Copyright (c) FluidInference
   https://github.com/FluidInference/FluidAudio
 
-Apple MLX - Machine Learning Framework
+fluidaudio-rs - FluidAudio Rust bindings
+  License: MIT
+  Copyright (c) FluidInference
+  https://github.com/FluidInference/fluidaudio-rs
+
+parakeet-rs - ONNX Runtime ASR bindings
+  License: MIT
+  Copyright (c) parakeet-rs contributors
+  https://github.com/jmg049/parakeet-rs
+
+cpal - Cross-platform audio capture
+  License: Apache-2.0
+  Copyright (c) The CPAL contributors
+  https://github.com/RustAudio/cpal
+
+hound - WAV encoding/decoding
+  License: Apache-2.0
+  Copyright (c) Ruud van Asseldonk
+  https://github.com/ruuda/hound
+
+rubato - Audio resampling
+  License: MIT
+  Copyright (c) Henrik Enquist
+  https://github.com/HEnquist/rubato
+
+
+AI TRANSCRIPT CLEANUP
+---------------------
+
+Apple MLX - Metal-native ML framework
   License: MIT
   Copyright (c) Apple Inc.
   https://github.com/ml-explore/mlx
 
-Tauri - Application Framework
+mlx-lm - MLX language model inference
+  License: MIT
+  Copyright (c) Apple Inc.
+  https://github.com/ml-explore/mlx-examples
+
+huggingface_hub - Model download and caching
+  License: Apache-2.0
+  Copyright (c) Hugging Face, Inc.
+  https://github.com/huggingface/huggingface_hub
+
+
+APPLICATION FRAMEWORK
+---------------------
+
+Tauri - Application framework
   License: MIT OR Apache-2.0
   Copyright (c) Tauri Programme within The Commons Conservancy
   https://github.com/tauri-apps/tauri
 
-Svelte - UI Framework
+tauri-nspanel - macOS NSPanel overlay windows
+  License: MIT OR Apache-2.0
+  Copyright (c) Victor Olaitan (ahkohd)
+  https://github.com/ahkohd/tauri-nspanel
+
+Svelte - UI framework
   License: MIT
   Copyright (c) Svelte contributors
   https://github.com/sveltejs/svelte
 
-For the complete list of dependencies and their licenses, see the
-Cargo.toml and package.json files.
+Vite - Frontend build tool
+  License: MIT
+  Copyright (c) Evan You and Vite contributors
+  https://github.com/vitejs/vite
+
+Tokio - Async Rust runtime
+  License: MIT
+  Copyright (c) Tokio contributors
+  https://github.com/tokio-rs/tokio
+
+serde - Serialization framework
+  License: MIT OR Apache-2.0
+  Copyright (c) David Tolnay
+  https://github.com/serde-rs/serde
+
+
+NOTABLE LICENSE CATEGORIES
+--------------------------
+
+The majority of dependencies (545+) are dual-licensed MIT OR Apache-2.0.
+Additional license types used by dependencies include:
+
+  MIT ................ 201 packages
+  Apache-2.0 ......... 13 packages (sole-licensed)
+  BSD-3-Clause ........ 5 packages
+  MPL-2.0 ............. 9 packages (file-level copyleft; see note below)
+  Unicode-3.0 ........ 18 packages (ICU4X libraries)
+  BSL-1.0 ............. 2 packages (Boost Software License)
+  ISC ................. 3 packages
+  Zlib ............... 20 packages
+  CC-BY-4.0 ........... 1 model (requires attribution; see above)
+
+Note on MPL-2.0: The Mozilla Public License 2.0 is a weak/file-level
+copyleft license. Per Section 3.3, MPL-2.0 code may be combined into a
+larger work under different terms. The copyleft obligation applies only
+to modifications of the MPL-licensed files themselves, not to SottoASR's
+own source code. Affected packages: cssparser, cssparser-macros,
+dtoa-short, option-ext, selectors, lightningcss.

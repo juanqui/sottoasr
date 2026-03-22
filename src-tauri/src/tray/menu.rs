@@ -15,9 +15,9 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let separator2 = PredefinedMenuItem::separator(app)
         .map_err(|e| e.to_string())?;
-    let about = MenuItem::with_id(app, "about", "About Sotto", true, None::<&str>)
+    let about = MenuItem::with_id(app, "about", "About SottoASR", true, None::<&str>)
         .map_err(|e| e.to_string())?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Sotto", true, None::<&str>)
+    let quit = MenuItem::with_id(app, "quit", "Quit SottoASR", true, None::<&str>)
         .map_err(|e| e.to_string())?;
 
     let menu = Menu::with_items(app, &[
@@ -40,7 +40,7 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
         None => {
             log::info!("Creating tray icon programmatically");
             TrayIconBuilder::with_id("main-tray")
-                .tooltip("Sotto — Speech to Text")
+                .tooltip("SottoASR — Speech to Text")
                 .icon(app.default_window_icon().cloned().unwrap_or_else(|| {
                     tauri::image::Image::new(&[], 1, 1)
                 }))
@@ -76,18 +76,18 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
             }
             "view_history" => {
                 log::info!("Tray: Opening history window");
-                open_or_focus_window(app, "history", "history.html", "Sotto — History", 520.0, 640.0);
+                open_or_focus_window(app, "history", "history.html", "SottoASR — History", 520.0, 640.0);
             }
             "settings" => {
                 log::info!("Tray: Opening settings window");
-                open_or_focus_window(app, "settings", "settings.html", "Sotto — Settings", 520.0, 600.0);
+                open_or_focus_window(app, "settings", "settings.html", "SottoASR — Settings", 520.0, 600.0);
             }
             "about" => {
                 log::info!("Tray: Opening about window");
-                open_or_focus_window(app, "about", "about.html", "About Sotto", 480.0, 960.0);
+                open_or_focus_window(app, "about", "about.html", "About SottoASR", 480.0, 960.0);
             }
             "quit" => {
-                log::info!("Quitting Sotto");
+                log::info!("Quitting SottoASR");
                 app.exit(0);
             }
             _ => {}

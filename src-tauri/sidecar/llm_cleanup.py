@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sotto LLM Cleanup Sidecar — runs Qwen3.5-0.8B via MLX for transcript cleanup.
+"""SottoASR LLM Cleanup Sidecar — runs Qwen3.5-0.8B via MLX for transcript cleanup.
 
 Protocol: reads JSON requests from stdin (one per line), writes JSON responses to stdout.
 

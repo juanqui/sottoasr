@@ -4,7 +4,7 @@ use crate::models::Transcription;
 use std::path::PathBuf;
 
 /// Persistent transcription store — survives app restarts and reinstalls.
-/// Stored at ~/Library/Application Support/com.sotto.app/transcriptions.json
+/// Stored at ~/Library/Application Support/com.sottoasr.app/transcriptions.json
 static TRANSCRIPTIONS: std::sync::LazyLock<tokio::sync::Mutex<Vec<Transcription>>> =
     std::sync::LazyLock::new(|| {
         let items = load_from_disk().unwrap_or_default();
@@ -15,7 +15,7 @@ static TRANSCRIPTIONS: std::sync::LazyLock<tokio::sync::Mutex<Vec<Transcription>
 /// Get the persistent storage file path.
 fn storage_path() -> Result<PathBuf, String> {
     let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    let app_dir = data_dir.join("com.sotto.app");
+    let app_dir = data_dir.join("com.sottoasr.app");
     std::fs::create_dir_all(&app_dir)
         .map_err(|e| format!("Failed to create app data dir: {}", e))?;
     Ok(app_dir.join("transcriptions.json"))

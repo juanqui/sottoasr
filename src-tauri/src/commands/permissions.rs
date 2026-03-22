@@ -152,16 +152,16 @@ pub async fn open_accessibility_settings() -> Result<(), String> {
 
 /// Reset and re-request Accessibility permission.
 /// Needed after each rebuild with ad-hoc signing because the code signature changes.
-/// Runs `tccutil reset Accessibility com.sotto.app` then re-triggers the system prompt.
+/// Runs `tccutil reset Accessibility com.sottoasr.app` then re-triggers the system prompt.
 #[tauri::command]
 pub async fn fix_accessibility_permission() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         tokio::task::spawn_blocking(|| {
             // Reset the stale TCC entry
-            log::info!("Resetting Accessibility TCC entry for com.sotto.app...");
+            log::info!("Resetting Accessibility TCC entry for com.sottoasr.app...");
             let _ = std::process::Command::new("tccutil")
-                .args(["reset", "Accessibility", "com.sotto.app"])
+                .args(["reset", "Accessibility", "com.sottoasr.app"])
                 .output();
 
             // Small delay for TCC database to update

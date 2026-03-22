@@ -234,12 +234,19 @@ fn handle_start_recording(app: &AppHandle) {
             // Show the overlay window
             show_overlay(app);
 
-            // Spawn auto-stop timer: warn at (MAX - WARNING) seconds, stop at MAX seconds
+            // Spawn auto-stop timer: warn at (MAX - WARNING) seconds, stop at MAX seconds.
+            // Capture the recording generation so this timer can detect if a new
+            // recording session has started (making this timer stale).
+            let generation = state.recording_generation.fetch_add(1, Ordering::SeqCst) + 1;
             let app_for_timer = app.clone();
             tokio::spawn(async move {
                 let warning_at = MAX_RECORDING_SECS - WARNING_BEFORE_LIMIT_SECS;
                 tokio::time::sleep(std::time::Duration::from_secs(warning_at)).await;
                 let state: tauri::State<'_, AppState> = app_for_timer.state();
+                if state.recording_generation.load(Ordering::SeqCst) != generation {
+                    log::info!("Auto-stop timer (gen {}) is stale, exiting", generation);
+                    return;
+                }
                 if state.get_state() != AppStateEnum::Recording {
                     return;
                 }
@@ -251,6 +258,10 @@ fn handle_start_recording(app: &AppHandle) {
 
                 tokio::time::sleep(std::time::Duration::from_secs(WARNING_BEFORE_LIMIT_SECS)).await;
                 let state: tauri::State<'_, AppState> = app_for_timer.state();
+                if state.recording_generation.load(Ordering::SeqCst) != generation {
+                    log::info!("Auto-stop timer (gen {}) is stale after warning, exiting", generation);
+                    return;
+                }
                 if state.get_state() == AppStateEnum::Recording {
                     log::info!("Max recording duration ({}s) reached — auto-stopping", MAX_RECORDING_SECS);
                     handle_stop_recording(&app_for_timer).await;

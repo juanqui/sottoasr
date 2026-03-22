@@ -1,8 +1,8 @@
-# Project: Sotto
+# Project: SottoASR
 
 ## Overview
 
-Sotto is a local, privacy-first speech-to-text application for macOS. The user presses a global hotkey, speaks, and transcribed text is pasted at their cursor position. All processing happens on-device — no audio or text is ever sent to a cloud service.
+SottoASR is a local, privacy-first speech-to-text application for macOS. The user presses a global hotkey, speaks, and transcribed text is pasted at their cursor position. All processing happens on-device — no audio or text is ever sent to a cloud service.
 
 ## Tech Stack
 

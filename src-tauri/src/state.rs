@@ -25,6 +25,9 @@ pub struct AppState {
     pub current_job_id: AtomicU64,
     // Cancel shortcut string — registered only while recording
     pub cancel_shortcut: StdMutex<String>,
+    // Recording generation counter — incremented on each new recording so stale
+    // auto-stop timers from previous sessions can detect they are obsolete.
+    pub recording_generation: AtomicU64,
 }
 
 impl AppState {
@@ -45,6 +48,7 @@ impl AppState {
             llm_engine: TokioMutex::new(None),
             current_job_id: AtomicU64::new(0),
             cancel_shortcut: StdMutex::new(cancel),
+            recording_generation: AtomicU64::new(0),
         }
     }
 

@@ -1,4 +1,4 @@
-# Sotto
+# SottoASR
 
 Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor.
 
@@ -30,10 +30,10 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 
 ## Important Notes
 - Accessibility permission is tied to code signature — must remove and re-add after each rebuild
-- `tccutil reset Accessibility com.sotto.app` resets the TCC entry
-- Always launch via `open Sotto.app`, never the raw binary (LSUIElement/TCC require the .app bundle)
+- `tccutil reset Accessibility com.sottoasr.app` resets the TCC entry
+- Always launch via `open SottoASR.app`, never the raw binary (LSUIElement/TCC require the .app bundle)
 - FluidAudio models (~500 MB) are cached at `~/Library/Application Support/FluidAudio/Models/`
-- Logs at `~/Library/Logs/com.sotto.app/Sotto.log`
+- Logs at `~/Library/Logs/com.sottoasr.app/SottoASR.log`
 
 ## Rules
 See `.claude/rules/` for development conventions and workflows.

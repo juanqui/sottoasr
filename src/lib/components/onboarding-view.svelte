@@ -186,7 +186,7 @@
   {#if currentStep === 'welcome'}
     <div class="step">
       <div class="icon-large">🎙</div>
-      <h1>Welcome to Sotto</h1>
+      <h1>Welcome to SottoASR</h1>
       <p class="subtitle">
         Local, privacy-first speech-to-text for macOS.
         Press a hotkey, speak, and text appears at your cursor.
@@ -229,7 +229,7 @@
   {:else if currentStep === 'permissions'}
     <div class="step">
       <h2>Permissions</h2>
-      <p class="subtitle">Sotto needs two permissions to work:</p>
+      <p class="subtitle">SottoASR needs two permissions to work:</p>
 
       <div class="permission-list">
         <div class="permission-item" class:granted={micGranted}>
@@ -296,7 +296,7 @@
         </p>
       {:else if !axPermission}
         <p class="note">
-          Toggle Sotto <strong>on</strong> in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
+          Toggle SottoASR <strong>on</strong> in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
         </p>
       {/if}
 
@@ -339,7 +339,7 @@
   {:else if currentStep === 'ready'}
     <div class="step">
       <div class="icon-large success">✓</div>
-      <h2>Sotto is Ready!</h2>
+      <h2>SottoASR is Ready!</h2>
       <p class="subtitle">Speech recognition is set up and ready to use.</p>
 
       <div class="shortcuts-preview">
@@ -358,11 +358,11 @@
       </div>
 
       <p class="note">
-        Sotto lives in your menu bar. Look for the microphone icon at the top of your screen.
+        SottoASR lives in your menu bar. Look for the microphone icon at the top of your screen.
       </p>
 
       <button class="primary" onclick={closeOnboarding}>
-        Start Using Sotto
+        Start Using SottoASR
       </button>
     </div>
 
@@ -376,7 +376,7 @@
         an app restart for it to take full effect.
       </p>
       <p class="note">
-        Without restarting, Sotto won't be able to paste transcribed text
+        Without restarting, SottoASR won't be able to paste transcribed text
         at your cursor. Your settings and model data will be preserved.
       </p>
 

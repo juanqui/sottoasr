@@ -18,7 +18,7 @@ fn paste_text_inner(text: &str, restore: bool) -> Result<(), String> {
         return Err(
             "Accessibility permission not granted. \
              Go to System Settings > Privacy & Security > Accessibility, \
-             remove Sotto, then re-add the .app bundle and toggle it ON."
+             remove SottoASR, then re-add the .app bundle and toggle it ON."
             .into()
         );
     }
@@ -28,7 +28,7 @@ fn paste_text_inner(text: &str, restore: bool) -> Result<(), String> {
     if !test_accessibility_functional() {
         return Err(
             "Accessibility permission is granted but not yet active. \
-             Please restart Sotto for the permission to take effect."
+             Please restart SottoASR for the permission to take effect."
             .into()
         );
     }

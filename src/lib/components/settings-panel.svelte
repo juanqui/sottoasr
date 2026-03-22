@@ -276,7 +276,7 @@
       <div class="toggle-field">
         <div class="toggle-info">
           <span class="toggle-label">Launch at login</span>
-          <span class="toggle-hint">Start Sotto when you log in</span>
+          <span class="toggle-hint">Start SottoASR when you log in</span>
         </div>
         <label class="switch">
           <input type="checkbox" bind:checked={settingsStore.current.launch_at_login} />
@@ -450,9 +450,9 @@
       </div>
       {#if accessibilityPermission === false}
         <p class="permission-explain">
-          Sotto appears enabled in System Settings but the app was updated since then.
-          Click "Fix Permission" to re-register, then toggle Sotto ON in the System Settings
-          window that opens. You may need to restart Sotto afterwards.
+          SottoASR appears enabled in System Settings but the app was updated since then.
+          Click "Fix Permission" to re-register, then toggle SottoASR ON in the System Settings
+          window that opens. You may need to restart SottoASR afterwards.
         </p>
       {/if}
       <button

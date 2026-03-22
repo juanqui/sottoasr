@@ -1,6 +1,6 @@
 # Development Guide
 
-This document covers everything needed to develop, build, test, and debug Sotto.
+This document covers everything needed to develop, build, test, and debug SottoASR.
 
 ## Table of Contents
 
@@ -39,7 +39,7 @@ source "$HOME/.cargo/env"
 xcode-select --install
 
 # 3. Clone the repository
-git clone https://github.com/juanqui/sotto.git
+git clone https://github.com/juanqui/sottoasr.git
 cd sotto
 
 # 4. Install frontend dependencies
@@ -116,7 +116,7 @@ sotto/
 
 ### Multi-Window Architecture
 
-Sotto uses Tauri's multi-window support with Vite multi-page entries. Each window has its own HTML entry point at the project root and a corresponding TypeScript entry in `src/`:
+SottoASR uses Tauri's multi-window support with Vite multi-page entries. Each window has its own HTML entry point at the project root and a corresponding TypeScript entry in `src/`:
 
 - **Overlay** -- floating pill shown during recording
 - **History** -- transcription history browser
@@ -157,10 +157,10 @@ cargo tauri build
 ```
 
 This produces:
-- `src-tauri/target/release/bundle/macos/Sotto.app` -- the application bundle
-- `src-tauri/target/release/bundle/dmg/Sotto_<version>_aarch64.dmg` -- disk image installer
+- `src-tauri/target/release/bundle/macos/SottoASR.app` -- the application bundle
+- `src-tauri/target/release/bundle/dmg/SottoASR_<version>_aarch64.dmg` -- disk image installer
 
-**Important:** You must launch the built app via `open src-tauri/target/release/bundle/macos/Sotto.app`, not by running the raw binary directly. The `open` command is required for `LSUIElement` (no Dock icon) and TCC permission checks to work correctly.
+**Important:** You must launch the built app via `open src-tauri/target/release/bundle/macos/SottoASR.app`, not by running the raw binary directly. The `open` command is required for `LSUIElement` (no Dock icon) and TCC permission checks to work correctly.
 
 ## Testing and Linting
 
@@ -201,7 +201,7 @@ npm run build 2>&1 | tee /tmp/npm-build.txt
 
 ## Feature Flags
 
-Sotto supports multiple ASR backends via Cargo feature flags, defined in `src-tauri/Cargo.toml`.
+SottoASR supports multiple ASR backends via Cargo feature flags, defined in `src-tauri/Cargo.toml`.
 
 | Flag | Backend | Platform | Default | Description |
 |---|---|---|---|---|
@@ -288,22 +288,22 @@ User presses hotkey
 
 1. Reset the TCC database entry:
    ```bash
-   tccutil reset Accessibility com.sotto.app
+   tccutil reset Accessibility com.sottoasr.app
    ```
 2. Open **System Settings** > **Privacy & Security** > **Accessibility**
-3. If Sotto is listed, remove it (select and click `-`)
-4. Click `+` and navigate to the newly built `Sotto.app`
-5. Relaunch Sotto via `open` (not the raw binary)
+3. If SottoASR is listed, remove it (select and click `-`)
+4. Click `+` and navigate to the newly built `SottoASR.app`
+5. Relaunch SottoASR via `open` (not the raw binary)
 
 **Tip:** You can verify Accessibility status from within the app -- the `permissions.rs` module calls `AXIsProcessTrusted()` and reports the result.
 
 ### Must Launch via `open` Command
 
-**Problem:** Running the Sotto binary directly (e.g., `./src-tauri/target/release/sotto`) bypasses macOS launch services. This causes `LSUIElement` (hide from Dock) to not take effect, and TCC permission checks to behave incorrectly.
+**Problem:** Running the SottoASR binary directly (e.g., `./src-tauri/target/release/sottoasr`) bypasses macOS launch services. This causes `LSUIElement` (hide from Dock) to not take effect, and TCC permission checks to behave incorrectly.
 
 **Fix:** Always launch via:
 ```bash
-open src-tauri/target/release/bundle/macos/Sotto.app
+open src-tauri/target/release/bundle/macos/SottoASR.app
 ```
 
 ### FluidAudio Model Download on First Launch
@@ -318,7 +318,7 @@ open src-tauri/target/release/bundle/macos/Sotto.app
 
 ### Log Output
 
-In development mode (`cargo tauri dev`), Rust logs are printed to the terminal. Look for output from the `sotto` and `fluidaudio` modules.
+In development mode (`cargo tauri dev`), Rust logs are printed to the terminal. Look for output from the `sottoasr` and `fluidaudio` modules.
 
 To increase log verbosity:
 
@@ -329,21 +329,21 @@ RUST_LOG=debug cargo tauri dev
 For even more detail:
 
 ```bash
-RUST_LOG=sotto=trace,fluidaudio=debug cargo tauri dev
+RUST_LOG=sottoasr=trace,fluidaudio=debug cargo tauri dev
 ```
 
 ### Frontend DevTools
 
-In development mode, right-click any Sotto window and select **Inspect Element** to open the WebView developer tools. This gives access to the browser console, network tab, and element inspector.
+In development mode, right-click any SottoASR window and select **Inspect Element** to open the WebView developer tools. This gives access to the browser console, network tab, and element inspector.
 
 ### Checking Permissions
 
 To verify microphone and accessibility permissions from the command line:
 
 ```bash
-# Check if Sotto has microphone access (look for com.sotto.app)
+# Check if SottoASR has microphone access (look for com.sottoasr.app)
 sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
-  "SELECT service, client, allowed FROM access WHERE client = 'com.sotto.app';"
+  "SELECT service, client, allowed FROM access WHERE client = 'com.sottoasr.app';"
 
 # Check accessibility (programmatic)
 # The app itself calls AXIsProcessTrusted() -- check terminal output
@@ -353,8 +353,8 @@ sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| Text not pasted after recording | Accessibility permission lost | Re-add Sotto in Accessibility settings |
-| App appears in Dock | Launched via raw binary | Launch via `open Sotto.app` |
+| Text not pasted after recording | Accessibility permission lost | Re-add SottoASR in Accessibility settings |
+| App appears in Dock | Launched via raw binary | Launch via `open SottoASR.app` |
 | "Model not found" error | First launch, model not downloaded | Wait for download or check network |
 | Overlay doesn't appear | Window creation failed | Check terminal for Tauri errors |
 | No audio captured | Microphone permission denied | Grant in System Settings > Microphone |
@@ -364,9 +364,9 @@ sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
 | What | Path |
 |---|---|
 | FluidAudio models | `~/Library/Application Support/FluidAudio/Models/` |
-| App data | `~/Library/Application Support/com.sotto.app/` |
+| App data | `~/Library/Application Support/com.sottoasr.app/` |
 | macOS TCC database | `~/Library/Application Support/com.apple.TCC/TCC.db` |
-| Build output | `src-tauri/target/release/bundle/macos/Sotto.app` |
+| Build output | `src-tauri/target/release/bundle/macos/SottoASR.app` |
 | DMG output | `src-tauri/target/release/bundle/dmg/` |
 
 ## Contributing
