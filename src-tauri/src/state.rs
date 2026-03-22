@@ -23,14 +23,18 @@ pub struct AppState {
     pub llm_engine: TokioMutex<Option<LlmEngine>>,
     // Monotonic job ID for stale-result prevention
     pub current_job_id: AtomicU64,
+    // Cancel shortcut string — registered only while recording
+    pub cancel_shortcut: StdMutex<String>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
+        let settings = crate::commands::settings::load_persisted_settings();
+        let cancel = settings.cancel_shortcut.clone();
         Self {
             current_state: StdMutex::new(AppStateEnum::Idle),
-            settings: TokioMutex::new(crate::commands::settings::load_persisted_settings()),
+            settings: TokioMutex::new(settings),
             last_transcription: TokioMutex::new(None),
             is_recording: AtomicBool::new(false),
             is_model_loaded: AtomicBool::new(false),
@@ -40,6 +44,7 @@ impl AppState {
             asr_engine: TokioMutex::new(crate::asr::engine::create_engine()),
             llm_engine: TokioMutex::new(None),
             current_job_id: AtomicU64::new(0),
+            cancel_shortcut: StdMutex::new(cancel),
         }
     }
 
