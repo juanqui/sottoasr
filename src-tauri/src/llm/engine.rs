@@ -215,11 +215,22 @@ pub fn setup_venv() -> Result<(), String> {
         return Err("python3 -m venv failed".into());
     }
 
-    // Install mlx-lm
-    let pip = venv.join("bin").join("pip3");
-    log::info!("Installing mlx-lm into venv...");
-    let output = Command::new(&pip)
-        .args(["install", "mlx-lm>=0.30.7"])
+    // Use the venv's python3 -m pip (not the pip3 binary) to ensure we always
+    // get the correct pip version, especially after upgrading
+    let python = venv.join("bin").join("python3");
+
+    // Upgrade pip first — the venv inherits the system pip which may be too old
+    // to resolve modern dependency trees
+    log::info!("Upgrading pip in venv...");
+    let _ = Command::new(&python)
+        .args(["-m", "pip", "install", "--upgrade", "pip"])
+        .output();
+
+    // Install mlx-lm and huggingface_hub (the sidecar imports huggingface_hub directly
+    // for model downloading/caching, so it must be explicitly installed)
+    log::info!("Installing mlx-lm and huggingface_hub into venv...");
+    let output = Command::new(&python)
+        .args(["-m", "pip", "install", "mlx-lm", "huggingface_hub"])
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
     if !output.status.success() {
