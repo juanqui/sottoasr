@@ -390,7 +390,7 @@
                 <div class="download-card">
                     <div class="download-info">
                         <div class="download-version">
-                            <span class="version-badge">v0.2.1</span>
+                            <span class="version-badge">v0.2.2</span>
                             <span class="version-label">Latest Release</span>
                         </div>
                         <div class="download-reqs">
@@ -439,8 +439,8 @@
                     </div>
                 </div>
 
-                <div class="gatekeeper-banner">
-                    <div class="gatekeeper-header">
+                <div class="signed-banner">
+                    <div class="signed-header">
                         <svg
                             width="18"
                             height="18"
@@ -451,44 +451,14 @@
                             stroke-linecap="round"
                             stroke-linejoin="round"
                         >
-                            <path
-                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                            />
-                            <line x1="12" y1="9" x2="12" y2="13" />
-                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <polyline points="9 12 12 15 16 10" />
                         </svg>
-                        <strong>Unsigned build</strong>
+                        <strong>Signed &amp; Notarized</strong>
                     </div>
                     <p>
-                        SottoASR is not yet code-signed or notarized with Apple.
-                        We're working on it. In the meantime, macOS Gatekeeper
-                        will block the app on first launch. Here's how to open it:
-                    </p>
-                    <ol>
-                        <li>
-                            Open the <code>.dmg</code> and drag SottoASR to
-                            <strong>Applications</strong> as usual.
-                        </li>
-                        <li>
-                            On first launch, you'll see
-                            <em>"SottoASR can't be opened."</em> &mdash; click
-                            <strong>OK</strong> to dismiss.
-                        </li>
-                        <li>
-                            Open <strong>System Settings &rarr; Privacy &amp;
-                            Security</strong>, scroll down, and click
-                            <strong>"Open Anyway"</strong> next to the SottoASR
-                            message.
-                        </li>
-                        <li>
-                            Alternatively, right-click (or Control-click) the app
-                            in Finder and choose <strong>Open</strong> &mdash;
-                            then click <strong>Open</strong> in the dialog.
-                        </li>
-                    </ol>
-                    <p class="gatekeeper-footer">
-                        You only need to do this once. After the first launch,
-                        macOS will remember your choice.
+                        SottoASR is code-signed and notarized with Apple.
+                        Download, install, and launch &mdash; no Gatekeeper warnings.
                     </p>
                 </div>
             </div>

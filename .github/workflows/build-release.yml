@@ -18,6 +18,10 @@ jobs:
             target: aarch64-apple-darwin
             label: Apple Silicon
     runs-on: ${{ matrix.platform }}
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
     steps:
       - name: Checkout
@@ -42,10 +46,38 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Import Apple Developer Certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Verify signing certificate
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain \
+            | grep "Developer ID Application")
+          echo "$CERT_INFO"
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
         with:
           tagName: v__VERSION__
           releaseName: 'SottoASR v__VERSION__'
@@ -68,7 +100,7 @@ jobs:
             - Apple Silicon (M1 or later)
             - Python 3.10+ (only required for optional AI Transcript Cleanup feature)
 
-            > **Note:** This is an unsigned build. On first launch, right-click the app and select "Open" to bypass Gatekeeper.
+            This build is signed and notarized by Apple.
 
             See [CHANGELOG.md](https://github.com/juanqui/sottoasr/blob/main/CHANGELOG.md) for details.
           releaseDraft: true

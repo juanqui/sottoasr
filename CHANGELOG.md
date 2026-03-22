@@ -2,6 +2,20 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.2.2] — 2026-03-22
+
+Code signing and notarization for macOS.
+
+### Added
+
+- **Apple code signing** — App is now signed with a Developer ID Application certificate. Accessibility permissions persist across updates.
+- **Apple notarization** — App is notarized and stapled by Apple. No more Gatekeeper warnings on first launch.
+- **CI/CD signing pipeline** — GitHub Actions workflow now imports the signing certificate, signs the build, and submits for notarization automatically.
+
+### Changed
+
+- **Website** — Replaced the "Unsigned build" Gatekeeper warning with a "Signed & Notarized" badge.
+
 ## [0.2.1] — 2026-03-22
 
 A polish release: rebrand to SottoASR, new app icon, macOS-native tray icon, and a recording timer bug fix.

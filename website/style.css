@@ -456,50 +456,28 @@ kbd {
   margin-top: 12px;
 }
 
-.gatekeeper-banner {
+.signed-banner {
   margin-top: 32px;
   padding: 20px 28px;
   border-radius: 14px;
-  background: var(--amber-glow);
-  border: 1px solid rgba(245, 183, 49, 0.18);
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.18);
   color: var(--text);
   font-size: 0.85rem;
   line-height: 1.7;
 }
 
-.gatekeeper-header {
+.signed-header {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  color: var(--amber);
+  color: #22c55e;
   font-size: 0.9rem;
 }
 
-.gatekeeper-banner p {
-  margin: 0 0 10px;
-}
-
-.gatekeeper-banner ol {
-  margin: 0 0 10px;
-  padding-left: 20px;
-}
-
-.gatekeeper-banner li {
-  margin-bottom: 6px;
-}
-
-.gatekeeper-banner code {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 0.82rem;
-}
-
-.gatekeeper-footer {
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  margin-bottom: 0 !important;
+.signed-banner p {
+  margin: 0;
 }
 
 /* ============================================================
