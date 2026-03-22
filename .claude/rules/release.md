@@ -20,6 +20,14 @@ Update the version string in all four files:
 
 All five must match exactly.
 
+**Important:** The About screen reads its version at runtime via `getVersion()` from `@tauri-apps/api/app`, which pulls from `tauri.conf.json`. Do NOT hardcode version strings in frontend components — always use this API.
+
+After bumping, verify no hardcoded versions remain:
+
+```bash
+grep -rn '0\.OLD\.VERSION' src/ --include='*.svelte' --include='*.ts'
+```
+
 ### 2. Update CHANGELOG.md
 
 Add a new section at the top of CHANGELOG.md following the existing format:

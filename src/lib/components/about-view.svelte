@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { getVersion } from '@tauri-apps/api/app';
   import appIcon from '../../assets/app-icon.png';
-  const version = '0.2.0';
+
+  let version = $state('');
+  getVersion().then(v => version = v);
 
   const sections = [
     {
