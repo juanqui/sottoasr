@@ -2,6 +2,15 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.2.4] — 2026-03-22
+
+Paste reliability improvements.
+
+### Fixed
+
+- **Paste failing in non-terminal apps (Claude Desktop, browsers, Electron apps)** — The per-paste accessibility functional check (`AXFocusedApplication` query) produced false negatives when called from background threads or during focus transitions, blocking paste even though accessibility was granted. Replaced with a one-time startup check; paste now relies solely on `AXIsProcessTrusted()`.
+- **Recording timer starting at ~0:30 on first recording** — The overlay's `startTime` was initialized to `Date.now()` at component mount (app startup) instead of at recording start. Now initializes to 0 and only sets when recording begins.
+
 ## [0.2.3] — 2026-03-22
 
 Paste reliability, diagnostics, and polish.

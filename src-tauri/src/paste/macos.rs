@@ -15,22 +15,16 @@ pub fn paste_text_and_restore(text: &str, target_pid: i32) -> Result<(), String>
 }
 
 fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), String> {
-    // Check accessibility first
+    // Check accessibility — AXIsProcessTrusted() is the authoritative check.
+    // We no longer run the functional AX query on every paste because it can
+    // produce false negatives when called from background threads or during
+    // focus transitions (e.g., AXFocusedApplication returns an error when no
+    // app has focus). The functional check is done once at startup instead.
     if !is_accessibility_trusted() {
         return Err(
             "Accessibility permission not granted. \
              Go to System Settings > Privacy & Security > Accessibility, \
              remove SottoASR, then re-add the .app bundle and toggle it ON."
-            .into()
-        );
-    }
-
-    // Functional verification: check if accessibility is actually working,
-    // not just reported as trusted by the TCC database.
-    if !test_accessibility_functional() {
-        return Err(
-            "Accessibility permission is granted but not yet active. \
-             Please restart SottoASR for the permission to take effect."
             .into()
         );
     }
@@ -146,7 +140,11 @@ pub fn test_accessibility_functional() -> bool {
         // errAXSuccess = 0, errAXAPIDisabled = -25211
         // On success or "attribute not settable" (-25205), accessibility is functional.
         // Only real failure codes (like -25211 API disabled) mean it's not working.
-        result == 0 || result == -25205
+        let ok = result == 0 || result == -25205;
+        if !ok {
+            log::warn!("AX functional check returned error code: {}", result);
+        }
+        ok
     }
 }
 

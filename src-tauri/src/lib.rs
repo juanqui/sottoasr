@@ -97,7 +97,19 @@ pub fn run() {
                 if !ax_trusted {
                     log::warn!("Accessibility permission NOT granted — hotkeys and paste will not work!");
                 } else {
-                    log::info!("Accessibility permission granted");
+                    log::info!("Accessibility permission granted (AXIsProcessTrusted)");
+                    // One-time functional verification: check the AX API actually works.
+                    // This catches the Sequoia bug where TCC says "granted" but the
+                    // permission hasn't propagated yet. Log a warning but don't block —
+                    // it may settle by the time the user records.
+                    if paste::test_accessibility_functional() {
+                        log::info!("Accessibility functional check passed");
+                    } else {
+                        log::warn!(
+                            "Accessibility functional check FAILED — permission may not have \
+                             propagated yet. Paste may not work until app restart."
+                        );
+                    }
                     paste::warmup_cgevent_pipeline();
                 }
             }

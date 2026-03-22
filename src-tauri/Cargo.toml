@@ -1,6 +1,6 @@
 [package]
 name = "sottoasr"
-version = "0.2.3"
+version = "0.2.4"
 description = "SottoASR — Local, privacy-first speech-to-text for macOS"
 authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"

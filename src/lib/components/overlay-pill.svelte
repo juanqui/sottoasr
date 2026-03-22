@@ -21,7 +21,7 @@
   let isCleaningUp = $state(false);
   let showSlowMessage = $state(false);
   let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
-  let startTime = $state<number>(Date.now());
+  let startTime = $state<number>(0);
 
   // Audio levels — append-only, the Waveform component uses a ring buffer internally
   let audioLevels = $state<number[]>([]);
@@ -68,6 +68,8 @@
     audioLevels = [];
     isRecording = false;
     isTranscribing = false;
+    isCleaningUp = false;
+    startTime = 0;
     waveformRef?.reset();
   }
 
@@ -174,7 +176,7 @@
       </div>
 
       <!-- Timer -->
-      <RecordingTimer {startTime} running={isRecording} />
+      <RecordingTimer running={isRecording} />
     {/if}
 
     <!-- Cancel button -->
