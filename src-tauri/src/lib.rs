@@ -18,12 +18,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default()
             .level(log::LevelFilter::Info)
-            .target(tauri_plugin_log::Target::new(
-                tauri_plugin_log::TargetKind::LogDir { file_name: Some("sottoasr".into()) },
-            ))
-            .target(tauri_plugin_log::Target::new(
-                tauri_plugin_log::TargetKind::Stdout,
-            ))
+            .targets([
+                tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir { file_name: None },
+                ),
+                tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ),
+            ])
             .build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -111,6 +113,11 @@ pub fn run() {
             // Setup hotkeys
             hotkeys::manager::setup_hotkeys(&handle)
                 .map_err(|e| Box::new(std::io::Error::other(e)))?;
+
+            // Pre-create the overlay panel (hidden) so that the first recording
+            // doesn't steal focus. WebviewWindow creation activates the app on
+            // macOS, but this is harmless at startup before the user is interacting.
+            hotkeys::manager::precreate_overlay(&handle);
 
             // Check if onboarding is needed and open the setup window
             let needs_setup = !asr::model::is_model_available();

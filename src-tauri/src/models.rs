@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
@@ -36,6 +40,8 @@ pub struct Settings {
     pub show_overlay: bool,
     pub auto_paste: bool,
     pub restore_clipboard: bool,
+    #[serde(default = "default_true")]
+    pub restore_focus_before_paste: bool,
     pub model_path: String,
     pub language: String,
     pub max_history: usize,
@@ -55,6 +61,7 @@ impl Default for Settings {
             show_overlay: true,
             auto_paste: true,
             restore_clipboard: true,
+            restore_focus_before_paste: true,
             model_path: String::new(),
             language: "auto".into(),
             max_history: 500,

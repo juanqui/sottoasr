@@ -22,6 +22,7 @@ export interface Settings {
   show_overlay: boolean;
   auto_paste: boolean;
   restore_clipboard: boolean;
+  restore_focus_before_paste: boolean;
   model_path: string;
   language: string;
   max_history: number;

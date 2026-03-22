@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex as TokioMutex;
 use crate::asr::engine::AsrEngine;
@@ -28,6 +28,10 @@ pub struct AppState {
     // Recording generation counter — incremented on each new recording so stale
     // auto-stop timers from previous sessions can detect they are obsolete.
     pub recording_generation: AtomicU64,
+    // PID of the frontmost application when recording started.
+    // Used to target Cmd+V paste at the correct app (avoids focus race conditions).
+    // 0 means no target captured — fall back to HID posting.
+    pub target_pid: AtomicI32,
 }
 
 impl AppState {
@@ -49,6 +53,7 @@ impl AppState {
             current_job_id: AtomicU64::new(0),
             cancel_shortcut: StdMutex::new(cancel),
             recording_generation: AtomicU64::new(0),
+            target_pid: AtomicI32::new(0),
         }
     }
 

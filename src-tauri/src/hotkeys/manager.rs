@@ -224,6 +224,12 @@ fn handle_start_recording(app: &AppHandle) {
 
     match start_result {
         Ok(()) => {
+            // Capture the frontmost app PID before showing the overlay.
+            // This is the app that should receive the paste when transcription completes.
+            let target_pid = crate::paste::get_frontmost_pid();
+            state.target_pid.store(target_pid, Ordering::SeqCst);
+            log::info!("Captured frontmost app PID: {}", target_pid);
+
             state.set_state(AppStateEnum::Recording);
             let _ = app.emit("recording-started", ());
             let _ = app.emit("state-changed", &AppStateEnum::Recording);
@@ -405,6 +411,7 @@ async fn handle_stop_recording(app: &AppHandle) {
                 let markdown_mode = settings.llm_markdown_mode;
                 let auto_paste = settings.auto_paste;
                 let restore_clipboard = settings.restore_clipboard;
+                let restore_focus_before_paste = settings.restore_focus_before_paste;
                 drop(settings);
 
                 if llm_enabled && final_text.split_whitespace().count() >= 5 {
@@ -503,10 +510,15 @@ async fn handle_stop_recording(app: &AppHandle) {
                 // Paste at cursor (if auto_paste is enabled), then hide overlay
                 if !final_text.trim().is_empty() {
                     if auto_paste {
-                        let paste_result = if restore_clipboard {
-                            crate::paste::paste_text_and_restore(&final_text)
+                        let target_pid = if restore_focus_before_paste {
+                            state.target_pid.load(Ordering::SeqCst)
                         } else {
-                            crate::paste::paste_text(&final_text)
+                            0
+                        };
+                        let paste_result = if restore_clipboard {
+                            crate::paste::paste_text_and_restore(&final_text, target_pid)
+                        } else {
+                            crate::paste::paste_text(&final_text, target_pid)
                         };
 
                         match paste_result {
@@ -672,6 +684,59 @@ async fn handle_cancel_recording(app: &AppHandle) {
 /// Logical dimensions of the overlay pill window.
 const OVERLAY_WIDTH: f64 = 280.0;
 const OVERLAY_HEIGHT: f64 = 110.0;
+
+/// Pre-create the overlay panel at startup so that the first recording
+/// doesn't steal focus. WebviewWindowBuilder::build() activates the app
+/// on macOS (Tauri bug #9065), but this only happens on initial creation.
+/// By creating the panel early (hidden), the first recording can just
+/// show the existing non-activating NSPanel.
+pub fn precreate_overlay(app: &AppHandle) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        // Don't create if it already exists
+        if app.get_webview_panel("overlay").is_ok() {
+            return;
+        }
+
+        let window = match tauri::webview::WebviewWindowBuilder::new(
+            &app,
+            "overlay",
+            tauri::WebviewUrl::App("overlay.html".into()),
+        )
+        .title("")
+        .inner_size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .visible(false)
+        .focused(false)
+        .build()
+        {
+            Ok(w) => w,
+            Err(e) => {
+                log::error!("Failed to pre-create overlay window: {}", e);
+                return;
+            }
+        };
+
+        match window.to_panel::<OverlayPanel>() {
+            Ok(panel) => {
+                panel.set_transparent(true);
+                panel.set_has_shadow(false);
+                panel.set_hides_on_deactivate(false);
+                clear_all_backgrounds(panel.as_panel());
+                // Do NOT show — leave hidden until first recording
+                log::info!("Overlay panel pre-created (hidden)");
+            }
+            Err(e) => {
+                log::error!("Failed to convert overlay to panel during pre-creation: {}", e);
+            }
+        }
+    });
+}
 
 /// Show the floating overlay pill panel. Creates it if it doesn't exist.
 /// Panel operations (show/hide/create) must run on the main thread for NSPanel.

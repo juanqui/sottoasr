@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: Settings = {
   show_overlay: true,
   auto_paste: true,
   restore_clipboard: true,
+  restore_focus_before_paste: true,
   model_path: '',
   language: 'auto',
   max_history: 500,

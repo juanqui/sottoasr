@@ -3,16 +3,18 @@ use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 /// Save the current clipboard contents, write new text, paste via Cmd+V,
 /// and optionally restore the original clipboard after a delay.
-pub fn paste_text(text: &str) -> Result<(), String> {
-    paste_text_inner(text, false)
+/// If `target_pid` is non-zero and differs from the current frontmost app,
+/// re-activates the target app before pasting to avoid focus race conditions.
+pub fn paste_text(text: &str, target_pid: i32) -> Result<(), String> {
+    paste_text_inner(text, false, target_pid)
 }
 
 /// Same as paste_text but restores the original clipboard contents afterwards.
-pub fn paste_text_and_restore(text: &str) -> Result<(), String> {
-    paste_text_inner(text, true)
+pub fn paste_text_and_restore(text: &str, target_pid: i32) -> Result<(), String> {
+    paste_text_inner(text, true, target_pid)
 }
 
-fn paste_text_inner(text: &str, restore: bool) -> Result<(), String> {
+fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), String> {
     // Check accessibility first
     if !is_accessibility_trusted() {
         return Err(
@@ -53,7 +55,16 @@ fn paste_text_inner(text: &str, restore: bool) -> Result<(), String> {
     // Brief pause for clipboard to settle (NSPasteboard change count propagation)
     std::thread::sleep(std::time::Duration::from_millis(30));
 
-    // Simulate Cmd+V with retry on failure
+    // Always re-activate the target app before pasting. CGEventPost to HID sends
+    // Cmd+V to whatever app is frontmost, so we must ensure the right app has focus.
+    // We always activate (even if we think it's already frontmost) because
+    // NSWorkspace.frontmostApplication is unreliable from background threads.
+    if target_pid > 0 {
+        log::info!("Re-activating target app PID {} before paste", target_pid);
+        activate_pid(target_pid);
+    }
+
+    // Simulate Cmd+V via HID (goes to the frontmost app)
     let paste_result = simulate_cmd_v();
     if paste_result.is_err() {
         log::warn!("First Cmd+V attempt failed, retrying...");
@@ -160,6 +171,89 @@ pub fn warmup_cgevent_pipeline() {
     }
 }
 
+/// Activate (bring to front) the application with the given PID.
+/// Uses NSRunningApplication.activateWithOptions: and then AppleScript as fallback.
+/// Waits for activation to settle before returning.
+fn activate_pid(pid: i32) {
+    // Try ObjC activation first
+    let objc_ok = activate_pid_objc(pid);
+
+    if !objc_ok {
+        // Fallback: use AppleScript which is more reliable for cross-app activation
+        log::info!("ObjC activation failed, trying AppleScript fallback for PID {}", pid);
+        activate_pid_applescript(pid);
+    }
+
+    // Always wait for the activation to settle — window server needs time
+    // to transfer focus, especially across apps.
+    std::thread::sleep(std::time::Duration::from_millis(150));
+}
+
+/// Try to activate via NSRunningApplication. Returns true if the call succeeded.
+fn activate_pid_objc(pid: i32) -> bool {
+    unsafe {
+        extern "C" {
+            fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn objc_msgSend(); // untyped — cast to proper signature per call site
+        }
+
+        type MsgSendObjI32 = unsafe extern "C" fn(
+            *const std::ffi::c_void, *const std::ffi::c_void, i32,
+        ) -> *const std::ffi::c_void;
+
+        let send_obj_i32: MsgSendObjI32 = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+
+        let cls = objc_getClass(c"NSRunningApplication".as_ptr());
+        if cls.is_null() {
+            log::warn!("NSRunningApplication class not found");
+            return false;
+        }
+
+        let sel_app = sel_registerName(c"runningApplicationWithProcessIdentifier:".as_ptr());
+        let running_app = send_obj_i32(cls, sel_app, pid);
+        if running_app.is_null() {
+            log::warn!("No running application found for PID {}", pid);
+            return false;
+        }
+
+        // activateWithOptions: NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps = 3
+        type MsgSendActivate = unsafe extern "C" fn(
+            *const std::ffi::c_void, *const std::ffi::c_void, u64,
+        ) -> bool;
+        let send_activate: MsgSendActivate = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+        let sel_activate = sel_registerName(c"activateWithOptions:".as_ptr());
+        let activated = send_activate(running_app, sel_activate, 3);
+
+        log::info!("activateWithOptions: returned {} for PID {}", activated, pid);
+        activated
+    }
+}
+
+/// Fallback activation via osascript. More reliable across apps but slightly slower.
+fn activate_pid_applescript(pid: i32) {
+    let script = format!(
+        "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
+        pid
+    );
+    match std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                log::info!("AppleScript activation succeeded for PID {}", pid);
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log::warn!("AppleScript activation failed for PID {}: {}", pid, stderr.trim());
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to run osascript: {}", e);
+        }
+    }
+}
+
 fn simulate_cmd_v() -> Result<(), String> {
     let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
         .map_err(|_| "Failed to create CGEventSource".to_string())?;
@@ -180,6 +274,42 @@ fn simulate_cmd_v() -> Result<(), String> {
     key_up.post(CGEventTapLocation::HID);
 
     Ok(())
+}
+
+/// Get the PID of the frontmost (active) application.
+/// Returns 0 if it cannot be determined.
+///
+/// Uses the ObjC runtime directly: [NSWorkspace.sharedWorkspace.frontmostApplication processIdentifier]
+pub fn get_frontmost_pid() -> i32 {
+    unsafe {
+        extern "C" {
+            fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn objc_msgSend(); // untyped — cast to proper signature per call site
+        }
+
+        // Cast objc_msgSend to the correct calling convention for each return type.
+        // ARM64 requires exact signatures (no variadics) for register-based dispatch.
+        type MsgSendObj = unsafe extern "C" fn(*const std::ffi::c_void, *const std::ffi::c_void) -> *const std::ffi::c_void;
+        type MsgSendI32 = unsafe extern "C" fn(*const std::ffi::c_void, *const std::ffi::c_void) -> i32;
+
+        let send_obj: MsgSendObj = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+        let send_i32: MsgSendI32 = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+
+        let cls = objc_getClass(c"NSWorkspace".as_ptr());
+        if cls.is_null() { return 0; }
+
+        let sel_shared = sel_registerName(c"sharedWorkspace".as_ptr());
+        let workspace = send_obj(cls, sel_shared);
+        if workspace.is_null() { return 0; }
+
+        let sel_front = sel_registerName(c"frontmostApplication".as_ptr());
+        let app = send_obj(workspace, sel_front);
+        if app.is_null() { return 0; }
+
+        let sel_pid = sel_registerName(c"processIdentifier".as_ptr());
+        send_i32(app, sel_pid)
+    }
 }
 
 /// Write text to the system clipboard (for copy operations, not paste).

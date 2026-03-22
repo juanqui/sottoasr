@@ -2,6 +2,22 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.2.3] — 2026-03-22
+
+Paste reliability, diagnostics, and polish.
+
+### Fixed
+
+- **Paste-at-cursor focus race condition** — When transcription completed quickly (short recordings, no LLM), the simulated Cmd+V could land in the wrong app or be silently dropped. Now captures the frontmost app PID when recording starts, re-activates it before pasting, and falls back to AppleScript activation if needed.
+- **First-recording focus theft** — The overlay window creation on the first recording after launch stole focus from the user's app (Tauri bug #9065). The overlay is now pre-created at startup so the first recording behaves identically to subsequent ones.
+- **About page version blank** — The About window was missing from the Tauri capabilities config, so `getVersion()` had no permission to call the API. Added `"about"` to the capabilities window list.
+- **Duplicate log lines** — Every log line was written twice because `tauri_plugin_log` defaults already include Stdout + LogDir targets, and we were appending two more. Switched from `.target()` (appends) to `.targets()` (replaces).
+
+### Added
+
+- **"Paste in original app" setting** — New toggle in Settings (default: ON). When enabled, restores focus to the app that was active when recording started before pasting. When disabled, pastes into whatever app is currently focused (legacy behavior).
+- **"Copy Diagnostics" tray menu item** — Copies app version, macOS version, and the last 100 log lines to the clipboard for easy bug reporting.
+
 ## [0.2.2] — 2026-03-22
 
 Code signing and notarization for macOS.

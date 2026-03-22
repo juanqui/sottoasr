@@ -4,6 +4,8 @@ use tauri::{
     AppHandle, Manager, WebviewUrl,
 };
 
+use std::io::{BufRead, BufReader};
+
 pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
     let copy_last = MenuItem::with_id(app, "copy_last", "Copy Last Transcription", true, None::<&str>)
         .map_err(|e| e.to_string())?;
@@ -14,6 +16,8 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
     let separator = PredefinedMenuItem::separator(app)
         .map_err(|e| e.to_string())?;
     let separator2 = PredefinedMenuItem::separator(app)
+        .map_err(|e| e.to_string())?;
+    let copy_diagnostics = MenuItem::with_id(app, "copy_diagnostics", "Copy Diagnostics", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     let about = MenuItem::with_id(app, "about", "About SottoASR", true, None::<&str>)
         .map_err(|e| e.to_string())?;
@@ -26,6 +30,7 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
         &separator,
         &settings,
         &separator2,
+        &copy_diagnostics,
         &about,
         &quit,
     ])
@@ -82,6 +87,14 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
                 log::info!("Tray: Opening settings window");
                 open_or_focus_window(app, "settings", "settings.html", "SottoASR — Settings", 520.0, 600.0);
             }
+            "copy_diagnostics" => {
+                log::info!("Tray: Copy diagnostics");
+                let diagnostics = collect_diagnostics(app);
+                match crate::paste::copy_to_clipboard(&diagnostics) {
+                    Ok(()) => log::info!("Diagnostics copied to clipboard ({} bytes)", diagnostics.len()),
+                    Err(e) => log::error!("Failed to copy diagnostics to clipboard: {}", e),
+                }
+            }
             "about" => {
                 log::info!("Tray: Opening about window");
                 open_or_focus_window(app, "about", "about.html", "About SottoASR", 480.0, 960.0);
@@ -96,6 +109,73 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
 
     log::info!("Tray menu configured");
     Ok(())
+}
+
+/// Collect diagnostic information: app version, macOS version, timestamp, and recent log lines.
+fn collect_diagnostics(app: &AppHandle) -> String {
+    let version = app.package_info().version.to_string();
+
+    let macos_version = get_macos_version();
+
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %z").to_string();
+
+    let log_tail = read_log_tail(app, 100);
+
+    format!(
+        "SottoASR Diagnostics\nVersion: {}\nmacOS: {}\nDate: {}\n---\n{}",
+        version, macos_version, timestamp, log_tail
+    )
+}
+
+/// Get macOS version string via `sw_vers`.
+fn get_macos_version() -> String {
+    match std::process::Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => "unknown".to_string(),
+    }
+}
+
+/// Read the last `n` lines from the app log file.
+/// Uses the Tauri log directory to find the log file.
+fn read_log_tail(app: &AppHandle, n: usize) -> String {
+    let log_dir = match app.path().app_log_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            return format!("[Could not determine log directory: {}]", e);
+        }
+    };
+
+    // tauri-plugin-log names the file based on the productName in tauri.conf.json
+    // with a .log extension. Try the known filename first, then fall back to scanning.
+    let log_path = log_dir.join("SottoASR.log");
+    let log_path = if log_path.exists() {
+        log_path
+    } else {
+        // Fallback: try the configured name from the plugin
+        let alt = log_dir.join("sottoasr.log");
+        if alt.exists() {
+            alt
+        } else {
+            return format!("[Log file not found in {}]", log_dir.display());
+        }
+    };
+
+    match std::fs::File::open(&log_path) {
+        Ok(file) => {
+            let reader = BufReader::new(file);
+            let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+            let start = lines.len().saturating_sub(n);
+            lines[start..].join("\n")
+        }
+        Err(e) => {
+            format!("[Could not read log file {}: {}]", log_path.display(), e)
+        }
+    }
 }
 
 /// Open a window by label, or focus it if already open.

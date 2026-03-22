@@ -275,6 +275,20 @@
       </div>
       <div class="toggle-field">
         <div class="toggle-info">
+          <span class="toggle-label">Paste in original app</span>
+          <span class="toggle-hint">
+            {settingsStore.current.restore_focus_before_paste
+              ? 'Restores focus to the app that was active when you started recording, then pastes'
+              : 'Pastes into whatever app is focused when transcription completes'}
+          </span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" bind:checked={settingsStore.current.restore_focus_before_paste} />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-field">
+        <div class="toggle-info">
           <span class="toggle-label">Launch at login</span>
           <span class="toggle-hint">Start SottoASR when you log in</span>
         </div>
