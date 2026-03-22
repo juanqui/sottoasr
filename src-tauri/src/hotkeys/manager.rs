@@ -33,6 +33,8 @@ pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
 }
 
 /// Re-register all shortcuts. Called at startup and when settings change.
+/// Note: the cancel shortcut is NOT registered globally here — it is only
+/// registered while recording is active (see register_cancel_shortcut).
 pub fn register_shortcuts(
     app: &AppHandle,
     ptt_shortcut: &str,
@@ -43,6 +45,13 @@ pub fn register_shortcuts(
 
     // Unregister all existing shortcuts first
     let _ = app.global_shortcut().unregister_all();
+
+    // Store the cancel shortcut for dynamic registration during recording
+    {
+        let state: tauri::State<'_, AppState> = app.state();
+        let mut cs = state.cancel_shortcut.lock().unwrap();
+        *cs = cancel_shortcut.to_string();
+    }
 
     let app_handle = app.clone();
 
@@ -125,12 +134,26 @@ pub fn register_shortcuts(
         }
     }).map_err(|e| format!("Failed to register toggle shortcut '{}': {}", toggle_shortcut, e))?;
 
-    let app_handle3 = app.clone();
+    log::info!(
+        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle) | cancel '{}' (registered only while recording)",
+        ptt_shortcut, toggle_shortcut, cancel_shortcut
+    );
+    Ok(())
+}
 
-    // Cancel (cancel current recording)
-    app.global_shortcut().on_shortcut(cancel_shortcut, move |_app, _shortcut, event| {
+/// Register the cancel shortcut globally. Called when recording starts.
+pub fn register_cancel_shortcut(app: &AppHandle) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    let state: tauri::State<'_, AppState> = app.state();
+    let cancel_shortcut = state.cancel_shortcut.lock()
+        .map(|cs| cs.clone())
+        .unwrap_or_else(|_| "Escape".to_string());
+
+    let app_handle = app.clone();
+    let result = app.global_shortcut().on_shortcut(cancel_shortcut.as_str(), move |_app, _shortcut, event| {
         if event.state == ShortcutState::Pressed {
-            let app = app_handle3.clone();
+            let app = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<'_, AppState> = app.state();
                 let current = state.get_state();
@@ -139,13 +162,27 @@ pub fn register_shortcuts(
                 }
             });
         }
-    }).map_err(|e| format!("Failed to register cancel shortcut '{}': {}", cancel_shortcut, e))?;
+    });
 
-    log::info!(
-        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle), '{}' (cancel)",
-        ptt_shortcut, toggle_shortcut, cancel_shortcut
-    );
-    Ok(())
+    match result {
+        Ok(()) => log::info!("Cancel shortcut '{}' registered (recording active)", cancel_shortcut),
+        Err(e) => log::error!("Failed to register cancel shortcut '{}': {}", cancel_shortcut, e),
+    }
+}
+
+/// Unregister the cancel shortcut. Called when recording stops or is cancelled.
+pub fn unregister_cancel_shortcut(app: &AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let state: tauri::State<'_, AppState> = app.state();
+    let cancel_shortcut = state.cancel_shortcut.lock()
+        .map(|cs| cs.clone())
+        .unwrap_or_else(|_| "Escape".to_string());
+
+    match app.global_shortcut().unregister(cancel_shortcut.as_str()) {
+        Ok(()) => log::info!("Cancel shortcut '{}' unregistered (recording ended)", cancel_shortcut),
+        Err(e) => log::warn!("Failed to unregister cancel shortcut '{}': {}", cancel_shortcut, e),
+    }
 }
 
 /// Start recording: open microphone, set state, emit events.
@@ -190,6 +227,9 @@ fn handle_start_recording(app: &AppHandle) {
             state.set_state(AppStateEnum::Recording);
             let _ = app.emit("recording-started", ());
             let _ = app.emit("state-changed", &AppStateEnum::Recording);
+
+            // Register cancel shortcut (only active while recording)
+            register_cancel_shortcut(app);
 
             // Show the overlay window
             show_overlay(app);
@@ -243,6 +283,9 @@ async fn handle_stop_recording(app: &AppHandle) {
         let mut capture = state.audio_capture.lock().unwrap();
         capture.stop();
     }
+
+    // Unregister cancel shortcut so it doesn't block the key globally
+    unregister_cancel_shortcut(app);
 
     // Keep overlay visible through transcription and LLM cleanup.
     // It will be hidden after paste/clipboard write completes.
@@ -518,6 +561,9 @@ async fn handle_cancel_recording(app: &AppHandle) {
         let mut capture = state.audio_capture.lock().unwrap();
         capture.stop();
     }
+
+    // Unregister cancel shortcut so it doesn't block the key globally
+    unregister_cancel_shortcut(app);
 
     // Hide the overlay
     hide_overlay(app);
