@@ -568,7 +568,18 @@ async fn handle_stop_recording(app: &AppHandle) {
                 if !final_text.trim().is_empty() {
                     if auto_paste {
                         let target_pid = if restore_focus_before_paste {
-                            state.target_pid.load(Ordering::SeqCst)
+                            let start_pid = state.target_pid.load(Ordering::SeqCst);
+                            let current_pid = crate::paste::get_frontmost_pid();
+                            let our_pid = std::process::id() as i32;
+
+                            if current_pid == start_pid || current_pid == our_pid || current_pid == 0 {
+                                // Same app or SottoASR stole focus → use original target
+                                start_pid
+                            } else {
+                                // User intentionally switched apps → paste where they are now
+                                log::info!("User switched apps during recording: {} → {}, pasting at current", start_pid, current_pid);
+                                current_pid
+                            }
                         } else {
                             0
                         };
@@ -784,6 +795,11 @@ pub fn precreate_overlay(app: &AppHandle) {
                 panel.set_transparent(true);
                 panel.set_has_shadow(false);
                 panel.set_hides_on_deactivate(false);
+                // Visible on all macOS Spaces (like Cmd+Shift+5 screenshot toolbar)
+                panel.set_collection_behavior(
+                    tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
+                );
                 clear_all_backgrounds(panel.as_panel());
                 // Do NOT show — leave hidden until first recording
                 log::info!("Overlay panel pre-created (hidden)");
@@ -849,6 +865,10 @@ fn show_overlay(app: &AppHandle) {
                 panel.set_transparent(true);
                 panel.set_has_shadow(false);
                 panel.set_hides_on_deactivate(false);
+                panel.set_collection_behavior(
+                    tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
+                );
 
                 // Synchronously clear backgrounds on ALL views in the hierarchy.
                 clear_all_backgrounds(panel.as_panel());
@@ -938,10 +958,21 @@ fn clear_all_backgrounds(panel: &tauri_nspanel::NSPanel) {
 }
 
 /// Compute overlay position: centered horizontally, 100 logical pixels above bottom.
-/// Uses the primary monitor (or falls back to current monitor).
+/// Uses the monitor containing the mouse cursor (active screen), falling back to primary.
 fn compute_overlay_position(window: &tauri::WebviewWindow) -> Option<tauri::PhysicalPosition<i32>> {
-    let monitor = window.primary_monitor().ok().flatten()
-        .or_else(|| window.current_monitor().ok().flatten())?;
+    // Prefer the monitor under the mouse cursor (the screen the user is actively on)
+    let monitor = window.available_monitors().ok()
+        .and_then(|monitors| {
+            let mouse_pos = get_mouse_position();
+            monitors.into_iter().find(|m| {
+                let pos = m.position();
+                let size = m.size();
+                mouse_pos.0 >= pos.x && mouse_pos.0 < pos.x + size.width as i32
+                    && mouse_pos.1 >= pos.y && mouse_pos.1 < pos.y + size.height as i32
+            })
+        })
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())?;
 
     let screen = monitor.size();
     let scale = monitor.scale_factor();
@@ -960,4 +991,32 @@ fn compute_overlay_position(window: &tauri::WebviewWindow) -> Option<tauri::Phys
     );
 
     Some(tauri::PhysicalPosition::new(x, y))
+}
+
+/// Get the current mouse cursor position in global (physical) coordinates.
+fn get_mouse_position() -> (i32, i32) {
+    unsafe {
+        // NSEvent.mouseLocation returns the position in screen coordinates
+        // with origin at bottom-left. Tauri uses top-left origin, so we need
+        // to flip the Y coordinate using the main screen height.
+        let mouse_loc: tauri_nspanel::objc2_foundation::NSPoint =
+            tauri_nspanel::objc2::msg_send![
+                tauri_nspanel::objc2::class!(NSEvent),
+                mouseLocation
+            ];
+        // Get main screen height for Y-flip
+        let screens: *const tauri_nspanel::objc2_foundation::NSArray<tauri_nspanel::objc2_app_kit::NSScreen> =
+            tauri_nspanel::objc2::msg_send![
+                tauri_nspanel::objc2::class!(NSScreen),
+                screens
+            ];
+        let main_screen: *const tauri_nspanel::objc2_app_kit::NSScreen =
+            tauri_nspanel::objc2::msg_send![&*screens, objectAtIndex: 0usize];
+        let main_frame: tauri_nspanel::objc2_foundation::NSRect =
+            tauri_nspanel::objc2::msg_send![main_screen, frame];
+
+        let x = mouse_loc.x as i32;
+        let y = (main_frame.size.height - mouse_loc.y) as i32;
+        (x, y)
+    }
 }

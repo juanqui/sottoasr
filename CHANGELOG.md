@@ -2,6 +2,20 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.3.1] — 2026-03-23
+
+Multi-monitor, multi-space, and paste target improvements.
+
+### Added
+
+- **Stop-and-transcribe button** in recording overlay — green checkmark alongside the cancel button so users can stop recording without remembering the keyboard shortcut.
+
+### Fixed
+
+- **Overlay now visible on all macOS Spaces** — the recording pill follows the user across virtual desktops, matching the behavior of macOS's screenshot toolbar (Cmd+Shift+5).
+- **Overlay positions on the active monitor** — on multi-monitor setups, the pill now appears on the screen where the mouse cursor is, not always the primary monitor.
+- **Smart paste target when switching apps** — if the user switches to a different app during recording, the transcription now pastes into the current app instead of jumping back to the original one.
+
 ## [0.3.0] — 2026-03-23
 
 AI transcript cleanup model selection and shortcut improvements.
