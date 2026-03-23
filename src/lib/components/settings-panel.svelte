@@ -42,6 +42,17 @@
   );
 
 
+  // Available LLM models
+  const llmModels = [
+    { value: '0.8b', label: 'Qwen3.5 0.8B — Fast (~570 MB)', sizeMb: 570 },
+    { value: '2b', label: 'Qwen3.5 2B — Balanced (~1.4 GB)', sizeMb: 1430 },
+    { value: '4b', label: 'Qwen3.5 4B — Best quality (~3 GB)', sizeMb: 2970 },
+  ];
+
+  let selectedModelInfo = $derived(
+    llmModels.find((m) => m.value === settingsStore.current.llm_model_size) ?? llmModels[2]
+  );
+
   // Available languages
   const languages = [
     { value: 'auto', label: 'Auto-detect' },
@@ -218,24 +229,44 @@
       <h2>Keyboard Shortcuts</h2>
       <div class="field">
         <label>Push-to-talk</label>
-        <ShortcutRecorder
-          value={settingsStore.current.push_to_talk_shortcut}
-          onchange={(v) => settingsStore.update('push_to_talk_shortcut', v)}
-          disabled={activeRecorder !== null && activeRecorder !== 'ptt'}
-          onrecordstart={() => { activeRecorder = 'ptt'; }}
-          onrecordend={() => { activeRecorder = null; }}
-        />
+        <div class="shortcut-pair">
+          <ShortcutRecorder
+            value={settingsStore.current.push_to_talk_shortcut}
+            onchange={(v) => settingsStore.update('push_to_talk_shortcut', v)}
+            disabled={activeRecorder !== null && activeRecorder !== 'ptt'}
+            onrecordstart={() => { activeRecorder = 'ptt'; }}
+            onrecordend={() => { activeRecorder = null; }}
+          />
+          <ShortcutRecorder
+            value={settingsStore.current.push_to_talk_shortcut_alt ?? ''}
+            onchange={(v) => settingsStore.update('push_to_talk_shortcut_alt', v || null)}
+            disabled={activeRecorder !== null && activeRecorder !== 'ptt-alt'}
+            onrecordstart={() => { activeRecorder = 'ptt-alt'; }}
+            onrecordend={() => { activeRecorder = null; }}
+            placeholder="Alt shortcut"
+          />
+        </div>
         <span class="field-hint">Hold to record, release to transcribe</span>
       </div>
       <div class="field">
         <label>Toggle recording</label>
-        <ShortcutRecorder
-          value={settingsStore.current.toggle_shortcut}
-          onchange={(v) => settingsStore.update('toggle_shortcut', v)}
-          disabled={activeRecorder !== null && activeRecorder !== 'toggle'}
-          onrecordstart={() => { activeRecorder = 'toggle'; }}
-          onrecordend={() => { activeRecorder = null; }}
-        />
+        <div class="shortcut-pair">
+          <ShortcutRecorder
+            value={settingsStore.current.toggle_shortcut}
+            onchange={(v) => settingsStore.update('toggle_shortcut', v)}
+            disabled={activeRecorder !== null && activeRecorder !== 'toggle'}
+            onrecordstart={() => { activeRecorder = 'toggle'; }}
+            onrecordend={() => { activeRecorder = null; }}
+          />
+          <ShortcutRecorder
+            value={settingsStore.current.toggle_shortcut_alt ?? ''}
+            onchange={(v) => settingsStore.update('toggle_shortcut_alt', v || null)}
+            disabled={activeRecorder !== null && activeRecorder !== 'toggle-alt'}
+            onrecordstart={() => { activeRecorder = 'toggle-alt'; }}
+            onrecordend={() => { activeRecorder = null; }}
+            placeholder="Alt shortcut"
+          />
+        </div>
         <span class="field-hint">Press to start, press again to stop</span>
       </div>
     </section>
@@ -306,7 +337,7 @@
       <div class="toggle-field">
         <div class="toggle-info">
           <span class="toggle-label">Clean up transcriptions with AI</span>
-          <span class="toggle-hint">Uses Qwen3.5-0.8B (~570 MB) running locally via MLX on Metal GPU</span>
+          <span class="toggle-hint">Uses {selectedModelInfo.label.split(' —')[0]} running locally via MLX on Metal GPU</span>
         </div>
         <label class="switch">
           <input
@@ -334,6 +365,29 @@
         </label>
       </div>
 
+      <!-- Model selector -->
+      <div class="field" style="margin-top: 8px;">
+        <label for="llm-model">Model size</label>
+        <select
+          id="llm-model"
+          class="select-input"
+          value={settingsStore.current.llm_model_size}
+          onchange={(e) => {
+            const newSize = (e.target as HTMLSelectElement).value;
+            settingsStore.update('llm_model_size', newSize);
+            // Unload current sidecar so it respawns with the new model
+            import('../utils/tauri').then(({ unloadLlmModel }) => unloadLlmModel().catch(() => {}));
+            // Refresh status to check if new model is downloaded
+            refreshLlmStatus();
+          }}
+        >
+          {#each llmModels as model}
+            <option value={model.value}>{model.label}</option>
+          {/each}
+        </select>
+        <span class="field-hint">Larger models produce better results but use more memory and disk space</span>
+      </div>
+
       <!-- Model status -->
       <div class="llm-status">
         {#if llmDownloading}
@@ -345,7 +399,9 @@
           <span class="llm-badge ready">Model Ready</span>
         {:else}
           <button class="download-btn" onclick={handleLlmDownload} type="button">
-            Download Model (~600 MB)
+            Download Model (~{selectedModelInfo.sizeMb >= 1000
+              ? (selectedModelInfo.sizeMb / 1000).toFixed(1) + ' GB'
+              : selectedModelInfo.sizeMb + ' MB'})
           </button>
         {/if}
       </div>
@@ -373,7 +429,11 @@
           onclick={handleLlmDelete}
           type="button"
         >
-          {llmDeleteConfirm ? 'Are you sure? Click again to confirm' : 'Delete Model (~600 MB)'}
+          {llmDeleteConfirm ? 'Are you sure? Click again to confirm' : `Delete Model (~${
+            selectedModelInfo.sizeMb >= 1000
+              ? (selectedModelInfo.sizeMb / 1000).toFixed(1) + ' GB'
+              : selectedModelInfo.sizeMb + ' MB'
+          })`}
         </button>
       {/if}
     </section>
@@ -638,6 +698,11 @@
   .select-input option {
     background: var(--card-bg);
     color: var(--text);
+  }
+
+  .shortcut-pair {
+    display: flex;
+    gap: 8px;
   }
 
   .field-hint {

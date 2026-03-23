@@ -23,8 +23,9 @@ pub struct AppState {
     pub llm_engine: TokioMutex<Option<LlmEngine>>,
     // Monotonic job ID for stale-result prevention
     pub current_job_id: AtomicU64,
-    // Cancel shortcut string — registered only while recording
+    // Cancel shortcut strings — registered only while recording
     pub cancel_shortcut: StdMutex<String>,
+    pub cancel_shortcut_alt: StdMutex<Option<String>>,
     // Recording generation counter — incremented on each new recording so stale
     // auto-stop timers from previous sessions can detect they are obsolete.
     pub recording_generation: AtomicU64,
@@ -39,6 +40,7 @@ impl AppState {
         let (tx, rx) = std::sync::mpsc::channel();
         let settings = crate::commands::settings::load_persisted_settings();
         let cancel = settings.cancel_shortcut.clone();
+        let cancel_alt = settings.cancel_shortcut_alt.clone();
         Self {
             current_state: StdMutex::new(AppStateEnum::Idle),
             settings: TokioMutex::new(settings),
@@ -52,6 +54,7 @@ impl AppState {
             llm_engine: TokioMutex::new(None),
             current_job_id: AtomicU64::new(0),
             cancel_shortcut: StdMutex::new(cancel),
+            cancel_shortcut_alt: StdMutex::new(cancel_alt),
             recording_generation: AtomicU64::new(0),
             target_pid: AtomicI32::new(0),
         }

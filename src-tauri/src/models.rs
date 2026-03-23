@@ -5,6 +5,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_llm_model_size() -> String {
+    "2b".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
@@ -35,8 +39,14 @@ pub enum AppStateEnum {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub push_to_talk_shortcut: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_to_talk_shortcut_alt: Option<String>,
     pub toggle_shortcut: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toggle_shortcut_alt: Option<String>,
     pub cancel_shortcut: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel_shortcut_alt: Option<String>,
     pub show_overlay: bool,
     pub auto_paste: bool,
     pub restore_clipboard: bool,
@@ -50,14 +60,19 @@ pub struct Settings {
     pub llm_cleanup_enabled: bool,
     #[serde(default)]
     pub llm_markdown_mode: bool,
+    #[serde(default = "default_llm_model_size")]
+    pub llm_model_size: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             push_to_talk_shortcut: "CommandOrControl+Shift+Space".into(),
+            push_to_talk_shortcut_alt: None,
             toggle_shortcut: "CommandOrControl+Shift+D".into(),
+            toggle_shortcut_alt: None,
             cancel_shortcut: "Escape".into(),
+            cancel_shortcut_alt: None,
             show_overlay: true,
             auto_paste: true,
             restore_clipboard: true,
@@ -68,6 +83,7 @@ impl Default for Settings {
             launch_at_login: false,
             llm_cleanup_enabled: false,
             llm_markdown_mode: false,
+            llm_model_size: "2b".into(),
         }
     }
 }

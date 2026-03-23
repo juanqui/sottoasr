@@ -3,17 +3,22 @@ use tauri::Emitter;
 
 /// Download the model via the sidecar process.
 /// The sidecar delegates to huggingface_hub for robust, resumable downloads.
-pub async fn download_model(app: &AppHandle) -> Result<(), String> {
+pub async fn download_model_with_id(app: &AppHandle, model_id: &str) -> Result<(), String> {
+    let config = crate::llm::engine::all_model_configs()
+        .into_iter()
+        .find(|c| c.id == model_id)
+        .unwrap_or(&crate::llm::engine::MODEL_4B);
+
     let _ = app.emit("llm-download-started", serde_json::json!({
-        "total_bytes": 570_000_000u64,
+        "total_bytes": config.download_size_mb * 1_000_000,
         "file_count": 1u32,
     }));
 
-    log::info!("Starting LLM model download via sidecar...");
+    log::info!("Starting LLM model download via sidecar: {}...", model_id);
 
-    // Spawn a temporary sidecar for the download
-    let result = tokio::task::spawn_blocking(|| {
-        let mut engine = crate::llm::engine::LlmEngine::spawn()?;
+    let model_id_owned = model_id.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut engine = crate::llm::engine::LlmEngine::spawn_with_model(&model_id_owned)?;
         let result = engine.download_model();
         engine.quit();
         result
@@ -33,11 +38,16 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-/// Delete downloaded model files from the HuggingFace cache.
-pub fn delete_model() -> Result<(), String> {
-    // The model is cached by huggingface_hub in ~/.cache/huggingface/hub/
+/// Download the model for the given settings size string.
+pub async fn download_model(app: &AppHandle, model_size: &str) -> Result<(), String> {
+    let model_id = crate::llm::engine::model_id_for_size(model_size);
+    download_model_with_id(app, model_id).await
+}
+
+/// Delete downloaded model files from the HuggingFace cache for a specific model.
+pub fn delete_model_by_id(model_id: &str) -> Result<(), String> {
     if let Some(cache_dir) = dirs::cache_dir() {
-        let cache_name = crate::llm::engine::MODEL_ID.replace('/', "--");
+        let cache_name = model_id.replace('/', "--");
         let hf_cache = cache_dir.join("huggingface").join("hub").join(format!("models--{}", cache_name));
         if hf_cache.exists() {
             std::fs::remove_dir_all(&hf_cache)
@@ -46,4 +56,10 @@ pub fn delete_model() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Delete model files for the given settings size string.
+pub fn delete_model(model_size: &str) -> Result<(), String> {
+    let model_id = crate::llm::engine::model_id_for_size(model_size);
+    delete_model_by_id(model_id)
 }

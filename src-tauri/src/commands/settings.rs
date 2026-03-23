@@ -85,13 +85,24 @@ pub async fn apply_shortcuts(
 ) -> Result<(), String> {
     let settings = state.settings.lock().await;
     let ptt = settings.push_to_talk_shortcut.clone();
+    let ptt_alt = settings.push_to_talk_shortcut_alt.clone();
     let toggle = settings.toggle_shortcut.clone();
+    let toggle_alt = settings.toggle_shortcut_alt.clone();
     let cancel = settings.cancel_shortcut.clone();
+    let cancel_alt = settings.cancel_shortcut_alt.clone();
     drop(settings);
 
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
-        match crate::hotkeys::manager::register_shortcuts(&app_clone, &ptt, &toggle, &cancel) {
+        match crate::hotkeys::manager::register_shortcuts(
+            &app_clone,
+            &ptt,
+            ptt_alt.as_deref(),
+            &toggle,
+            toggle_alt.as_deref(),
+            &cancel,
+            cancel_alt.as_deref(),
+        ) {
             Ok(()) => log::info!("Shortcuts re-applied from settings"),
             Err(e) => log::error!("Failed to re-apply shortcuts: {}", e),
         }

@@ -14,9 +14,10 @@
     }
   }
 
-  // The overlay window is ONLY created/shown during recording.
-  // Initialize as recording=true immediately.
-  let isRecording = $state(true);
+  // Initialize as false so the timer doesn't start at precreation time.
+  // The state-changed:Recording event will flip this to true when recording actually starts,
+  // triggering the RecordingTimer's $effect to capture the correct start time.
+  let isRecording = $state(false);
   let isTranscribing = $state(false);
   let isCleaningUp = $state(false);
   let showSlowMessage = $state(false);
@@ -227,9 +228,6 @@
     border-radius: 22px;
     background: rgba(20, 20, 22, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.5),
-      0 2px 8px rgba(0, 0, 0, 0.3);
     box-sizing: border-box;
     user-select: none;
   }
@@ -250,7 +248,6 @@
     border-radius: 14px;
     background: rgba(220, 38, 38, 0.95);
     border: 1px solid rgba(255, 120, 120, 0.3);
-    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
     animation: warningPulse 2s ease-in-out infinite;
   }
 
@@ -266,11 +263,9 @@
   @keyframes warningPulse {
     0%, 100% {
       opacity: 1;
-      box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
     }
     50% {
       opacity: 0.85;
-      box-shadow: 0 4px 24px rgba(220, 38, 38, 0.6);
     }
   }
 

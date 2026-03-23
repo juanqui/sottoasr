@@ -17,14 +17,16 @@ pub struct LlmEngine {
     child: Child,
     stdin: std::io::BufWriter<std::process::ChildStdin>,
     stdout: BufReader<std::process::ChildStdout>,
+    /// The model ID this engine was spawned with.
+    pub model_id: String,
 }
 
 // We manage the sidecar as a single-owner resource behind TokioMutex.
 unsafe impl Send for LlmEngine {}
 
 impl LlmEngine {
-    /// Spawn the Python sidecar process using the app's managed venv.
-    pub fn spawn() -> Result<Self, String> {
+    /// Spawn the Python sidecar process for the given model.
+    pub fn spawn_with_model(model_id: &str) -> Result<Self, String> {
         // Ensure venv exists
         if !is_venv_ready() {
             log::info!("LLM venv not found, setting up...");
@@ -33,10 +35,11 @@ impl LlmEngine {
 
         let python = venv_python()?;
         let sidecar_path = Self::sidecar_script_path()?;
-        log::info!("Spawning LLM sidecar: {} {}", python.display(), sidecar_path.display());
+        log::info!("Spawning LLM sidecar: {} {} --model {}", python.display(), sidecar_path.display(), model_id);
 
         let mut child = Command::new(&python)
             .arg(&sidecar_path)
+            .args(["--model", model_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit()) // sidecar logs go to app stderr
@@ -52,8 +55,10 @@ impl LlmEngine {
             child,
             stdin: std::io::BufWriter::new(stdin),
             stdout: BufReader::new(stdout),
+            model_id: model_id.to_string(),
         })
     }
+
 
     /// Send a request and read a response (blocking).
     fn request(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -247,5 +252,47 @@ pub fn is_feature_compiled() -> bool {
     cfg!(feature = "llm-qwen")
 }
 
-/// Model identifier.
-pub const MODEL_ID: &str = "mlx-community/Qwen3.5-0.8B-OptiQ-4bit";
+/// Available model configurations.
+pub struct ModelConfig {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub download_size_mb: u64,
+}
+
+pub const MODEL_0_8B: ModelConfig = ModelConfig {
+    id: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
+    display_name: "Qwen3.5-0.8B",
+    download_size_mb: 570,
+};
+
+pub const MODEL_2B: ModelConfig = ModelConfig {
+    id: "mlx-community/Qwen3.5-2B-OptiQ-4bit",
+    display_name: "Qwen3.5-2B",
+    download_size_mb: 1_430,
+};
+
+pub const MODEL_4B: ModelConfig = ModelConfig {
+    id: "mlx-community/Qwen3.5-4B-OptiQ-4bit",
+    display_name: "Qwen3.5-4B",
+    download_size_mb: 2_970,
+};
+
+/// Get the model config for a settings size string ("0.8b", "2b", "4b").
+pub fn model_config_for_size(size: &str) -> &'static ModelConfig {
+    match size {
+        "0.8b" => &MODEL_0_8B,
+        "2b" => &MODEL_2B,
+        "4b" => &MODEL_4B,
+        _ => &MODEL_2B,
+    }
+}
+
+/// Get the HuggingFace model ID for a settings size string.
+pub fn model_id_for_size(size: &str) -> &'static str {
+    model_config_for_size(size).id
+}
+
+/// Return all model configs for UI display.
+pub fn all_model_configs() -> Vec<&'static ModelConfig> {
+    vec![&MODEL_0_8B, &MODEL_2B, &MODEL_4B]
+}

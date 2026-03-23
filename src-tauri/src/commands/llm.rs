@@ -25,6 +25,14 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
 
     let venv_ready = engine::is_venv_ready();
 
+    // Read selected model from settings
+    let settings = state.settings.lock().await;
+    let model_size = settings.llm_model_size.clone();
+    drop(settings);
+
+    let model_id = engine::model_id_for_size(&model_size);
+    let config = engine::model_config_for_size(&model_size);
+
     // Check if sidecar is running (model loaded)
     let loaded = {
         let engine_guard = state.llm_engine.lock().await;
@@ -33,8 +41,9 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
 
     // Check if model is downloaded (only if venv is ready)
     let downloaded = if available && venv_ready {
-        tokio::task::spawn_blocking(|| {
-            match engine::LlmEngine::spawn() {
+        let model_id_owned = model_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            match engine::LlmEngine::spawn_with_model(&model_id_owned) {
                 Ok(mut e) => {
                     let status = e.status();
                     e.quit();
@@ -55,15 +64,22 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
         downloaded,
         downloading: false,
         loaded,
-        model_name: "Qwen3.5-0.8B".into(),
+        model_name: config.display_name.to_string(),
         model_path: None,
     })
 }
 
 /// Start downloading the LLM model.
 #[tauri::command]
-pub async fn download_llm_model(app: tauri::AppHandle) -> Result<(), String> {
-    download::download_model(&app).await
+pub async fn download_llm_model(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let settings = state.settings.lock().await;
+    let model_size = settings.llm_model_size.clone();
+    drop(settings);
+
+    download::download_model(&app, &model_size).await
 }
 
 /// Cancel an in-progress LLM model download.
@@ -83,14 +99,25 @@ pub async fn delete_llm_model(state: State<'_, AppState>) -> Result<(), String> 
             e.quit();
         }
     }
-    download::delete_model()
+
+    let settings = state.settings.lock().await;
+    let model_size = settings.llm_model_size.clone();
+    drop(settings);
+
+    download::delete_model(&model_size)
 }
 
 /// Load the LLM model (spawn sidecar and load model into memory).
 #[tauri::command]
 pub async fn load_llm_model(state: State<'_, AppState>) -> Result<(), String> {
-    let engine = tokio::task::spawn_blocking(|| {
-        let mut e = engine::LlmEngine::spawn()?;
+    let settings = state.settings.lock().await;
+    let model_size = settings.llm_model_size.clone();
+    drop(settings);
+
+    let model_id = engine::model_id_for_size(&model_size).to_string();
+
+    let engine = tokio::task::spawn_blocking(move || {
+        let mut e = engine::LlmEngine::spawn_with_model(&model_id)?;
         e.load_model()?;
         Ok::<_, String>(e)
     }).await.map_err(|e| format!("Load task panicked: {}", e))??;

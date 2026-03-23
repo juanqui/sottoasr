@@ -121,18 +121,37 @@ Results are saved to `results/` as timestamped JSON files.
 
 Results from each cycle are documented below.
 
-### Results Summary (6 Cycles)
+### Results Summary (9 Cycles)
 
-| Cycle | Prompt Style | ROUGE-L | chrF | Zero-Filler% | LenR | Exact% |
-|-------|-------------|---------|------|-------------|------|--------|
-| 1 | conditional-v2 (original) | 0.774 | 0.769 | 91.8% | 1.11 | 26.4% |
-| 2 | Simplified, no examples | 0.725 | 0.717 | 95.5% | 1.01 | 11.8% |
-| **3** | **"such as" examples + preserve** | **0.845** | **0.845** | 86.4% | 1.04 | 24.6% |
-| 4 | Explicit filler list | 0.806 | 0.804 | 84.5% | 1.04 | 23.6% |
-| 5 | Cycle 3 + more crutch words | 0.815 | 0.800 | 92.7% | 0.99 | 28.2% |
-| 6 | Stronger filler emphasis | 0.816 | 0.803 | 89.1% | 0.97 | 21.8% |
+Cycles 1-6 ran on Qwen3-0.6B (PyTorch). Cycles 7-9 ran on Qwen3.5-2B-OptiQ-4bit (MLX).
 
-### Winner: Cycle 3
+| Cycle | Model | Prompt Style | ROUGE-L | chrF | Zero-Filler% | LenR | Exact% |
+|-------|-------|-------------|---------|------|-------------|------|--------|
+| 1 | 0.6B | conditional-v2 (original) | 0.774 | 0.769 | 91.8% | 1.11 | 26.4% |
+| 2 | 0.6B | Simplified, no examples | 0.725 | 0.717 | 95.5% | 1.01 | 11.8% |
+| **3** | **0.6B** | **"such as" examples + preserve** | **0.845** | **0.845** | 86.4% | 1.04 | 24.6% |
+| 4 | 0.6B | Explicit filler list | 0.806 | 0.804 | 84.5% | 1.04 | 23.6% |
+| 5 | 0.6B | Cycle 3 + more crutch words | 0.815 | 0.800 | 92.7% | 0.99 | 28.2% |
+| 6 | 0.6B | Stronger filler emphasis | 0.816 | 0.803 | 89.1% | 0.97 | 21.8% |
+| 7 | 2B | Explicit rules (v2) | 0.847 | 0.848 | 87.4% | 1.16 | 24.3% |
+| 8 | 2B | Targeted crutch+selfcorr (v3) | 0.874 | 0.861 | 85.6% | 1.05 | 22.5% |
+| 9 | 2B | Inline example for selfcorr (v4) | 0.866 | 0.845 | 88.3% | 0.99 | 18.9% |
+
+### Model Comparison (Cycle 3 prompt, MLX OptiQ-4bit, 111 samples)
+
+| Metric | 0.8B | 2B | 4B |
+|--------|------|-----|-----|
+| ROUGE-L | 0.833 | **0.880** | 0.850 |
+| chrF | 0.854 | **0.868** | 0.847 |
+| Length Ratio | 1.15 | **1.05** | 1.12 |
+| Exact Match | 27.9% | 24.3% | **33.3%** |
+| Zero-Filler | 82.9% | 85.6% | **91.0%** |
+| Avg Latency (s) | **0.42** | 0.80 | 2.22 |
+| Gen tok/s | **128** | 59 | 26 |
+
+**2B is the best overall quality model.** The 4B model scores higher on filler removal but restructures/reformats long text instead of just cleaning it (long_dictation ROUGE-L: 0.739 vs 0.905 for 2B). The 0.8B model is fastest but summarizes complex inputs.
+
+### Winner: Cycle 3 prompt on 2B model (ROUGE-L 0.880)
 
 ```
 Fix this speech transcript. Remove all verbal fillers and hesitations such
@@ -144,33 +163,33 @@ meaningful content — do not summarize or shorten. Output only the cleaned text
 ```
 
 **Why Cycle 3 wins:**
-- Highest ROUGE-L (0.845) and chrF (0.845) — best overall text quality
+- Highest ROUGE-L across all model sizes — best overall text quality
 - "such as" examples teach the model what fillers look like without causing prompt echoing
-- "Preserve all meaningful content" prevents over-summarization seen in Cycles 1-2
+- "Preserve all meaningful content" prevents over-summarization
 - "do not summarize or shorten" is a strong negative instruction the model respects
-- Self-correction handling works well (keeps only final version)
 
-**Trade-off:** Cycle 3 has a lower zero-filler rate (86.4%) than Cycle 5 (92.7%). Most remaining fillers are in long dictation (8/23) and short utterances (4/23). For production, the quality improvement (ROUGE-L +0.03 over Cycle 5) outweighs the filler rate difference.
+**Trade-off:** Cycle 3 has a lower zero-filler rate (85.6% on 2B) than more aggressive prompts (Cycle 9: 88.3%). The quality improvement in content preservation outweighs the filler rate difference.
 
-### Per-Category Performance (Cycle 3)
+### Per-Category Performance (Cycle 3 prompt on 2B)
 
-| Category | ROUGE-L | chrF | Zero-Filler% | Exact% | Notes |
-|----------|---------|------|-------------|--------|-------|
-| short | 0.955 | 0.902 | 60% | 40% | Excellent for brief utterances |
-| filler_removal | 0.925 | 0.901 | 87% | 47% | Strong core capability |
-| crutch_words | 0.856 | 0.888 | 50% | 30% | Good, some crutch words persist |
-| long_dictation | 0.854 | 0.862 | 0% | 0% | Good quality but fillers in long text |
-| grammar | 0.818 | 0.826 | 90% | 20% | Solid grammar correction |
-| false_start | 0.844 | 0.799 | 100% | 30% | Good false start removal |
-| misheard_words | 0.803 | 0.870 | 100% | 30% | Decent, limited by model knowledge |
-| mixed | 0.837 | 0.841 | 80% | 7% | Good multi-issue handling |
-| self_correction | 0.796 | 0.827 | 100% | 27% | Works but sometimes keeps both versions |
-| list_formatting | 0.756 | 0.723 | 100% | 0% | Weakest — model doesn't always format as lists |
+| Category | ROUGE-L | chrF | LenR | Exact% | Notes |
+|----------|---------|------|------|--------|-------|
+| misheard_words | 0.931 | 0.922 | 0.99 | 10% | Best category — strong domain knowledge |
+| filler_removal | 0.925 | 0.901 | 0.91 | 47% | Core capability, very strong |
+| long_dictation | 0.905 | 0.879 | 1.09 | 0% | Good content preservation (was 0.454 on 0.8B) |
+| crutch_words | 0.895 | 0.899 | 1.05 | 30% | Good, some crutch words persist (so, I mean) |
+| mixed | 0.873 | 0.893 | 1.08 | 27% | Good multi-issue handling |
+| list_formatting | 0.863 | 0.779 | 0.90 | 0% | Improved over 0.8B (was 0.744) |
+| false_start | 0.852 | 0.776 | 0.92 | 20% | Good false start removal |
+| grammar | 0.806 | 0.863 | 0.98 | 30% | Solid grammar correction |
+| self_correction | 0.801 | 0.833 | 1.44 | 27% | Weakest — keeps both versions |
+| short | 0.975 | 0.799 | 1.01 | 20% | Excellent for brief utterances |
 
 ### Key Insights
 
-1. **Prompt echoing is a real risk** — Cycles 1 and 4 showed the model can repeat system prompt text as output when the prompt contains explicit word lists with parentheticals. The "such as" pattern avoids this.
-2. **There's a quality-filler tradeoff** — More aggressive filler removal lowers ROUGE-L because the model over-trims meaningful content. The Cycle 3 prompt strikes the best balance.
-3. **Self-correction handling is the hardest task** — ROUGE-L 0.796, LenR 1.32. The model sometimes keeps both the original and corrected versions, inflating output length.
-4. **List formatting rarely produces exact matches** — The model formats lists differently from our expected output (different punctuation, numbering style) but the content is correct. chrF (0.723) is more representative than exact match (0%).
-5. **Long dictation quality is good** (ROUGE-L 0.854) but has the most remaining fillers (8/23). This is because longer text has more opportunities for fillers to survive.
+1. **Model size matters more than prompt tuning.** Switching from 0.8B to 2B improved ROUGE-L from 0.833 to 0.880 — more than any prompt change across 9 cycles.
+2. **The 4B model is NOT the best for cleanup.** Despite higher IFEval (89.8%), it restructures/reformats long text (ROUGE-L 0.739 on long_dictation vs 0.905 for 2B). It's too "creative" for a faithful cleanup task.
+3. **Self-correction is a fundamental 2B limitation.** The model treats corrections ("actually", "no", "wait") as additive content rather than replacement signals. Prompt changes (Cycles 7-9) yielded only marginal improvement (0.801→0.814) with tradeoffs elsewhere.
+4. **Residual fillers are mostly contextual.** The 24 remaining fillers are words like "so", "I mean", "okay" that serve double duty as connectors. Removing them aggressively hurts content quality.
+5. **The 0.8B model summarizes long/complex inputs.** User-reported failure: a 100-word technical dictation was compressed to ~44% of its length. The 2B model preserved it at 103% (ROUGE-L 0.976).
+6. **Prompt echoing risk** — Cycles 1 and 4 showed the model can repeat system prompt text. The "such as" pattern avoids this.

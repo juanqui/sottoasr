@@ -167,45 +167,47 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
                 // Handle regular keyboard events
                 // kCGEventKeyDown = 10, kCGEventKeyUp = 11, kCGEventFlagsChanged = 12
                 if event_type_raw == 10 || event_type_raw == 11 || event_type_raw == 12 {
-                    // Only capture on key down (10), skip key up (11) for recording
-                    // But still log key up for diagnostics
-                    let is_key_down = event_type_raw == 10;
                     let keycode = CGEventGetIntegerValueField(event, 9) as u16;
                     let flags = CGEventGetFlags(event);
-
-                    let key_name = vk_to_name(keycode);
-                    if key_name.is_empty() {
-                        log::info!("Unknown macOS keycode: 0x{:02X}", keycode);
-                        return event;
-                    }
 
                     let has_cmd = (flags & (1 << 20)) != 0;
                     let has_shift = (flags & (1 << 17)) != 0;
                     let has_alt = (flags & (1 << 19)) != 0;
                     let has_ctrl = (flags & (1 << 18)) != 0;
 
-                    let is_modifier = matches!(key_name, "Meta" | "Shift" | "ShiftRight" |
-                        "Alt" | "AltRight" | "Control" | "ControlRight" | "Fn");
-
-                    if !is_modifier && is_key_down {
-                        log::info!("Captured key: {} (vk 0x{:02X})", key_name, keycode);
-                        let _ = app.emit("key-captured", serde_json::json!({
-                            "code": key_name,
-                            "key": key_name,
-                            "source": "keyboard",
-                            "metaKey": has_cmd,
-                            "shiftKey": has_shift,
-                            "altKey": has_alt,
-                            "ctrlKey": has_ctrl,
-                        }));
-                    } else if is_key_down {
+                    if event_type_raw == 12 {
+                        // kCGEventFlagsChanged — modifier pressed or released.
+                        // Always emit so the frontend can track modifier state
+                        // and detect when all keys are released.
                         let _ = app.emit("key-modifier", serde_json::json!({
                             "metaKey": has_cmd,
                             "shiftKey": has_shift,
                             "altKey": has_alt,
                             "ctrlKey": has_ctrl,
                         }));
+                    } else if event_type_raw == 10 {
+                        // kCGEventKeyDown — only emit for non-modifier keys
+                        let key_name = vk_to_name(keycode);
+                        if key_name.is_empty() {
+                            log::info!("Unknown macOS keycode: 0x{:02X}", keycode);
+                            return event;
+                        }
+                        let is_modifier = matches!(key_name, "Meta" | "Shift" | "ShiftRight" |
+                            "Alt" | "AltRight" | "Control" | "ControlRight" | "Fn");
+                        if !is_modifier {
+                            log::info!("Captured key: {} (vk 0x{:02X})", key_name, keycode);
+                            let _ = app.emit("key-captured", serde_json::json!({
+                                "code": key_name,
+                                "key": key_name,
+                                "source": "keyboard",
+                                "metaKey": has_cmd,
+                                "shiftKey": has_shift,
+                                "altKey": has_alt,
+                                "ctrlKey": has_ctrl,
+                            }));
+                        }
                     }
+                    // Type 11 (kCGEventKeyUp) — no action needed
                 }
 
                 event

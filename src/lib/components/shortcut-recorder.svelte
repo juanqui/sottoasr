@@ -38,6 +38,8 @@
 
   let recording = $state(false);
   let currentModifiers = $state<Set<string>>(new Set());
+  let pendingShortcut = $state('');
+  let commitTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let buttonEl: HTMLButtonElement;
 
   // ---- macOS symbol mappings ----
@@ -178,12 +180,14 @@
     const code = payload.code;
 
     if (code === 'Escape') {
+      pendingShortcut = '';
       stopRecording();
       return;
     }
 
     if (code === 'Backspace' || code === 'Delete') {
       if (!payload.metaKey && !payload.ctrlKey && !payload.altKey && !payload.shiftKey) {
+        pendingShortcut = '';
         onchange('');
         stopRecording();
         return;
@@ -214,8 +218,18 @@
     }
     parts.push(code);
 
-    onchange(parts.join('+'));
-    stopRecording();
+    pendingShortcut = parts.join('+');
+
+    // For shortcuts without modifiers (system/function keys), commit immediately
+    if (mods.size === 0) {
+      commitPending();
+      return;
+    }
+
+    // For shortcuts with modifiers, wait for all keys to be released.
+    // Set a fallback timeout in case release detection fails.
+    clearCommitTimeout();
+    commitTimeoutId = setTimeout(commitPending, 3000);
   }
 
   function handleModifierUpdate(payload: { metaKey: boolean; shiftKey: boolean; altKey: boolean; ctrlKey: boolean }) {
@@ -226,6 +240,28 @@
     if (payload.altKey) mods.add('Alt');
     if (payload.shiftKey) mods.add('Shift');
     currentModifiers = mods;
+
+    // If we have a pending shortcut and all modifiers are released, commit
+    if (pendingShortcut && !payload.metaKey && !payload.shiftKey && !payload.altKey && !payload.ctrlKey) {
+      commitPending();
+    }
+  }
+
+  function commitPending() {
+    clearCommitTimeout();
+    if (pendingShortcut) {
+      const shortcut = pendingShortcut;
+      pendingShortcut = '';
+      onchange(shortcut);
+      stopRecording();
+    }
+  }
+
+  function clearCommitTimeout() {
+    if (commitTimeoutId !== null) {
+      clearTimeout(commitTimeoutId);
+      commitTimeoutId = null;
+    }
   }
 
   function handleDocMouseDown(event: MouseEvent) {
@@ -240,6 +276,17 @@
     event.stopPropagation();
     if (event.repeat) return;
 
+    // For modifier-only keys, just update the modifier display
+    if (JS_MODIFIER_KEYS.has(event.key)) {
+      handleModifierUpdate({
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+      });
+      return;
+    }
+
     handleCapturedKey({
       code: codeToTauriKey(event.code) || event.code || event.key,
       key: event.key,
@@ -251,10 +298,21 @@
     });
   }
 
+  // JS keyup handler for release detection
+  function handleDocKeyUp(event: KeyboardEvent) {
+    if (!recording || !pendingShortcut) return;
+    // When all modifier keys are released, commit the pending shortcut
+    if (!event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey) {
+      commitPending();
+    }
+  }
+
   async function startRecording() {
     if (disabled) return;
     recording = true;
     currentModifiers = new Set();
+    pendingShortcut = '';
+    clearCommitTimeout();
     onrecordstart?.();
 
     // Start Rust-side CGEventTap for full key capture
@@ -272,6 +330,7 @@
 
     // JS fallback (always active as backup)
     document.addEventListener('keydown', handleDocKeyDown, true);
+    document.addEventListener('keyup', handleDocKeyUp, true);
     document.addEventListener('mousedown', handleDocMouseDown, true);
   }
 
@@ -279,6 +338,8 @@
     if (!recording) return;
     recording = false;
     currentModifiers = new Set();
+    pendingShortcut = '';
+    clearCommitTimeout();
 
     // Stop Rust-side capture
     try {
@@ -291,23 +352,26 @@
 
     // Remove JS listeners
     document.removeEventListener('keydown', handleDocKeyDown, true);
+    document.removeEventListener('keyup', handleDocKeyUp, true);
     document.removeEventListener('mousedown', handleDocMouseDown, true);
     onrecordend?.();
   }
 
   onDestroy(() => {
+    clearCommitTimeout();
     if (recording) {
       invoke('stop_key_capture').catch(() => {});
     }
     keyCaptureUnlisten?.();
     modifierUnlisten?.();
     document.removeEventListener('keydown', handleDocKeyDown, true);
+    document.removeEventListener('keyup', handleDocKeyUp, true);
     document.removeEventListener('mousedown', handleDocMouseDown, true);
   });
 
   let displayText = $derived(
     recording
-      ? formatActiveModifiers()
+      ? (pendingShortcut ? formatForDisplay(pendingShortcut) : formatActiveModifiers())
       : value
         ? formatForDisplay(value)
         : placeholder

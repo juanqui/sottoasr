@@ -15,12 +15,14 @@ Response format:
   {"ok": false, "error": "message"}
 """
 
+import argparse
 import json
 import sys
 import time
 import os
 
-MODEL_ID = "mlx-community/Qwen3.5-0.8B-OptiQ-4bit"
+DEFAULT_MODEL_ID = "mlx-community/Qwen3.5-2B-OptiQ-4bit"
+MODEL_ID = DEFAULT_MODEL_ID  # overridden by --model CLI arg
 
 STANDARD_PROMPT = (
     "Fix this speech transcript. Remove all verbal fillers and hesitations "
@@ -147,7 +149,7 @@ def handle_request(req):
             "status": "ready" if loaded else ("not_downloaded" if not downloaded else "downloaded"),
             "downloaded": downloaded,
             "loaded": loaded,
-            "model_name": "Qwen3.5-0.8B",
+            "model_name": MODEL_ID.split("/")[-1] if "/" in MODEL_ID else MODEL_ID,
             "model_id": MODEL_ID,
         })
 
@@ -210,7 +212,14 @@ def handle_request(req):
 
 
 def main():
-    log("Sidecar started, waiting for requests on stdin...")
+    global MODEL_ID
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default=DEFAULT_MODEL_ID, help="HuggingFace model ID")
+    args = parser.parse_args()
+    MODEL_ID = args.model
+
+    log(f"Sidecar started (model={MODEL_ID}), waiting for requests on stdin...")
 
     for line in sys.stdin:
         line = line.strip()

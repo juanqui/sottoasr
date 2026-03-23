@@ -27,8 +27,11 @@ pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
     register_shortcuts(
         app,
         &settings.push_to_talk_shortcut,
+        settings.push_to_talk_shortcut_alt.as_deref(),
         &settings.toggle_shortcut,
+        settings.toggle_shortcut_alt.as_deref(),
         &settings.cancel_shortcut,
+        settings.cancel_shortcut_alt.as_deref(),
     )
 }
 
@@ -38,101 +41,120 @@ pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
 pub fn register_shortcuts(
     app: &AppHandle,
     ptt_shortcut: &str,
+    ptt_shortcut_alt: Option<&str>,
     toggle_shortcut: &str,
+    toggle_shortcut_alt: Option<&str>,
     cancel_shortcut: &str,
+    cancel_shortcut_alt: Option<&str>,
 ) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     // Unregister all existing shortcuts first
     let _ = app.global_shortcut().unregister_all();
 
-    // Store the cancel shortcut for dynamic registration during recording
+    // Store the cancel shortcuts for dynamic registration during recording
     {
         let state: tauri::State<'_, AppState> = app.state();
         let mut cs = state.cancel_shortcut.lock().unwrap();
         *cs = cancel_shortcut.to_string();
+        let mut cs_alt = state.cancel_shortcut_alt.lock().unwrap();
+        *cs_alt = cancel_shortcut_alt.filter(|s| !s.is_empty()).map(|s| s.to_string());
     }
 
-    let app_handle = app.clone();
+    // Helper: register a push-to-talk shortcut with the given key string
+    fn register_ptt(app: &AppHandle, shortcut: &str) -> Result<(), String> {
+        use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-    // Extract the main (non-modifier) key from the push-to-talk shortcut for release polling.
-    // e.g., "CommandOrControl+Shift+Space" -> "Space" -> vk 0x31
-    let ptt_main_key = ptt_shortcut.split('+').next_back().unwrap_or("Space").to_string();
+        let app_handle = app.clone();
+        let ptt_main_key = shortcut.split('+').next_back().unwrap_or("Space").to_string();
 
-    // Push-to-talk: start on press, poll for key release, stop when released
-    app.global_shortcut().on_shortcut(ptt_shortcut, move |_app, _shortcut, event| {
-        if event.state != ShortcutState::Pressed {
-            return;
-        }
-        let app = app_handle.clone();
-        let main_key = ptt_main_key.clone();
-        tauri::async_runtime::spawn(async move {
-            let state: tauri::State<'_, AppState> = app.state();
-            if state.get_state() != AppStateEnum::Idle {
+        app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state != ShortcutState::Pressed {
                 return;
             }
-            handle_start_recording(&app);
-
-            // Poll for key release via CGEventSourceKeyState
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(vk) = crate::commands::keycapture::tauri_key_to_vk(&main_key) {
-                    let app_for_release = app.clone();
-                    std::thread::spawn(move || {
-                        // Wait briefly for the key to register as "down"
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-
-                        unsafe {
-                            extern "C" {
-                                fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
-                            }
-                            // Poll at ~30Hz until the key is released
-                            loop {
-                                std::thread::sleep(std::time::Duration::from_millis(33));
-                                // stateID 0 = kCGEventSourceStateCombinedSessionState
-                                let still_pressed = CGEventSourceKeyState(0, vk);
-                                if !still_pressed {
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Key released — stop recording
-                        let state: tauri::State<'_, AppState> = app_for_release.state();
-                        if state.get_state() == AppStateEnum::Recording {
-                            tauri::async_runtime::spawn(async move {
-                                handle_stop_recording(&app_for_release).await;
-                            });
-                        }
-                    });
-                }
-            }
-        });
-    }).map_err(|e| format!("Failed to register push-to-talk shortcut '{}': {}", ptt_shortcut, e))?;
-
-    let app_handle2 = app.clone();
-
-    // Toggle mode (press once to start, again to stop)
-    app.global_shortcut().on_shortcut(toggle_shortcut, move |_app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            let app = app_handle2.clone();
+            let app = app_handle.clone();
+            let main_key = ptt_main_key.clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<'_, AppState> = app.state();
-                let current = state.get_state();
-                match current {
-                    AppStateEnum::Idle => {
-                        handle_start_recording(&app);
-                    }
-                    AppStateEnum::Recording => {
-                        handle_stop_recording(&app).await;
-                    }
-                    _ => {
-                        log::info!("Toggle: ignoring (state={:?})", current);
+                if state.get_state() != AppStateEnum::Idle {
+                    return;
+                }
+                handle_start_recording(&app);
+
+                // Poll for key release via CGEventSourceKeyState
+                #[cfg(target_os = "macos")]
+                {
+                    if let Some(vk) = crate::commands::keycapture::tauri_key_to_vk(&main_key) {
+                        let app_for_release = app.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            unsafe {
+                                extern "C" {
+                                    fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
+                                }
+                                loop {
+                                    std::thread::sleep(std::time::Duration::from_millis(33));
+                                    let still_pressed = CGEventSourceKeyState(0, vk);
+                                    if !still_pressed {
+                                        break;
+                                    }
+                                }
+                            }
+                            let state: tauri::State<'_, AppState> = app_for_release.state();
+                            if state.get_state() == AppStateEnum::Recording {
+                                tauri::async_runtime::spawn(async move {
+                                    handle_stop_recording(&app_for_release).await;
+                                });
+                            }
+                        });
                     }
                 }
             });
+        }).map_err(|e| format!("Failed to register push-to-talk shortcut '{}': {}", shortcut, e))
+    }
+
+    // Helper: register a toggle shortcut with the given key string
+    fn register_toggle(app: &AppHandle, shortcut: &str) -> Result<(), String> {
+        use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+        let app_handle = app.clone();
+        app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                let app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, AppState> = app.state();
+                    let current = state.get_state();
+                    match current {
+                        AppStateEnum::Idle => {
+                            handle_start_recording(&app);
+                        }
+                        AppStateEnum::Recording => {
+                            handle_stop_recording(&app).await;
+                        }
+                        _ => {
+                            log::info!("Toggle: ignoring (state={:?})", current);
+                        }
+                    }
+                });
+            }
+        }).map_err(|e| format!("Failed to register toggle shortcut '{}': {}", shortcut, e))
+    }
+
+    // Register primary shortcuts
+    register_ptt(app, ptt_shortcut)?;
+    register_toggle(app, toggle_shortcut)?;
+
+    // Register alt shortcuts (if set and non-empty)
+    if let Some(alt) = ptt_shortcut_alt.filter(|s| !s.is_empty()) {
+        if let Err(e) = register_ptt(app, alt) {
+            log::warn!("Failed to register alt push-to-talk shortcut: {}", e);
         }
-    }).map_err(|e| format!("Failed to register toggle shortcut '{}': {}", toggle_shortcut, e))?;
+    }
+    if let Some(alt) = toggle_shortcut_alt.filter(|s| !s.is_empty()) {
+        if let Err(e) = register_toggle(app, alt) {
+            log::warn!("Failed to register alt toggle shortcut: {}", e);
+        }
+    }
 
     log::info!(
         "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle) | cancel '{}' (registered only while recording)",
@@ -141,7 +163,7 @@ pub fn register_shortcuts(
     Ok(())
 }
 
-/// Register the cancel shortcut globally. Called when recording starts.
+/// Register the cancel shortcut(s) globally. Called when recording starts.
 pub fn register_cancel_shortcut(app: &AppHandle) {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -149,28 +171,39 @@ pub fn register_cancel_shortcut(app: &AppHandle) {
     let cancel_shortcut = state.cancel_shortcut.lock()
         .map(|cs| cs.clone())
         .unwrap_or_else(|_| "Escape".to_string());
+    let cancel_shortcut_alt = state.cancel_shortcut_alt.lock()
+        .ok()
+        .and_then(|cs| cs.clone());
 
-    let app_handle = app.clone();
-    let result = app.global_shortcut().on_shortcut(cancel_shortcut.as_str(), move |_app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            let app = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                let state: tauri::State<'_, AppState> = app.state();
-                let current = state.get_state();
-                if current == AppStateEnum::Recording {
-                    handle_cancel_recording(&app).await;
-                }
-            });
+    // Helper to register a single cancel shortcut string
+    let register_one = |app: &AppHandle, shortcut: &str| {
+        let app_handle = app.clone();
+        let result = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                let app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, AppState> = app.state();
+                    let current = state.get_state();
+                    if current == AppStateEnum::Recording {
+                        handle_cancel_recording(&app).await;
+                    }
+                });
+            }
+        });
+
+        match result {
+            Ok(()) => log::info!("Cancel shortcut '{}' registered (recording active)", shortcut),
+            Err(e) => log::error!("Failed to register cancel shortcut '{}': {}", shortcut, e),
         }
-    });
+    };
 
-    match result {
-        Ok(()) => log::info!("Cancel shortcut '{}' registered (recording active)", cancel_shortcut),
-        Err(e) => log::error!("Failed to register cancel shortcut '{}': {}", cancel_shortcut, e),
+    register_one(app, &cancel_shortcut);
+    if let Some(alt) = cancel_shortcut_alt.as_deref().filter(|s| !s.is_empty()) {
+        register_one(app, alt);
     }
 }
 
-/// Unregister the cancel shortcut. Called when recording stops or is cancelled.
+/// Unregister the cancel shortcut(s). Called when recording stops or is cancelled.
 pub fn unregister_cancel_shortcut(app: &AppHandle) {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -178,10 +211,19 @@ pub fn unregister_cancel_shortcut(app: &AppHandle) {
     let cancel_shortcut = state.cancel_shortcut.lock()
         .map(|cs| cs.clone())
         .unwrap_or_else(|_| "Escape".to_string());
+    let cancel_shortcut_alt = state.cancel_shortcut_alt.lock()
+        .ok()
+        .and_then(|cs| cs.clone());
 
     match app.global_shortcut().unregister(cancel_shortcut.as_str()) {
         Ok(()) => log::info!("Cancel shortcut '{}' unregistered (recording ended)", cancel_shortcut),
         Err(e) => log::warn!("Failed to unregister cancel shortcut '{}': {}", cancel_shortcut, e),
+    }
+    if let Some(alt) = cancel_shortcut_alt.as_deref().filter(|s| !s.is_empty()) {
+        match app.global_shortcut().unregister(alt) {
+            Ok(()) => log::info!("Cancel alt shortcut '{}' unregistered", alt),
+            Err(e) => log::warn!("Failed to unregister cancel alt shortcut '{}': {}", alt, e),
+        }
     }
 }
 
@@ -409,6 +451,7 @@ async fn handle_stop_recording(app: &AppHandle) {
                 let settings = state.settings.lock().await;
                 let llm_enabled = settings.llm_cleanup_enabled;
                 let markdown_mode = settings.llm_markdown_mode;
+                let llm_model_size = settings.llm_model_size.clone();
                 let auto_paste = settings.auto_paste;
                 let restore_clipboard = settings.restore_clipboard;
                 let restore_focus_before_paste = settings.restore_focus_before_paste;
@@ -425,14 +468,28 @@ async fn handle_stop_recording(app: &AppHandle) {
                         crate::llm::prompts::CleanupMode::Standard
                     };
 
+                    let selected_model_id = crate::llm::engine::model_id_for_size(&llm_model_size).to_string();
+
                     {
                         let mut llm_guard = state.llm_engine.lock().await;
 
-                        // Spawn sidecar on first use if not already running
-                        if llm_guard.is_none() {
-                            log::info!("Spawning LLM sidecar on first use...");
-                            match tokio::task::spawn_blocking(|| {
-                                crate::llm::engine::LlmEngine::spawn()
+                        // Respawn sidecar if model changed or not running
+                        let needs_spawn = match llm_guard.as_ref() {
+                            None => true,
+                            Some(engine) => engine.model_id != selected_model_id,
+                        };
+
+                        if needs_spawn {
+                            // Shut down old sidecar if model changed
+                            if let Some(mut old) = llm_guard.take() {
+                                log::info!("Model changed, shutting down old sidecar");
+                                old.quit();
+                            }
+
+                            log::info!("Spawning LLM sidecar for {}...", selected_model_id);
+                            let model_id_for_spawn = selected_model_id.clone();
+                            match tokio::task::spawn_blocking(move || {
+                                crate::llm::engine::LlmEngine::spawn_with_model(&model_id_for_spawn)
                             }).await {
                                 Ok(Ok(engine)) => {
                                     *llm_guard = Some(engine);
@@ -794,8 +851,6 @@ fn show_overlay(app: &AppHandle) {
                 panel.set_hides_on_deactivate(false);
 
                 // Synchronously clear backgrounds on ALL views in the hierarchy.
-                // with_webview() is async and may not take effect before show().
-                // Instead, walk the NSPanel's view tree directly via objc2.
                 clear_all_backgrounds(panel.as_panel());
 
                 panel.show();
@@ -809,10 +864,16 @@ fn show_overlay(app: &AppHandle) {
     });
 }
 
-/// Hide the overlay panel (falls back to hiding the window if not a panel).
+/// Hide the overlay panel and reset its state for the next recording.
 fn hide_overlay(app: &AppHandle) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
+        // Reset overlay state (timer, waveform, isRecording) so the next
+        // recording starts fresh with a false→true transition.
+        if let Some(window) = app.get_webview_window("overlay") {
+            let _ = window.eval("window.__resetOverlay && window.__resetOverlay()");
+        }
+
         if let Ok(panel) = app.get_webview_panel("overlay") {
             panel.hide();
             log::info!("Overlay hidden");

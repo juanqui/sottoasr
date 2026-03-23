@@ -7,8 +7,11 @@ import type { Settings } from '../utils/tauri';
 
 const DEFAULT_SETTINGS: Settings = {
   push_to_talk_shortcut: 'CommandOrControl+Shift+Space',
+  push_to_talk_shortcut_alt: null,
   toggle_shortcut: 'CommandOrControl+Shift+D',
+  toggle_shortcut_alt: null,
   cancel_shortcut: 'Escape',
+  cancel_shortcut_alt: null,
   show_overlay: true,
   auto_paste: true,
   restore_clipboard: true,
@@ -19,6 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
   launch_at_login: false,
   llm_cleanup_enabled: false,
   llm_markdown_mode: false,
+  llm_model_size: '2b',
 };
 
 class SettingsStore {

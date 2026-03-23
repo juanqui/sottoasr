@@ -17,8 +17,11 @@ export type AppStateEnum = 'Idle' | 'Recording' | 'Transcribing' | 'CleaningUp' 
 
 export interface Settings {
   push_to_talk_shortcut: string;
+  push_to_talk_shortcut_alt?: string | null;
   toggle_shortcut: string;
+  toggle_shortcut_alt?: string | null;
   cancel_shortcut: string;
+  cancel_shortcut_alt?: string | null;
   show_overlay: boolean;
   auto_paste: boolean;
   restore_clipboard: boolean;
@@ -29,6 +32,7 @@ export interface Settings {
   launch_at_login: boolean;
   llm_cleanup_enabled: boolean;
   llm_markdown_mode: boolean;
+  llm_model_size: string;
 }
 
 export interface ModelStatus {
