@@ -2,6 +2,14 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.3.2] — 2026-03-23
+
+Critical CPU usage fix.
+
+### Fixed
+
+- **34% idle CPU usage** — the CGEventTap run loop was calling `CFRunLoopRunInMode` with a 2-second timeout in a tight loop, generating continuous mach messages to the window server. Replaced with `CFRunLoopRun()` which blocks until the tap is invalidated. CPU at idle is now 0.0%.
+
 ## [0.3.1] — 2026-03-23
 
 Multi-monitor, multi-space, and paste target improvements.
