@@ -2,6 +2,27 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.3.0] — 2026-03-23
+
+AI transcript cleanup model selection and shortcut improvements.
+
+### Added
+
+- **LLM model size selection** — Choose between Qwen3.5 0.8B (fast, ~570 MB), 2B (balanced, ~1.4 GB), or 4B (best quality, ~3 GB) in Settings. Default changed to 2B based on benchmarking showing best quality-to-speed tradeoff (ROUGE-L 0.880).
+- **Alt shortcut support** — Push-to-talk, toggle, and cancel shortcuts each support an optional alternate binding.
+- **Improved shortcut recorder** — Better modifier key tracking and key capture via CGEventTap.
+- **Multi-model benchmark tooling** — `compare_models.py` for running the LLM benchmark suite across model sizes.
+
+### Fixed
+
+- **Recording timer starting at ~0:30 on first recording** — Timer now correctly initializes at 0:00 by setting `isRecording` to false at overlay creation and resetting overlay state on hide.
+- **LLM summarizing long/complex inputs** — The 0.8B model was too small to follow "preserve all content" instructions. Upgrading default to 2B resolves this (user-reported long_06 example: ROUGE-L improved from 0.454 to 0.976).
+
+### Changed
+
+- Default LLM model changed from 0.8B to 2B for better instruction following.
+- LLM sidecar accepts `--model` CLI argument and auto-respawns when model selection changes.
+
 ## [0.2.4] — 2026-03-22
 
 Paste reliability improvements.
