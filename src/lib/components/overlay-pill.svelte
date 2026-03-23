@@ -6,6 +6,14 @@
   import Waveform from './waveform.svelte';
   import RecordingTimer from './recording-timer.svelte';
 
+  async function handleStop() {
+    try {
+      await invoke('stop_recording');
+    } catch (e) {
+      console.error('Stop failed:', e);
+    }
+  }
+
   async function handleCancel() {
     try {
       await invoke('cancel_recording');
@@ -180,8 +188,13 @@
       <RecordingTimer running={isRecording} />
     {/if}
 
-    <!-- Cancel button -->
+    <!-- Stop (transcribe) and Cancel buttons -->
     {#if isRecording}
+      <button class="stop-btn" onclick={handleStop} type="button" aria-label="Stop and transcribe">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+          <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <button class="cancel-btn" onclick={handleCancel} type="button" aria-label="Cancel recording">
         ×
       </button>
@@ -221,8 +234,8 @@
   .pill {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 280px;
+    gap: 8px;
+    width: 300px;
     height: 44px;
     padding: 0 14px;
     border-radius: 22px;
@@ -335,6 +348,7 @@
     overflow: hidden;
   }
 
+  .stop-btn,
   .cancel-btn {
     display: flex;
     align-items: center;
@@ -351,7 +365,15 @@
     padding: 0;
     flex-shrink: 0;
     transition: background 0.15s ease, color 0.15s ease;
-    margin-left: 2px;
+  }
+
+  .stop-btn {
+    color: rgba(34, 197, 94, 0.8);
+  }
+
+  .stop-btn:hover {
+    background: rgba(34, 197, 94, 0.25);
+    color: #22c55e;
   }
 
   .cancel-btn:hover {

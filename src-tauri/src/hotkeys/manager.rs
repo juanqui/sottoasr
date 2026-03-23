@@ -739,7 +739,7 @@ async fn handle_cancel_recording(app: &AppHandle) {
 }
 
 /// Logical dimensions of the overlay pill window.
-const OVERLAY_WIDTH: f64 = 280.0;
+const OVERLAY_WIDTH: f64 = 300.0;
 const OVERLAY_HEIGHT: f64 = 110.0;
 
 /// Pre-create the overlay panel at startup so that the first recording
