@@ -226,7 +226,6 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
             fn CFMachPortCreateRunLoopSource(alloc: *const std::ffi::c_void, port: *const std::ffi::c_void, order: i64) -> *const std::ffi::c_void;
             fn CFRunLoopGetCurrent() -> *const std::ffi::c_void;
             fn CFRunLoopAddSource(rl: *const std::ffi::c_void, source: *const std::ffi::c_void, mode: *const std::ffi::c_void);
-            fn CFRunLoopRunInMode(mode: *const std::ffi::c_void, seconds: f64, return_after: u8) -> i32;
             fn CGEventTapEnable(tap: *const std::ffi::c_void, enable: bool);
             static kCFRunLoopCommonModes: *const std::ffi::c_void;
         }
@@ -246,11 +245,16 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
 
         log::info!("CGEventTap created and enabled, entering run loop");
 
-        // Run the event loop, re-enable tap periodically
-        loop {
-            CFRunLoopRunInMode(kCFRunLoopCommonModes, 2.0, 0);
-            CGEventTapEnable(tap, true);
+        extern "C" {
+            fn CFRunLoopRun();
         }
+
+        // Block in the run loop. CFRunLoopRun only returns if all sources
+        // are removed, which means the tap was invalidated by the system.
+        CFRunLoopRun();
+
+        // If we get here, the run loop exited — tap was invalidated
+        true
     }
 }
 
