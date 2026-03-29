@@ -15,6 +15,7 @@ export function formatDuration(ms: number): string {
 export function formatRelativeTime(date: string): string {
   const now = Date.now();
   const then = new Date(date).getTime();
+  if (isNaN(then)) return 'Unknown';
   const diffMs = now - then;
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
