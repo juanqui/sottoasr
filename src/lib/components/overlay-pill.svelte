@@ -149,6 +149,7 @@
     return () => {
       unlisteners.forEach((fn) => fn());
       clearWarning();
+      delete (window as any).__resetOverlay;
     };
   });
 </script>
