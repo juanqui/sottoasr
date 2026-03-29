@@ -71,9 +71,11 @@
     { value: 'hi', label: 'Hindi' },
   ];
 
+  // Track timeouts for cleanup
+  const timeouts: Array<ReturnType<typeof setTimeout>> = [];
+
   onMount(() => {
     const cleanups: Array<() => void> = [];
-    const timeouts: Array<ReturnType<typeof setTimeout>> = [];
 
     // Load settings and permissions
     settingsStore.load().then(() => {
