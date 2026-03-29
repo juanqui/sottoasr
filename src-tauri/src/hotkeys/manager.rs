@@ -373,7 +373,7 @@ async fn handle_stop_recording(app: &AppHandle) {
                     all.len()
                 );
                 // Hide overlay before returning
-                hide_overlay(&app);
+                hide_overlay(app);
                 let _ = app.emit("recording-error", serde_json::json!({
                     "error": format!("Recording too long: maximum {} minutes of audio allowed", MAX_AUDIO_BUFFER_SAMPLES / 48_000 / 60)
                 }));
@@ -842,12 +842,32 @@ fn show_overlay(app: &AppHandle) {
         // Try to show an existing panel first
         if let Ok(panel) = app.get_webview_panel("overlay") {
             panel.show();
+            // Re-apply floating level after show — this is required to fix
+            // Tauri issue #13530 where the setting is lost after hide/show.
+            // The PanelLevel::Floating keeps the window above normal windows.
+            use tauri_nspanel::PanelLevel;
+            panel.set_level(PanelLevel::Floating.into());
+            // Re-apply floating panel behavior to ensure consistent layering
+            panel.set_floating_panel(true);
+            // Bring to front without activating
+            panel.order_front_regardless();
             if let Some(window) = app.get_webview_window("overlay") {
                 if let Some(pos) = compute_overlay_position(&window) {
                     let _ = window.set_position(pos);
                 }
             }
-            log::info!("Overlay shown (existing panel)");
+            log::info!("Overlay shown (existing panel, floating level reapplied)");
+            return;
+        }
+
+        // Fallback: check for a regular webview window (handles case where panel
+        // conversion failed in the past and we have a plain window instead).
+        if let Some(window) = app.get_webview_window("overlay") {
+            let _ = window.show();
+            if let Some(pos) = compute_overlay_position(&window) {
+                let _ = window.set_position(pos);
+            }
+            log::info!("Overlay shown (existing window fallback)");
             return;
         }
 
