@@ -73,6 +73,7 @@
 
   onMount(() => {
     const cleanups: Array<() => void> = [];
+    const timeouts: Array<ReturnType<typeof setTimeout>> = [];
 
     // Load settings and permissions
     settingsStore.load().then(() => {
@@ -95,6 +96,7 @@
 
     return () => {
       cleanups.forEach((fn) => fn());
+      timeouts.forEach((t) => clearTimeout(t));
     };
   });
 
@@ -119,7 +121,7 @@
 
   async function handleRequestAccessibility() {
     await requestAccessibilityPermission();
-    setTimeout(refreshPermissions, 2000);
+    timeouts.push(setTimeout(refreshPermissions, 2000));
   }
 
   async function handleFixAccessibility() {
@@ -127,7 +129,7 @@
     try {
       await invoke('fix_accessibility_permission');
       // Wait for user to grant in System Settings, then re-check
-      setTimeout(refreshPermissions, 3000);
+      timeouts.push(setTimeout(refreshPermissions, 3000));
     } catch (err) {
       console.error('Fix accessibility failed:', err);
     } finally {
@@ -150,11 +152,11 @@
         saveMessage = 'Saved (shortcuts may need restart)';
       }
 
-      setTimeout(() => { saveMessage = ''; }, 2500);
+      timeouts.push(setTimeout(() => { saveMessage = ''; }, 2500));
     } catch (e) {
       console.error('Save failed:', e);
       saveMessage = `Save failed: ${e}`;
-      setTimeout(() => { saveMessage = ''; }, 4000);
+      timeouts.push(setTimeout(() => { saveMessage = ''; }, 4000));
     }
   }
 
