@@ -146,6 +146,7 @@ pub async fn download_parakeet_model(app: tauri::AppHandle) -> Result<(), String
 
     let client = reqwest::Client::builder()
         .user_agent("SottoASR/0.1.0")
+        .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
 
