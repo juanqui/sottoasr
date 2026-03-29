@@ -20,6 +20,9 @@ tauri_panel! {
 const MAX_RECORDING_SECS: u64 = 12 * 60;
 /// Seconds before max duration to show a warning (1 minute before).
 const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
+/// Maximum audio buffer size (15 minutes at 48kHz mono = 43.2M samples ≈ 173MB).
+/// Prevents memory exhaustion from unbounded recordings.
+const MAX_AUDIO_BUFFER_SAMPLES: usize = 48_000 * 60 * 15;
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
     // Load persisted settings to use saved shortcuts (not hardcoded defaults)
@@ -354,10 +357,25 @@ async fn handle_stop_recording(app: &AppHandle) {
     let _ = app.emit("state-changed", &AppStateEnum::Transcribing);
 
     // Collect all audio samples from the channel
+    // Check buffer limit to prevent memory exhaustion
     let samples = {
         let rx = state.audio_receiver.lock().unwrap();
         let mut all = Vec::new();
         while let Ok(chunk) = rx.try_recv() {
+            // Check if adding this chunk would exceed the buffer limit
+            if all.len().saturating_add(chunk.len()) > MAX_AUDIO_BUFFER_SAMPLES {
+                log::error!(
+                    "Audio buffer limit ({}) exceeded after {} samples - recording too long",
+                    MAX_AUDIO_BUFFER_SAMPLES,
+                    all.len()
+                );
+                let _ = app.emit("recording-error", serde_json::json!({
+                    "error": format!("Recording too long: maximum {} minutes of audio allowed", MAX_AUDIO_BUFFER_SAMPLES / 48_000 / 60)
+                }));
+                state.set_state(AppStateEnum::Idle);
+                let _ = app.emit("state-changed", &AppStateEnum::Idle);
+                return;
+            }
             all.extend(chunk);
         }
         all
