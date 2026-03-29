@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { diffWords } from 'diff';
   import { formatRelativeTime, formatDuration, truncateText } from '../utils/format';
   import type { Transcription } from '../utils/tauri';
@@ -33,6 +34,8 @@
 
   let hasLlm = $derived(item.llm_applied && !!item.raw_text);
 
+  let copyTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   function setView(mode: ViewMode) {
     if (viewMode === mode) {
       viewMode = 'cleaned';
@@ -48,12 +51,25 @@
   function handleCopy() {
     oncopy(displayText);
     copyFeedback = true;
-    setTimeout(() => { copyFeedback = false; }, 1500);
+    // Clear any existing timeout to avoid stale callbacks
+    if (copyTimeoutId) clearTimeout(copyTimeoutId);
+    copyTimeoutId = setTimeout(() => {
+      copyFeedback = false;
+      copyTimeoutId = null;
+    }, 1500);
   }
 
   function handleDelete() {
     ondelete(item.id);
   }
+
+  // Clean up timeout on component destroy to prevent memory leaks
+  onDestroy(() => {
+    if (copyTimeoutId) {
+      clearTimeout(copyTimeoutId);
+      copyTimeoutId = null;
+    }
+  });
 </script>
 
 <div class="history-item" class:expanded>
