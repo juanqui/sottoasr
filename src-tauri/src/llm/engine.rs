@@ -143,25 +143,33 @@ impl LlmEngine {
         let _ = self.request(&serde_json::json!({"action": "quit"}));
 
         // Wait for the process to exit with a timeout, then kill if needed.
-        // Use a thread with timeout to avoid blocking forever.
-        let timed_out = std::thread::scope(|s| {
-            let start = std::time::Instant::now();
-            let handle = s.spawn(|| self.child.wait());
+        // Use non-blocking try_wait to properly handle the timeout.
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(3);
+        let sleep_interval = std::time::Duration::from_millis(100);
 
-            // Poll join with timeout
-            while start.elapsed() < std::time::Duration::from_secs(3) {
-                if handle.is_finished() {
-                    return false; // Process exited normally
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process exited normally
+                    break;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                Ok(None) => {
+                    if start.elapsed() >= timeout {
+                        // Timeout expired - force kill the process
+                        let _ = self.child.kill();
+                        let _ = self.child.wait();
+                        break;
+                    }
+                    std::thread::sleep(sleep_interval);
+                }
+                Err(_e) => {
+                    // On error, attempt to kill and wait to avoid leaving a zombie.
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    break;
+                }
             }
-            true // Timeout expired
-        });
-
-        if timed_out {
-            // Timeout expired - force kill the process
-            let _ = self.child.kill();
-            let _ = self.child.wait();
         }
     }
 

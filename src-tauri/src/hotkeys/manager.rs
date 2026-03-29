@@ -20,9 +20,12 @@ tauri_panel! {
 const MAX_RECORDING_SECS: u64 = 12 * 60;
 /// Seconds before max duration to show a warning (1 minute before).
 const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
-/// Maximum audio buffer size (15 minutes at 48kHz mono = 43.2M samples ≈ 173MB).
+/// Maximum sample rate we expect to handle (96kHz for high-quality audio).
+const MAX_EXPECTED_SAMPLE_RATE_HZ: usize = 96_000;
+/// Maximum audio buffer size (MAX_RECORDING_SECS at max expected sample rate).
 /// Prevents memory exhaustion from unbounded recordings.
-const MAX_AUDIO_BUFFER_SAMPLES: usize = 48_000 * 60 * 15;
+/// At 96kHz: 12 minutes * 60 seconds * 96,000 samples = 69.1M samples ≈ 277MB
+const MAX_AUDIO_BUFFER_SAMPLES: usize = MAX_EXPECTED_SAMPLE_RATE_HZ * MAX_RECORDING_SECS as usize;
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
     // Load persisted settings to use saved shortcuts (not hardcoded defaults)
@@ -369,6 +372,8 @@ async fn handle_stop_recording(app: &AppHandle) {
                     MAX_AUDIO_BUFFER_SAMPLES,
                     all.len()
                 );
+                // Hide overlay before returning
+                hide_overlay(&app);
                 let _ = app.emit("recording-error", serde_json::json!({
                     "error": format!("Recording too long: maximum {} minutes of audio allowed", MAX_AUDIO_BUFFER_SAMPLES / 48_000 / 60)
                 }));
