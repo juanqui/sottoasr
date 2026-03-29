@@ -860,6 +860,17 @@ fn show_overlay(app: &AppHandle) {
             return;
         }
 
+        // Fallback: check for a regular webview window (handles case where panel
+        // conversion failed in the past and we have a plain window instead).
+        if let Some(window) = app.get_webview_window("overlay") {
+            let _ = window.show();
+            if let Some(pos) = compute_overlay_position(&window) {
+                let _ = window.set_position(pos);
+            }
+            log::info!("Overlay shown (existing window fallback)");
+            return;
+        }
+
         // Create the overlay as a regular WebviewWindow first (proven to work),
         // then convert it to an NSPanel for proper transparency.
         let window = match tauri::webview::WebviewWindowBuilder::new(
