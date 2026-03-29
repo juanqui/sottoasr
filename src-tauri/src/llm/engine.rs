@@ -141,7 +141,28 @@ impl LlmEngine {
     /// Shut down the sidecar.
     pub fn quit(&mut self) {
         let _ = self.request(&serde_json::json!({"action": "quit"}));
-        let _ = self.child.wait();
+
+        // Wait for the process to exit with a timeout, then kill if needed.
+        // Use a thread with timeout to avoid blocking forever.
+        let timed_out = std::thread::scope(|s| {
+            let start = std::time::Instant::now();
+            let handle = s.spawn(|| self.child.wait());
+
+            // Poll join with timeout
+            while start.elapsed() < std::time::Duration::from_secs(3) {
+                if handle.is_finished() {
+                    return false; // Process exited normally
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            true // Timeout expired
+        });
+
+        if timed_out {
+            // Timeout expired - force kill the process
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
     }
 
     /// Find the sidecar script path.
