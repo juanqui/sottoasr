@@ -141,7 +141,36 @@ impl LlmEngine {
     /// Shut down the sidecar.
     pub fn quit(&mut self) {
         let _ = self.request(&serde_json::json!({"action": "quit"}));
-        let _ = self.child.wait();
+
+        // Wait for the process to exit with a timeout, then kill if needed.
+        // Use non-blocking try_wait to properly handle the timeout.
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(3);
+        let sleep_interval = std::time::Duration::from_millis(100);
+
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process exited normally
+                    break;
+                }
+                Ok(None) => {
+                    if start.elapsed() >= timeout {
+                        // Timeout expired - force kill the process
+                        let _ = self.child.kill();
+                        let _ = self.child.wait();
+                        break;
+                    }
+                    std::thread::sleep(sleep_interval);
+                }
+                Err(_e) => {
+                    // On error, attempt to kill and wait to avoid leaving a zombie.
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    break;
+                }
+            }
+        }
     }
 
     /// Find the sidecar script path.

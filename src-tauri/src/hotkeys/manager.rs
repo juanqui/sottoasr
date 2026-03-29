@@ -20,6 +20,12 @@ tauri_panel! {
 const MAX_RECORDING_SECS: u64 = 12 * 60;
 /// Seconds before max duration to show a warning (1 minute before).
 const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
+/// Maximum sample rate we expect to handle (96kHz for high-quality audio).
+const MAX_EXPECTED_SAMPLE_RATE_HZ: usize = 96_000;
+/// Maximum audio buffer size (MAX_RECORDING_SECS at max expected sample rate).
+/// Prevents memory exhaustion from unbounded recordings.
+/// At 96kHz: 12 minutes * 60 seconds * 96,000 samples = 69.1M samples ≈ 277MB
+const MAX_AUDIO_BUFFER_SAMPLES: usize = MAX_EXPECTED_SAMPLE_RATE_HZ * MAX_RECORDING_SECS as usize;
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
     // Load persisted settings to use saved shortcuts (not hardcoded defaults)
@@ -354,10 +360,27 @@ async fn handle_stop_recording(app: &AppHandle) {
     let _ = app.emit("state-changed", &AppStateEnum::Transcribing);
 
     // Collect all audio samples from the channel
+    // Check buffer limit to prevent memory exhaustion
     let samples = {
         let rx = state.audio_receiver.lock().unwrap();
         let mut all = Vec::new();
         while let Ok(chunk) = rx.try_recv() {
+            // Check if adding this chunk would exceed the buffer limit
+            if all.len().saturating_add(chunk.len()) > MAX_AUDIO_BUFFER_SAMPLES {
+                log::error!(
+                    "Audio buffer limit ({}) exceeded after {} samples - recording too long",
+                    MAX_AUDIO_BUFFER_SAMPLES,
+                    all.len()
+                );
+                // Hide overlay before returning
+                hide_overlay(&app);
+                let _ = app.emit("recording-error", serde_json::json!({
+                    "error": format!("Recording too long: maximum {} minutes of audio allowed", MAX_AUDIO_BUFFER_SAMPLES / 48_000 / 60)
+                }));
+                state.set_state(AppStateEnum::Idle);
+                let _ = app.emit("state-changed", &AppStateEnum::Idle);
+                return;
+            }
             all.extend(chunk);
         }
         all

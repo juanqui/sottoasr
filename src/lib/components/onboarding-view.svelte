@@ -20,6 +20,7 @@
 
   // Poll interval for permission checks
   let permissionPollInterval: ReturnType<typeof setInterval> | null = null;
+  let permissionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Derived: both permissions granted and functional
   let micGranted = $derived(micPermission === 'authorized');
@@ -82,6 +83,10 @@
       clearInterval(permissionPollInterval);
       permissionPollInterval = null;
     }
+    if (permissionCheckTimeout) {
+      clearTimeout(permissionCheckTimeout);
+      permissionCheckTimeout = null;
+    }
   }
 
   async function checkPermissions() {
@@ -100,7 +105,7 @@
     try {
       await invoke('request_microphone_permission');
       // Recheck after prompt
-      setTimeout(checkPermissions, 500);
+      permissionCheckTimeout = setTimeout(checkPermissions, 500);
     } catch (e) {
       console.error('Microphone request failed:', e);
     }

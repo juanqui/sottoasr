@@ -38,7 +38,8 @@ class SettingsStore {
   /** Load settings from the Tauri backend */
   async load() {
     try {
-      this.current = await fetchSettings();
+      const fetched = await fetchSettings();
+      this.current = { ...DEFAULT_SETTINGS, ...fetched };
       this.loaded = true;
     } catch (err) {
       console.error('Failed to load settings:', err);
