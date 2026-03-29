@@ -2,6 +2,14 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.3.4] — 2026-03-29
+
+Fix overlay reliability on subsequent recordings.
+
+### Fixed
+
+- **Overlay not showing on second recording** — Fixed known Tauri issue #13530 where `always_on_top` is lost after calling `hide()` then `show()` on a window. The overlay now reliably appears on all recordings by re-applying the floating window level after each show.
+
 ## [0.3.3] — 2025-07-07
 
 Bug fixes from comprehensive code audit.
