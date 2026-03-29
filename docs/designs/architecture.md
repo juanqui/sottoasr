@@ -1314,26 +1314,6 @@ sotto/
 
 ---
 
-## 20. Future: Cross-Platform Support
-
-### Architecture for Portability
-
-The codebase is designed for cross-platform expansion:
-
-| Component | macOS | Windows (Future) | Linux (Future) |
-|-----------|-------|-------------------|-----------------|
-| Desktop framework | Tauri (WKWebView) | Tauri (WebView2) | Tauri (WebKitGTK) |
-| Audio capture | cpal | cpal | cpal |
-| ASR | parakeet-rs (ONNX) | parakeet-rs (ONNX) | parakeet-rs (ONNX) |
-| Resampling | rubato | rubato | rubato |
-| Paste | CGEvent Cmd+V | SendInput Ctrl+V | xdotool Ctrl+V |
-| Tray | NSStatusItem | NotifyIcon | StatusNotifierItem |
-| Permissions | TCC framework | N/A (auto-granted) | PipeWire/PulseAudio |
-
-The paste module (`src-tauri/src/paste/`) uses conditional compilation (`#[cfg(target_os)]`) to isolate platform-specific code. Audio capture and ASR are already cross-platform via cpal and parakeet-rs.
-
----
-
 ## Review Notes
 
 *(To be filled during review passes)*
