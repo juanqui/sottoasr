@@ -358,7 +358,11 @@
   }
 
   onDestroy(() => {
-    clearCommitTimeout();
+    // Explicitly clear timeout to prevent memory leak
+    if (commitTimeoutId !== null) {
+      clearTimeout(commitTimeoutId);
+      commitTimeoutId = null;
+    }
     if (recording) {
       invoke('stop_key_capture').catch(() => {});
     }
