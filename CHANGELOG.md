@@ -2,6 +2,24 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.3.3] — 2025-07-07
+
+Bug fixes from comprehensive code audit.
+
+### Critical
+
+- **Memory leak** — Clean up `window.__resetOverlay` global on component destroy
+- **Date handling** — Handle invalid dates gracefully in `formatRelativeTime` (was showing "NaN seconds ago")
+- **Audio buffer** — Add max audio buffer limit (15 min) to prevent memory exhaustion
+- **Security** — Tighten CSP for better XSS protection
+
+### Fixed
+
+- Clean up setTimeout calls in settings-panel.svelte, history-item.svelte, onboarding-view.svelte, shortcut-recorder.svelte
+- Deep merge settings with defaults on load
+- Add timeout to LLM engine quit (3s)
+- Add HTTP timeout for model downloads (5min)
+
 ## [0.3.2] — 2026-03-23
 
 Critical CPU usage fix.
