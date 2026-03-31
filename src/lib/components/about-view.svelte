@@ -83,6 +83,15 @@
     </p>
     <p class="footer-copy">&copy; 2026 Juan Villa</p>
   </div>
+
+  <hr class="sep" />
+
+  <!-- Contributors -->
+  <p class="section-heading">Contributors</p>
+  <div class="contributors">
+    <p class="contributor-name">Ian Scofield</p>
+    <p class="contributor-name">Young Park</p>
+  </div>
 </div>
 
 <style>
@@ -223,5 +232,17 @@
     font-size: 10px !important;
     color: var(--text-dim) !important;
     opacity: 0.5;
+  }
+
+  /* ---- Contributors ---- */
+  .contributors {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .contributor-name {
+    font-size: 12px;
+    color: var(--text);
+    margin: 4px 0;
   }
 </style>

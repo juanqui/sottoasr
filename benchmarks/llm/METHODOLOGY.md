@@ -22,8 +22,10 @@ This document describes the methodology for benchmarking Qwen3-0.6B's transcript
 | misheard_words | 10 | Speech recognition errors (oh auth → OAuth) |
 | mixed | 15 | Multiple issues combined |
 | short | 10 | Very brief utterances (2-10 words) |
-| long_dictation | 5 | Multi-sentence passages (100+ words) |
-| **Total** | **110** | |
+| long_dictation | 8 | Multi-sentence passages (100+ words) |
+| preserve_wording | 12 | Inputs where emphasis/phrases must NOT be changed |
+| dictation_commands | 10 | Spoken punctuation (period→., comma→,, slash→/) |
+| **Total** | **135** | |
 
 ### Adding Samples
 

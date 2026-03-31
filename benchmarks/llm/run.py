@@ -34,8 +34,8 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 DEFAULT_PROMPT = (PROMPTS_DIR / "standard.txt").read_text().strip()
 
 FILLERS = [
-    "uh", "um", "like", "you know", "basically", "right", "yeah", "okay",
-    "so", "i mean", "honestly", "literally", "anyway", "actually",
+    "uh", "um", "uhm", "er", "like", "you know", "basically", "right", "yeah",
+    "okay", "so", "i mean", "honestly", "literally", "anyway",
 ]
 
 

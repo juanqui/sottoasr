@@ -33,14 +33,7 @@ pub async fn stop_recording(
     if current != AppStateEnum::Recording {
         return Err(format!("Cannot stop recording: currently in {:?} state", current));
     }
-
-    state.is_recording.store(false, std::sync::atomic::Ordering::SeqCst);
-    state.set_state(AppStateEnum::Idle);
-
-    app.emit("recording-stopped", ()).map_err(|e| e.to_string())?;
-    app.emit("state-changed", &AppStateEnum::Idle).map_err(|e| e.to_string())?;
-
-    log::info!("Recording stopped via command");
+    crate::hotkeys::manager::handle_stop_recording(&app).await;
     Ok(())
 }
 
@@ -49,21 +42,10 @@ pub async fn cancel_recording(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.is_recording.store(false, std::sync::atomic::Ordering::SeqCst);
-    {
-        let mut capture = state.audio_capture.lock().unwrap();
-        capture.stop();
+    let current = state.get_state();
+    if current != AppStateEnum::Recording {
+        return Err(format!("Cannot cancel recording: currently in {:?} state", current));
     }
-    state.set_state(AppStateEnum::Idle);
-
-    // Drain any buffered audio
-    if let Ok(rx) = state.audio_receiver.lock() {
-        while rx.try_recv().is_ok() {}
-    }
-
-    app.emit("recording-cancelled", ()).map_err(|e| e.to_string())?;
-    app.emit("state-changed", &AppStateEnum::Idle).map_err(|e| e.to_string())?;
-
-    log::info!("Recording cancelled");
+    crate::hotkeys::manager::handle_cancel_recording(&app).await;
     Ok(())
 }

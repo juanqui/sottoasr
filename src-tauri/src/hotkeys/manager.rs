@@ -333,7 +333,7 @@ fn handle_start_recording(app: &AppHandle) {
 }
 
 /// Stop recording: close microphone, collect samples, transcribe, paste.
-async fn handle_stop_recording(app: &AppHandle) {
+pub async fn handle_stop_recording(app: &AppHandle) {
     let state: tauri::State<'_, AppState> = app.state();
     let current = state.get_state();
 
@@ -342,12 +342,13 @@ async fn handle_stop_recording(app: &AppHandle) {
         return;
     }
 
-    // Stop audio capture
-    state.is_recording.store(false, Ordering::SeqCst);
+    // Stop audio capture — drop the stream first so all in-flight callbacks
+    // finish sending their samples before we clear the recording flag.
     {
         let mut capture = state.audio_capture.lock().unwrap();
         capture.stop();
     }
+    state.is_recording.store(false, Ordering::SeqCst);
 
     // Unregister cancel shortcut so it doesn't block the key globally
     unregister_cancel_shortcut(app);
@@ -425,8 +426,18 @@ async fn handle_stop_recording(app: &AppHandle) {
             for &sample in &samples {
                 let _ = writer.write_sample(sample);
             }
+            // Append trailing silence so the ASR model fully processes the final
+            // audio chunk. FluidAudio's chunked Parakeet TDT decoder may not emit
+            // tokens for the last few words when speech extends to the very end of
+            // the audio without a silence boundary.
+            let silence_pad_ms: usize = 750;
+            let silence_samples = sample_rate as usize * silence_pad_ms / 1000;
+            for _ in 0..silence_samples {
+                let _ = writer.write_sample(0.0f32);
+            }
             let _ = writer.finalize();
-            log::info!("Wrote temp WAV: {:?} ({} samples, {} Hz)", temp_path, samples.len(), sample_rate);
+            log::info!("Wrote temp WAV: {:?} ({} + {} pad samples, {} Hz)",
+                temp_path, samples.len(), silence_samples, sample_rate);
         }
         Err(e) => {
             log::error!("Failed to write temp WAV: {}", e);
@@ -660,7 +671,7 @@ async fn handle_stop_recording(app: &AppHandle) {
 }
 
 /// Cancel recording: stop mic, transcribe what we have, save as cancelled, don't paste.
-async fn handle_cancel_recording(app: &AppHandle) {
+pub async fn handle_cancel_recording(app: &AppHandle) {
     let state: tauri::State<'_, AppState> = app.state();
     let current = state.get_state();
 
@@ -669,12 +680,13 @@ async fn handle_cancel_recording(app: &AppHandle) {
         return;
     }
 
-    // Stop audio capture
-    state.is_recording.store(false, Ordering::SeqCst);
+    // Stop audio capture — drop the stream first so all in-flight callbacks
+    // finish sending their samples before we clear the recording flag.
     {
         let mut capture = state.audio_capture.lock().unwrap();
         capture.stop();
     }
+    state.is_recording.store(false, Ordering::SeqCst);
 
     // Unregister cancel shortcut so it doesn't block the key globally
     unregister_cancel_shortcut(app);

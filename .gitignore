@@ -24,6 +24,7 @@ benchmarks/llm/model_cache/
 benchmarks/llm/.venv/
 benchmarks/llm/results/
 benchmarks/llm/__pycache__/
+src-tauri/sidecar/__pycache__/
 
 # Environment
 .env

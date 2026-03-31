@@ -8,12 +8,18 @@ docs/
 │   └── YYYY-MM-DD-slug.md
 ├── research/     # Research notes and findings
 │   └── YYYY-MM-DD-slug.md
+├── journals/     # Iterative experiment logs (tuning, debugging, optimization)
+│   └── YYYY-MM-DD-slug.md
+├── audit/        # Code and architecture audits
+│   └── YYYY-MM-DD-slug.md
 └── designs/      # Design documents (living docs, updated over time)
     └── slug.md
 ```
 
 - **Specs** are date-prefixed and represent a point-in-time decision. Once a spec is implemented, create a new spec for further changes rather than rewriting the original.
 - **Research** documents capture investigation results, benchmarks, and external findings. Date-prefixed because they reflect knowledge at a point in time.
+- **Journals** are date-prefixed logs of iterative work — prompt tuning cycles, parameter sweeps, debugging sessions. Each entry records what was tried, what was measured, and what was learned. Journals live in `docs/journals/`, not alongside benchmark code.
+- **Audits** are date-prefixed reviews of code quality, architecture, security, or performance. They capture the state of the system at a point in time and list findings, recommendations, and remediation status.
 - **Designs** are living documents (no date prefix) that evolve with the system. Examples: architecture overview, data flow diagrams, API surface.
 
 ## Document Format

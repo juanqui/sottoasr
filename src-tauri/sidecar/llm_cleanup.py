@@ -17,6 +17,7 @@ Response format:
 
 import argparse
 import json
+import re
 import sys
 import time
 import os
@@ -25,12 +26,30 @@ DEFAULT_MODEL_ID = "mlx-community/Qwen3.5-2B-OptiQ-4bit"
 MODEL_ID = DEFAULT_MODEL_ID  # overridden by --model CLI arg
 
 STANDARD_PROMPT = (
-    "Fix this speech transcript. Remove all verbal fillers and hesitations "
-    "such as uh and um. Remove crutch phrases such as basically and you know. "
-    "Fix grammar and misheard words. Remove false starts where the speaker "
-    "restarts a sentence. When the speaker changes their mind, keep only the "
-    "final version. If the speaker lists items by number, format as a numbered "
-    "list. Preserve all meaningful content — do not summarize or shorten. "
+    "Clean this speech-to-text transcript.\n\n"
+    "You MUST apply ALL of these changes:\n"
+    "1. Remove fillers (uh, um, uhm, er) and crutch words (basically, you know, "
+    "I mean, honestly, literally, anyway, and filler uses of "
+    "like/so/okay/yeah/right)\n"
+    "2. Remove stuttered repetitions (\"the the\" → \"the\") and false starts\n"
+    "3. Fix punctuation, capitalization, grammar, and misheard terms\n"
+    "4. Convert spoken punctuation: \"period\" → \".\", \"dot\" → \".\", "
+    "\"comma\" → \",\", \"slash\" → \"/\", \"question mark\" → \"?\", "
+    "\"exclamation point\" → \"!\"\n"
+    "5. Self-corrections (\"wait\", \"actually\", \"no\", \"scratch that\"): "
+    "DELETE the original, keep ONLY the correction\n"
+    "6. Format numbered items (first/second/third, one/two/three) as a "
+    "numbered list\n\n"
+    "You MUST NOT paraphrase or reword. Preserve emphasis (really, very, "
+    "definitely) and phrases like \"go ahead and\", \"a lot of\". "
+    "Do not summarize.\n\n"
+    "Examples:\n"
+    "IN: \"I uh think we should use Redis, wait no, Memcached would be better\"\n"
+    "OUT: \"I think we should use Memcached.\"\n\n"
+    "IN: \"So basically the uh database is uh timing out period\"\n"
+    "OUT: \"The database is timing out.\"\n\n"
+    "IN: \"Let's go ahead and really focus on this\"\n"
+    "OUT: \"Let's go ahead and really focus on this.\"\n\n"
     "Output only the cleaned text."
 )
 
@@ -73,9 +92,25 @@ def load_model():
         return False
 
 
+def strip_thinking_tags(text):
+    """Strip <think>...</think> blocks from model output.
+
+    Qwen3/3.5 models may emit thinking blocks even when enable_thinking=False
+    is passed to apply_chat_template (e.g. if the MLX tokenizer doesn't fully
+    support that flag). This ensures only the actual response is returned.
+    """
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    # Also handle unclosed <think> (model stopped mid-thought)
+    cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
+    if cleaned != text.strip():
+        log(f"Stripped thinking tags ({len(text)} → {len(cleaned)} chars)")
+    return cleaned
+
+
 def cleanup_text(text, mode="standard"):
     """Clean up transcript text using the loaded model."""
     from mlx_lm import stream_generate
+    from mlx_lm.sample_utils import make_sampler, make_logits_processors
 
     if _model is None or _tokenizer is None:
         return None, "Model not loaded"
@@ -94,16 +129,29 @@ def cleanup_text(text, mode="standard"):
         enable_thinking=False,
     )
 
+    sampler = make_sampler(temp=0.3, top_p=0.9)
+    logits_processors = make_logits_processors(repetition_penalty=1.10)
+
     start = time.perf_counter()
     segments = []
     last_resp = None
-    for resp in stream_generate(_model, _tokenizer, prompt=prompt, max_tokens=4096):
+    for resp in stream_generate(
+        _model,
+        _tokenizer,
+        prompt=prompt,
+        max_tokens=4096,
+        sampler=sampler,
+        logits_processors=logits_processors,
+    ):
         segments.append(resp.text)
         last_resp = resp
     elapsed = time.perf_counter() - start
 
     output = "".join(segments).strip()
     gen_tokens = last_resp.generation_tokens if last_resp else 0
+
+    # Strip any thinking blocks the model may have emitted
+    output = strip_thinking_tags(output)
 
     return output, None, elapsed, gen_tokens
 
@@ -193,15 +241,24 @@ def handle_request(req):
             output, _, elapsed, tokens = result
             # Validate output length ratio
             ratio = len(output) / len(text) if text else 1.0
-            if ratio < 0.4 or ratio > 2.0:
-                log(f"Output ratio {ratio:.2f} outside bounds, using raw text")
-                output = text
-            respond({
-                "ok": True,
-                "text": output,
-                "elapsed_ms": int(elapsed * 1000),
-                "tokens": tokens,
-            })
+            if ratio < 0.3 or ratio > 2.5:
+                log(f"Output ratio {ratio:.2f} outside bounds (input={len(text)}, output={len(output)}), using raw text")
+                log(f"  First 200 chars of output: {output[:200]!r}")
+                respond({
+                    "ok": True,
+                    "text": text,
+                    "elapsed_ms": int(elapsed * 1000),
+                    "tokens": tokens,
+                    "fallback": True,
+                    "fallback_reason": f"output ratio {ratio:.2f} outside bounds",
+                })
+            else:
+                respond({
+                    "ok": True,
+                    "text": output,
+                    "elapsed_ms": int(elapsed * 1000),
+                    "tokens": tokens,
+                })
 
     elif action == "quit":
         respond({"ok": True})

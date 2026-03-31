@@ -26,8 +26,8 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 DEFAULT_PROMPT = (PROMPTS_DIR / "standard.txt").read_text().strip()
 
 FILLERS = [
-    "uh", "um", "like", "you know", "basically", "right", "yeah", "okay",
-    "so", "i mean", "honestly", "literally", "anyway",
+    "uh", "um", "uhm", "er", "like", "you know", "basically", "right", "yeah",
+    "okay", "so", "i mean", "honestly", "literally", "anyway",
 ]
 
 
@@ -109,9 +109,15 @@ def run_benchmark(model_id, system_prompt, category_filter=None, cycle=0):
 
     RESULTS_DIR.mkdir(exist_ok=True)
 
+    from mlx_lm.sample_utils import make_sampler, make_logits_processors
+
     print(f"Loading {model_id}...")
     model, tokenizer = load(model_id)
     print(f"Loaded! Running benchmark...\n")
+
+    # Generation parameters (tuned via sweep_params.py — moderate settings)
+    sampler = make_sampler(temp=0.3, top_p=0.9)
+    logits_processors = make_logits_processors(repetition_penalty=1.10)
 
     with open(DATASET) as f:
         samples = list(csv.DictReader(f))
@@ -135,13 +141,21 @@ def run_benchmark(model_id, system_prompt, category_filter=None, cycle=0):
 
         start = time.perf_counter()
         # Collect all stream chunks to get full text + final timing
+        # Match production sidecar generation parameters
         segments = []
         last_resp = None
-        for resp in stream_generate(model, tokenizer, prompt=prompt, max_tokens=1024):
+        for resp in stream_generate(
+            model, tokenizer, prompt=prompt, max_tokens=4096,
+            sampler=sampler, logits_processors=logits_processors,
+        ):
             segments.append(resp.text)
             last_resp = resp
         elapsed = time.perf_counter() - start
         full_text = "".join(segments)
+
+        # Strip thinking tags (matches sidecar behavior)
+        full_text = re.sub(r"<think>.*?</think>", "", full_text, flags=re.DOTALL).strip()
+        full_text = re.sub(r"<think>.*", "", full_text, flags=re.DOTALL).strip()
 
         prompt_tokens = last_resp.prompt_tokens if last_resp else 0
         gen_tokens = last_resp.generation_tokens if last_resp else 0

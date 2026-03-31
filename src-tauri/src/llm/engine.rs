@@ -104,6 +104,12 @@ impl LlmEngine {
             if let Some(ms) = resp.get("elapsed_ms").and_then(|v| v.as_u64()) {
                 log::info!("LLM cleanup completed in {}ms", ms);
             }
+            if resp.get("fallback").and_then(|v| v.as_bool()) == Some(true) {
+                let reason = resp.get("fallback_reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                log::warn!("LLM cleanup fell back to raw text: {}", reason);
+            }
             Ok(cleaned)
         } else {
             let error = resp.get("error")

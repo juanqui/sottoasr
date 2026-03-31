@@ -57,9 +57,16 @@ sotto/
 │   └── routes/           # SvelteKit routes (if applicable)
 ├── src-tauri/            # Tauri + Rust backend
 │   ├── src/              # Rust source code
+│   ├── sidecar/          # Python LLM sidecar (mlx-lm)
 │   ├── Cargo.toml        # Rust dependencies
 │   └── tauri.conf.json   # Tauri configuration
-├── docs/                 # Documentation (specs, research, designs)
+├── benchmarks/llm/       # LLM cleanup benchmarks (dataset, runner, prompts)
+├── docs/                 # Documentation
+│   ├── specs/            # Feature specs (date-prefixed, immutable)
+│   ├── research/         # Research notes (date-prefixed)
+│   ├── journals/         # Experiment logs (date-prefixed)
+│   ├── audit/            # Code/architecture audits (date-prefixed)
+│   └── designs/          # Living design docs
 └── .claude/              # Claude Code rules and configuration
 ```
 
@@ -71,3 +78,4 @@ sotto/
 - **The app MUST remain menu-bar-only.** No Dock icon, no main window by default. Any UI must be a floating overlay or a settings panel opened from the tray menu.
 - **Accessibility permissions are required** for the paste-at-cursor functionality (simulated Cmd+V). Code that interacts with accessibility APIs must handle the case where permissions have not been granted and guide the user to enable them.
 - **Local-only processing is a hard constraint.** Never add features that send audio, transcriptions, or usage data to external services.
+- **Experiment logs go in `docs/journals/`**, not alongside code. Benchmark code lives in `benchmarks/`; the narrative of what was tried, measured, and learned lives in `docs/journals/YYYY-MM-DD-slug.md`.

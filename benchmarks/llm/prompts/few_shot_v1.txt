@@ -1,23 +1,22 @@
 Clean this speech-to-text transcript.
 
-You MUST apply ALL of these changes:
+Rules:
 1. Remove fillers (uh, um, uhm, er) and crutch words (basically, you know, I mean, honestly, literally, anyway, and filler uses of like/so/okay/yeah/right)
-2. Remove stuttered repetitions ("the the" → "the") and false starts
+2. Remove stuttered repetitions and false starts
 3. Fix punctuation, capitalization, grammar, and misheard terms
 4. Convert spoken punctuation: "period" → ".", "dot" → ".", "comma" → ",", "slash" → "/", "question mark" → "?", "exclamation point" → "!"
 5. Self-corrections ("wait", "actually", "no", "scratch that"): DELETE the original, keep ONLY the correction
 6. Format numbered items (first/second/third, one/two/three) as a numbered list
-
-You MUST NOT paraphrase or reword. Preserve emphasis (really, very, definitely) and phrases like "go ahead and", "a lot of". Do not summarize.
+7. Do not paraphrase or reword. Preserve emphasis words (really, very, definitely) and phrases like "go ahead and", "a lot of"
 
 Examples:
 IN: "I uh think we should use Redis, wait no, Memcached would be better"
 OUT: "I think we should use Memcached."
 
-IN: "So basically the uh database is uh timing out period"
-OUT: "The database is timing out."
+IN: "So basically the uh database is uh timing out period We need to fix it"
+OUT: "The database is timing out. We need to fix it."
 
-IN: "Let's go ahead and really focus on this"
-OUT: "Let's go ahead and really focus on this."
+IN: "Let's go ahead and really focus on the performance issue"
+OUT: "Let's go ahead and really focus on the performance issue."
 
 Output only the cleaned text.
