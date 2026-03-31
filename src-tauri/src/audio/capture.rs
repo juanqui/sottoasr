@@ -7,8 +7,9 @@ pub struct AudioCapture {
     stream: Option<cpal::Stream>,
 }
 
-// Safety: cpal::Stream manages its own audio thread internally.
-// We only access AudioCapture from behind a Mutex in AppState.
+// SAFETY: AudioCapture is only accessed through Mutex<AudioCapture> in AppState.
+// The cpal::Stream is created and dropped within AudioCapture methods, and the
+// Mutex ensures exclusive access across threads.
 unsafe impl Send for AudioCapture {}
 
 impl AudioCapture {
@@ -48,6 +49,10 @@ impl AudioCapture {
         let mut level_buffer = Vec::with_capacity(level_window);
         let mut level_emit_count: u64 = 0;
 
+        // Pre-allocate mono buffer outside the callback to avoid heap
+        // allocations on the real-time audio thread (only used when channels > 1).
+        let mut mono_buffer: Vec<f32> = Vec::with_capacity(4096);
+
         let stream = device
             .build_input_stream(
                 &config.into(),
@@ -56,20 +61,27 @@ impl AudioCapture {
                         return;
                     }
 
-                    // Downmix to mono if needed
-                    let mono: Vec<f32> = if channels > 1 {
-                        data.chunks(channels)
-                            .map(|frame| frame.iter().sum::<f32>() / channels as f32)
-                            .collect()
+                    // Downmix to mono if needed, reusing pre-allocated buffer
+                    let mono: &[f32] = if channels > 1 {
+                        let mono_len = data.len() / channels;
+                        mono_buffer.clear();
+                        if mono_buffer.capacity() < mono_len {
+                            mono_buffer.reserve(mono_len - mono_buffer.capacity());
+                        }
+                        for frame in data.chunks(channels) {
+                            mono_buffer.push(frame.iter().sum::<f32>() / channels as f32);
+                        }
+                        &mono_buffer
                     } else {
-                        data.to_vec()
+                        data
                     };
 
                     // Send samples to receiver for transcription
-                    let _ = sender_clone.send(mono.clone());
+                    // (Vec allocation here is unavoidable — the channel requires owned data)
+                    let _ = sender_clone.send(mono.to_vec());
 
                     // Calculate audio level for waveform visualization
-                    level_buffer.extend_from_slice(&mono);
+                    level_buffer.extend_from_slice(mono);
                     if level_buffer.len() >= level_window {
                         let rms = calculate_rms(&level_buffer);
                         level_callback(rms);

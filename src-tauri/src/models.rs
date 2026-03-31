@@ -64,6 +64,34 @@ pub struct Settings {
     pub llm_model_size: String,
 }
 
+impl Settings {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.push_to_talk_shortcut.trim().is_empty() {
+            return Err("Push-to-talk shortcut cannot be empty".into());
+        }
+        if self.toggle_shortcut.trim().is_empty() {
+            return Err("Toggle shortcut cannot be empty".into());
+        }
+        if self.cancel_shortcut.trim().is_empty() {
+            return Err("Cancel shortcut cannot be empty".into());
+        }
+        if self.max_history < 10 || self.max_history > 10_000 {
+            return Err("max_history must be between 10 and 10,000".into());
+        }
+        // Check for shortcut conflicts
+        if self.push_to_talk_shortcut == self.toggle_shortcut {
+            return Err("Push-to-talk and toggle shortcuts cannot be the same".into());
+        }
+        if self.push_to_talk_shortcut == self.cancel_shortcut {
+            return Err("Push-to-talk and cancel shortcuts cannot be the same".into());
+        }
+        if self.toggle_shortcut == self.cancel_shortcut {
+            return Err("Toggle and cancel shortcuts cannot be the same".into());
+        }
+        Ok(())
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {

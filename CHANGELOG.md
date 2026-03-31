@@ -2,6 +2,50 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.4.0] — 2026-03-30
+
+LLM transcript cleanup quality improvements and comprehensive audit remediation.
+
+### Added
+
+- **Dictation command support** — Spoken punctuation ("period", "comma", "slash", "question mark", "exclamation point") is now converted to actual punctuation marks during LLM cleanup.
+- **Contributors section** in the About page (Ian Scofield, Young Park).
+- **Dependency vulnerability scanning** in CI — `cargo audit` and `npm audit` now run before every release build.
+- **Settings validation** — Shortcut fields cannot be empty, `max_history` is bounded (10–10,000), and duplicate shortcuts are rejected.
+- **Clipboard change detection** — Clipboard restore after paste now checks `NSPasteboard.changeCount` to avoid overwriting content the user copied during the 500ms restore delay.
+- **Full application audit** — 4-pass, 59-finding audit covering security, reliability, correctness, and code quality (`docs/audit/2026-03-30-full-audit.md`).
+
+### Fixed
+
+- **LLM cleanup rewriting user's words** — Rewrote the system prompt with structured rules, examples, and explicit "do not paraphrase" instructions. Emphasis words ("really", "very", "definitely") and phrases ("go ahead and", "a lot of") are now preserved.
+- **Thinking tags leaking into output** — Qwen3/3.5 models sometimes emit `<think>...</think>` blocks even when thinking is disabled. These are now stripped from output in both the sidecar and benchmarks.
+- **Recording commands broken** — `start_recording` IPC command set state to Recording without starting audio capture, overlay, or auto-stop timer, permanently corrupting the state machine. Now delegates to the hotkey manager's full recording lifecycle. `stop_recording` and `cancel_recording` were similarly fixed in 0.3.4.
+- **State machine stuck after rapid re-record** — If a user started a new recording before the previous transcription completed, the stale job was discarded but state remained in Transcribing/CleaningUp. Both stale-job checks now reset state to Idle.
+- **CSV export corrupted** — Two bugs on the same format string: an extra dot between `created_at` and `duration_ms`, and unescaped newlines in text fields breaking row boundaries. Both fixed.
+- **Push-to-talk polling thread could run forever** — Added a 12m30s timeout to the CGEventSourceKeyState polling loop for key release detection.
+- **Mutex poisoning crashes** — All 8 instances of `.lock().unwrap()` in the hotkey manager replaced with `.unwrap_or_else(|e| e.into_inner())` to recover from poisoned mutexes instead of cascading panics.
+- **Audio callback heap allocations** — Pre-allocated mono buffer in the cpal audio callback to avoid `Vec::collect` and `.to_vec()` on the real-time audio thread, reducing risk of glitches.
+- **Null pointer risk in CGEventTap** — Added null check for `user_info` before unsafe dereference in the key capture callback.
+- **Settings persistence error silent** — `update_settings` now persists to disk before updating in-memory state and propagates write errors to the frontend.
+- **Onboarding event listener leak** — Four Tauri event listeners were never cleaned up on component destroy. Now stored and unlistened in `onDestroy`.
+- **LLM status check spawning Python** — `get_llm_status` no longer spawns and kills a full Python sidecar just to check if the model is downloaded. Now checks the HuggingFace cache directory directly.
+
+### Changed
+
+- **LLM generation parameters tuned** — Temperature 0.3, top_p 0.9, repetition_penalty 1.10 for more consistent cleanup output.
+- **Output ratio bounds relaxed** — Changed from 0.4–2.0 to 0.3–2.5 with fallback reason reporting when bounds are exceeded.
+- **CSP tightened** — Removed `'unsafe-inline'` from `style-src` Content Security Policy directive.
+- **Removed dead code** — Unused LLM prompt constants removed from `prompts.rs` (prompts live in the Python sidecar).
+- **LLM sidecar timeout handling** — Clear logging when 30s cleanup timeout fires; sidecar is respawned on next use.
+
+### Infrastructure
+
+- LLM benchmark dataset expanded to 135 samples (+25 preserve_wording, dictation_commands categories).
+- Parameter sweep script (`sweep_params.py`) for systematic LLM tuning.
+- Prompt experiment variants (few-shot, must-preserve) for A/B testing.
+- Added `journals/` and `audit/` doc categories to project rules.
+- Documented App Sandbox rationale in `Entitlements.plist`.
+
 ## [0.3.4] — 2026-03-29
 
 Fix overlay reliability on subsequent recordings.

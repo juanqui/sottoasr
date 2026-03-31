@@ -39,21 +39,19 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
         engine_guard.is_some()
     };
 
-    // Check if model is downloaded (only if venv is ready)
+    // Check if model is downloaded by looking at HuggingFace cache
     let downloaded = if available && venv_ready {
-        let model_id_owned = model_id.to_string();
-        tokio::task::spawn_blocking(move || {
-            match engine::LlmEngine::spawn_with_model(&model_id_owned) {
-                Ok(mut e) => {
-                    let status = e.status();
-                    e.quit();
-                    status.ok()
-                        .and_then(|v| v.get("downloaded").and_then(|d| d.as_bool()))
-                        .unwrap_or(false)
-                }
-                Err(_) => false,
-            }
-        }).await.unwrap_or(false)
+        let cache_dir = dirs::home_dir()
+            .map(|h| h.join(".cache/huggingface/hub"))
+            .unwrap_or_default();
+        // Convert model ID "mlx-community/Qwen3.5-2B-OptiQ-4bit" to cache dir name
+        let cache_name = format!("models--{}", model_id.replace('/', "--"));
+        let model_cache = cache_dir.join(&cache_name);
+        let has_snapshots = model_cache.join("snapshots").is_dir();
+        if has_snapshots {
+            log::info!("LLM model found in HuggingFace cache: {:?}", model_cache);
+        }
+        has_snapshots
     } else {
         false
     };

@@ -119,11 +119,6 @@ impl LlmEngine {
         }
     }
 
-    /// Get model status from the sidecar.
-    pub fn status(&mut self) -> Result<serde_json::Value, String> {
-        self.request(&serde_json::json!({"action": "status"}))
-    }
-
     /// Tell the sidecar to download the model.
     pub fn download_model(&mut self) -> Result<(), String> {
         let resp = self.request(&serde_json::json!({"action": "download"}))?;

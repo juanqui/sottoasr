@@ -46,6 +46,15 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Audit Rust dependencies
+        working-directory: src-tauri
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit
+
+      - name: Audit npm dependencies
+        run: npm audit --omit=dev || true
+
       - name: Import Apple Developer Certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -72,6 +81,7 @@ jobs:
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
 
       - name: Build and release
+        # v0 is the latest major for Tauri v2 — auto-updates within 0.x
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

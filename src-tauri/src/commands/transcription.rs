@@ -79,10 +79,10 @@ pub async fn export_transcriptions_csv() -> Result<String, String> {
     let store = TRANSCRIPTIONS.lock().await;
     let mut csv = String::from("id,created_at,duration_ms,word_count,llm_applied,text,raw_text\n");
     for t in store.iter() {
-        let text_escaped = t.text.replace('"', "\"\"");
-        let raw_escaped = t.raw_text.as_deref().unwrap_or("").replace('"', "\"\"");
+        let text_escaped = t.text.replace('"', "\"\"").replace('\n', " ").replace('\r', "");
+        let raw_escaped = t.raw_text.as_deref().unwrap_or("").replace('"', "\"\"").replace('\n', " ").replace('\r', "");
         csv.push_str(&format!(
-            "{},{}.,{},{},{},\"{}\",\"{}\"\n",
+            "{},{},{},{},{},\"{}\",\"{}\"\n",
             t.id, t.created_at, t.duration_ms, t.word_count, t.llm_applied,
             text_escaped, raw_escaped,
         ));

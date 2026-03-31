@@ -61,9 +61,9 @@ pub fn register_shortcuts(
     // Store the cancel shortcuts for dynamic registration during recording
     {
         let state: tauri::State<'_, AppState> = app.state();
-        let mut cs = state.cancel_shortcut.lock().unwrap();
+        let mut cs = state.cancel_shortcut.lock().unwrap_or_else(|e| e.into_inner());
         *cs = cancel_shortcut.to_string();
-        let mut cs_alt = state.cancel_shortcut_alt.lock().unwrap();
+        let mut cs_alt = state.cancel_shortcut_alt.lock().unwrap_or_else(|e| e.into_inner());
         *cs_alt = cancel_shortcut_alt.filter(|s| !s.is_empty()).map(|s| s.to_string());
     }
 
@@ -98,8 +98,13 @@ pub fn register_shortcuts(
                                 extern "C" {
                                     fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
                                 }
+                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(12 * 60 + 30);
                                 loop {
                                     std::thread::sleep(std::time::Duration::from_millis(33));
+                                    if std::time::Instant::now() > deadline {
+                                        log::warn!("PTT key release polling timed out after {}s", 12 * 60 + 30);
+                                        break;
+                                    }
                                     let still_pressed = CGEventSourceKeyState(0, vk);
                                     if !still_pressed {
                                         break;
@@ -250,7 +255,7 @@ fn handle_start_recording(app: &AppHandle) {
 
     // Start audio capture
     let sender = {
-        let s = state.audio_sender.lock().unwrap();
+        let s = state.audio_sender.lock().unwrap_or_else(|e| e.into_inner());
         s.clone()
     };
     let is_recording = Arc::new(AtomicBool::new(true));
@@ -260,7 +265,7 @@ fn handle_start_recording(app: &AppHandle) {
     let app_clone = app.clone();
 
     let start_result = {
-        let mut capture = state.audio_capture.lock().unwrap();
+        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
         capture.start(
             sender,
             is_recording_clone,
@@ -345,7 +350,7 @@ pub async fn handle_stop_recording(app: &AppHandle) {
     // Stop audio capture — drop the stream first so all in-flight callbacks
     // finish sending their samples before we clear the recording flag.
     {
-        let mut capture = state.audio_capture.lock().unwrap();
+        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
         capture.stop();
     }
     state.is_recording.store(false, Ordering::SeqCst);
@@ -363,7 +368,7 @@ pub async fn handle_stop_recording(app: &AppHandle) {
     // Collect all audio samples from the channel
     // Check buffer limit to prevent memory exhaustion
     let samples = {
-        let rx = state.audio_receiver.lock().unwrap();
+        let rx = state.audio_receiver.lock().unwrap_or_else(|e| e.into_inner());
         let mut all = Vec::new();
         while let Ok(chunk) = rx.try_recv() {
             // Check if adding this chunk would exceed the buffer limit
@@ -474,6 +479,9 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 // Check if this job is still current (user may have started a new recording)
                 if !state.is_current_job(job_id) {
                     log::info!("Job {} is stale, discarding transcription", job_id);
+                    state.set_state(AppStateEnum::Idle);
+                    let _ = app_clone.emit("state-changed", &AppStateEnum::Idle);
+                    hide_overlay(&app_clone);
                     return;
                 }
 
@@ -564,7 +572,10 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                                     log::error!("LLM cleanup task panicked: {}, sidecar lost", e);
                                 }
                                 Err(_) => {
-                                    log::warn!("LLM cleanup timed out after 30s, using raw text");
+                                    log::warn!("LLM cleanup timed out after 30s, sidecar will be respawned on next use");
+                                    // The sidecar is still held by the timed-out spawn_blocking task.
+                                    // It will be dropped when that task eventually completes.
+                                    // llm_guard is already None, so next cleanup will spawn a new one.
                                 }
                             }
                         }
@@ -574,6 +585,8 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 // Check again if this job is still current
                 if !state.is_current_job(job_id) {
                     log::info!("Job {} is stale after cleanup, discarding", job_id);
+                    state.set_state(AppStateEnum::Idle);
+                    let _ = app_clone.emit("state-changed", &AppStateEnum::Idle);
                     hide_overlay(&app_clone);
                     return;
                 }
@@ -683,7 +696,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
     // Stop audio capture — drop the stream first so all in-flight callbacks
     // finish sending their samples before we clear the recording flag.
     {
-        let mut capture = state.audio_capture.lock().unwrap();
+        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
         capture.stop();
     }
     state.is_recording.store(false, Ordering::SeqCst);
@@ -699,7 +712,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
 
     // Collect audio samples
     let samples = {
-        let rx = state.audio_receiver.lock().unwrap();
+        let rx = state.audio_receiver.lock().unwrap_or_else(|e| e.into_inner());
         let mut all = Vec::new();
         while let Ok(chunk) = rx.try_recv() {
             all.extend(chunk);

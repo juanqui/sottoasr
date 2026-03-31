@@ -64,16 +64,15 @@ pub async fn update_settings(
     new_settings: Settings,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    new_settings.validate()?;
+
+    // Persist to disk first — if this fails, don't update in-memory state
+    persist_settings(&new_settings)?;
+
     let mut settings = state.settings.lock().await;
-    *settings = new_settings.clone();
-    drop(settings);
+    *settings = new_settings;
 
-    // Persist to disk
-    if let Err(e) = persist_settings(&new_settings) {
-        log::error!("Failed to persist settings: {}", e);
-    }
-
-    log::info!("Settings updated");
+    log::info!("Settings updated and persisted");
     Ok(())
 }
 

@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- App Sandbox (com.apple.security.app-sandbox) is intentionally NOT enabled.
+     SottoASR requires capabilities incompatible with the default sandbox:
+     - CGEventTap for global hotkey capture (requires Input Monitoring, not sandboxable)
+     - Python subprocess spawning for LLM sidecar (sandbox blocks exec)
+     - Arbitrary file writes to ~/Library/Application Support/
+     The app mitigates this with: strict CSP, no external content loading,
+     no @html usage, and code signing + notarization. -->
 <dict>
     <key>com.apple.security.device.audio-input</key>
     <true/>

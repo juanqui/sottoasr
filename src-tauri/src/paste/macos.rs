@@ -71,12 +71,24 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
 
     // Restore clipboard contents after the paste has been consumed
     if let Some(original) = saved_clipboard {
+        // Capture the current change count right after our paste
+        let change_count_after_paste = get_pasteboard_change_count();
+
         std::thread::spawn(move || {
             // Wait long enough for the target app to consume the paste
             std::thread::sleep(std::time::Duration::from_millis(500));
-            if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                let _ = clipboard.set_text(&original);
-                log::info!("Clipboard restored to previous contents");
+            // Only restore if nobody else has changed the clipboard
+            let current_count = get_pasteboard_change_count();
+            if current_count == change_count_after_paste {
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    let _ = clipboard.set_text(&original);
+                    log::info!("Clipboard restored to previous contents");
+                }
+            } else {
+                log::info!(
+                    "Clipboard changed by user, skipping restore (count {} \u{2192} {})",
+                    change_count_after_paste, current_count
+                );
             }
         });
     }
@@ -272,6 +284,38 @@ fn simulate_cmd_v() -> Result<(), String> {
     key_up.post(CGEventTapLocation::HID);
 
     Ok(())
+}
+
+/// Get the NSPasteboard change count for the general pasteboard.
+/// Returns -1 if the pasteboard cannot be accessed.
+fn get_pasteboard_change_count() -> i64 {
+    unsafe {
+        extern "C" {
+            fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
+            fn objc_msgSend();
+        }
+
+        type MsgSendObj = unsafe extern "C" fn(
+            *const std::ffi::c_void, *const std::ffi::c_void,
+        ) -> *const std::ffi::c_void;
+        type MsgSendI64 = unsafe extern "C" fn(
+            *const std::ffi::c_void, *const std::ffi::c_void,
+        ) -> i64;
+
+        let send_obj: MsgSendObj = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+        let send_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
+
+        let cls = objc_getClass(c"NSPasteboard".as_ptr());
+        if cls.is_null() { return -1; }
+
+        let sel_general = sel_registerName(c"generalPasteboard".as_ptr());
+        let pasteboard = send_obj(cls, sel_general);
+        if pasteboard.is_null() { return -1; }
+
+        let sel_count = sel_registerName(c"changeCount".as_ptr());
+        send_i64(pasteboard, sel_count)
+    }
 }
 
 /// Get the PID of the frontmost (active) application.

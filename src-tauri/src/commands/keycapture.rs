@@ -103,6 +103,9 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
                     return event;
                 }
 
+                if user_info.is_null() {
+                    return event;
+                }
                 let app = &*(user_info as *const AppHandle);
 
                 extern "C" {

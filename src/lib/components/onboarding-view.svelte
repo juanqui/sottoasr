@@ -22,6 +22,9 @@
   let permissionPollInterval: ReturnType<typeof setInterval> | null = null;
   let permissionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Event listener cleanup
+  let unlisteners: Array<() => void> = [];
+
   // Derived: both permissions granted and functional
   let micGranted = $derived(micPermission === 'authorized');
   let allPermissionsGranted = $derived(micGranted && axPermission && axFunctional);
@@ -39,11 +42,11 @@
       console.error('Failed to get backend info:', e);
     }
 
-    await listen<{ step: string; message: string }>('setup-progress', (event) => {
+    unlisteners.push(await listen<{ step: string; message: string }>('setup-progress', (event) => {
       progressMessage = event.payload.message;
-    });
+    }));
 
-    await listen<{ progress: number; current_file: string; status: string }>(
+    unlisteners.push(await listen<{ progress: number; current_file: string; status: string }>(
       'model-download-progress',
       (event) => {
         progressPercent = Math.round(event.payload.progress * 100);
@@ -54,22 +57,23 @@
           progressMessage = 'Download complete!';
         }
       }
-    );
+    ));
 
-    await listen('asr-init-complete', () => {
+    unlisteners.push(await listen('asr-init-complete', () => {
       currentStep = 'ready';
       isProcessing = false;
-    });
+    }));
 
-    await listen<{ error: string }>('asr-init-error', (event) => {
+    unlisteners.push(await listen<{ error: string }>('asr-init-error', (event) => {
       errorMessage = event.payload.error;
       currentStep = 'error';
       isProcessing = false;
-    });
+    }));
   });
 
   onDestroy(() => {
     stopPermissionPolling();
+    unlisteners.forEach(fn => fn());
   });
 
   function startPermissionPolling() {
