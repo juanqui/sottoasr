@@ -91,9 +91,9 @@ def get_local_revision():
         from huggingface_hub import scan_cache_dir
         cache = scan_cache_dir()
         for repo in cache.repos:
-            if MODEL_ID.replace("/", "--") in str(repo.repo_id).replace("/", "--"):
-                # Get the latest revision from the cached repo
-                revisions = list(repo.revisions)
+            if repo.repo_id == MODEL_ID:
+                # Sort by last_modified descending — frozenset has no guaranteed order
+                revisions = sorted(repo.revisions, key=lambda r: r.last_modified, reverse=True)
                 if revisions:
                     return revisions[0].commit_hash
         return None

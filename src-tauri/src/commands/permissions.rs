@@ -203,6 +203,22 @@ pub async fn open_microphone_settings() -> Result<(), String> {
     Ok(())
 }
 
+/// Open an HTTPS URL in the default browser.
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("Only HTTPS URLs are allowed".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open URL: {}", e))?;
+    }
+    Ok(())
+}
+
 // ---- macOS implementation helpers ----
 
 /// Trigger the macOS Accessibility permission prompt.

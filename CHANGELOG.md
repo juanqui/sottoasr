@@ -2,6 +2,18 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.5.1] — 2026-04-01
+
+Fix model update detection and add HuggingFace model link in settings.
+
+### Fixed
+
+- **Model update button stuck in loop** — After clicking "Update Available — Install", the button would reappear immediately because the local revision check picked an arbitrary cached revision from a non-deterministic set instead of the most recent one.
+
+### Added
+
+- **HuggingFace model link** — The AI Transcript Cleanup section in Settings now shows a "View on HuggingFace" link to the cleanup model page.
+
 ## [0.5.0] — 2026-04-01
 
 Reliable multi-monitor overlay, draggable positioning, and a switch to SottoASR's own fine-tuned cleanup model.

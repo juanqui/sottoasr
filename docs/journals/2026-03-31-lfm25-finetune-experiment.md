@@ -349,9 +349,81 @@ Do NOT add GRPO or DPO after stage-2 — it degrades the model.
 
 **Stage-2 (iteration 8): ROUGE-L 0.931 | 56% Exact | 90% Zero-Filler | 8x faster than 2B**
 
-Optimal pipeline:
+### Ralph Loop 2 — v4 Data with Higher LR
+
+**Context:** v4 dataset = 116K (94K cleaned + 20K Bedrock Haiku + 1K long transcripts + phonetic errors + hand-crafted)
+
+| Experiment | ROUGE-L | Exact | Key |
+|------------|---------|-------|-----|
+| v4 Full FT (LR 1e-5) + Stage-2 | 0.927 | 55% | Baseline with long transcripts |
+| v4 GRPO | 0.929 | 56% | Marginal GRPO improvement |
+| **v4 Full FT (LR 2e-5)** | **0.938** | **60%** | **Higher LR breakthrough** |
+| **v4 Full FT (LR 2e-5) + Stage-2** | **0.942** | **60%** | **NEW ALL-TIME RECORD** |
+
+**Key insight:** Doubling the LR from 1e-5 to 2e-5 was the breakthrough. Grammar jumped to 0.963, self-correction to 0.922, mixed to 0.938. The v4 data (with long transcripts and phonetic errors) combined with the higher LR produced the best model ever.
+
+### Ralph Loop 2, Iteration 2 — LR sweep and combined datasets
+
+| Experiment | ROUGE-L | Exact | Key |
+|------------|---------|-------|-----|
+| v6: LR 3e-5 | 0.933 | 61% | Too high — overshoots |
+| **v7: Combined dataset, LR 2e-5** | **0.943** | **62%** | **Eliminates need for Stage-2** |
+| v7 + Stage-2 | 0.939 | 62% | Stage-2 redundant on combined data |
+| v5: LR 2e-5 + Stage-2 | 0.942 | 60% | Previous best |
+
+**Key findings:**
+- LR 2e-5 is optimal. LR 3e-5 overshoots (0.933 < 0.938).
+- Mixing hard patterns (20%) into the main training set at 138K total matches Stage-2 in a single training run.
+- Stage-2 on the combined dataset is redundant and slightly harmful.
+
+### Updated Optimal Pipeline
 ```
 LFM2.5-350M-Base
-  → Full FT on 124K dataset (LR 1e-5, 3 epochs)     → 0.930
-  → Stage-2 on 14K hard patterns (LR 2e-6, 1 epoch)  → 0.931
+  → Full FT on 138K combined dataset (LR 2e-5, 3 epochs)  → 0.943
 ```
+Single-stage training. No separate Stage-2 needed. Hard patterns mixed at 20% weight.
+
+### Ralph Loop 2, Iteration 3 — Breaking the 0.943 Plateau
+
+**Approaches tried that did NOT work:**
+
+| Experiment | ROUGE-L | vs v7 | Key finding |
+|------------|---------|-------|-------------|
+| v7 + GRPO (LoRA r=16, 5K steps) | 0.939 | -0.004 | GRPO hurts fully-converged models |
+| v8: weight_decay=0.005 | 0.943 | 0.000 | No effect — wd irrelevant at this scale |
+| SWA (3 checkpoint avg) | 0.942 | -0.001 | Too few checkpoints, same family |
+| NEFTune v9 (noise_alpha=5) | 0.942 | -0.001 | Noise didn't help generalization |
+| Seed 123 | 0.939 | -0.004 | Different seed, worse |
+| 2-way model soup (v7+seed123) | ~0.935 | -0.008 | Soup degraded mixed category badly |
+
+**Failure analysis on worst benchmark samples revealed the model's two failure modes:**
+1. **Under-editing**: On crutch_08, short_01, short_10 — model punctuates instead of stripping fillers
+2. **Over-editing**: On falsestart_06 — model strips too much content
+
+**What DID work: Targeted training data (v11)**
+
+Generated 1,200 targeted examples for the specific failure patterns:
+- Long crutch preambles: 600 ("okay so the thing is basically" → core message)
+- "You know" removal (repeated, as filler): 200
+- Short inputs with heavy filler: 200
+- False starts with correction: 200
+
+Mixed at 10x weight into the combined dataset (131K base + 12K targeted = 143K total).
+
+**v11 Result: ROUGE-L 0.9503 — NEW ALL-TIME RECORD (+0.007 vs v7)**
+
+| Category | v7 (0.943) | v11 (0.950) | Delta |
+|---|---|---|---|
+| **short** | 0.907 | **0.947** | **+0.040** |
+| **false_start** | 0.903 | **0.946** | **+0.043** |
+| **crutch_words** | 0.898 | **0.937** | **+0.039** |
+| grammar | 0.954 | 0.963 | +0.009 |
+| list_formatting | 0.971 | 0.990 | +0.019 |
+| Exact Match | 62% | **64%** | +2pts |
+
+Previously worst samples fixed:
+- ✅ crutch_08: "We're running out of disk space." (was punctuated, now stripped)
+- ✅ falsestart_06: "What I wanted to say is that the tests pass." (was over-edited)
+- ✅ short_01: "Yes." (was kept "Uh yes.")
+
+**v12 training in progress** — 1,995 targeted patterns at 15x weight (162K total), plus a NEFTune variant.

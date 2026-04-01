@@ -60,6 +60,7 @@ pub fn run() {
             commands::permissions::fix_accessibility_permission,
             commands::permissions::open_input_monitoring_settings,
             commands::permissions::open_microphone_settings,
+            commands::permissions::open_url,
             // Key capture (for shortcut recorder)
             commands::keycapture::start_key_capture,
             commands::keycapture::stop_key_capture,

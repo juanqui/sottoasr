@@ -46,6 +46,7 @@
 
   // SottoASR cleanup model info
   const cleanupModel = { label: 'SottoASR Cleanup (233 MB)', sizeMb: 233 };
+  const cleanupModelUrl = 'https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit';
 
   // Available languages
   const languages = [
@@ -194,7 +195,7 @@
       await updateLlmModel();
       llmUpdateAvailable = false;
       llmUpdating = false;
-      refreshLlmStatus();
+      // refreshLlmStatus() is called by the llm-download-complete event listener
     } catch (err: any) {
       llmError = err?.toString() || 'Update failed';
       llmUpdating = false;
@@ -355,7 +356,11 @@
       <div class="toggle-field">
         <div class="toggle-info">
           <span class="toggle-label">Clean up transcriptions with AI</span>
-          <span class="toggle-hint">Fine-tuned SottoASR model running locally via MLX on Metal GPU (233 MB)</span>
+          <span class="toggle-hint">Fine-tuned SottoASR model running locally via MLX on Metal GPU (233 MB) —
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <span class="link" onclick={() => invoke('open_url', { url: cleanupModelUrl })}>View on HuggingFace</span>
+          </span>
         </div>
         <label class="switch">
           <input
@@ -981,5 +986,15 @@
     margin-top: 6px;
     font-size: 12px;
     color: rgb(239, 68, 68);
+  }
+
+  .link {
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .link:hover {
+    opacity: 0.8;
   }
 </style>
