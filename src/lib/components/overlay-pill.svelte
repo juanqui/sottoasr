@@ -244,6 +244,8 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-sizing: border-box;
     user-select: none;
+    -webkit-app-region: drag;
+    cursor: grab;
   }
 
   .pill.transcribing {
@@ -351,6 +353,8 @@
 
   .stop-btn,
   .cancel-btn {
+    -webkit-app-region: no-drag;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;

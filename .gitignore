@@ -40,3 +40,4 @@ src-tauri/sidecar/__pycache__/
 *.njsproj
 *.sln
 *.sw?
+__pycache__/

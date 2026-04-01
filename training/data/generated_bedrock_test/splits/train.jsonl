@@ -1,0 +1,98 @@
+{"input": "so um when grafana uh alerts fire we should um automatically trigger a uh scaling event in kubernetes er and um maybe use terraform to um update the infrastructure dynamically", "output": "So when Grafana alerts fire we should automatically trigger a scaling event in Kubernetes and maybe use Terraform to update the infrastructure dynamically."}
+{"input": "so um the sql injection vulnerability is um pretty serious and the the development team needs to prioritize it", "output": "The SQL injection vulnerability is serious, and the development team needs to prioritize it."}
+{"input": "so uh everyone needs to update their dependencies no wait dependencies and also review the changelog for security patches", "output": "Everyone needs to update their dependencies and review the changelog for security patches."}
+{"input": "the github actions workflow runs on every commit wait no only on pull requests", "output": "The GitHub Actions workflow runs only on pull requests."}
+{"input": "um the um partnership framework um requires that um both parties commit um to um specific um performance benchmarks", "output": "The partnership framework requires that both parties commit to specific performance benchmarks."}
+{"input": "you know the quarterly period for q2 planning is actually coming up", "output": "You know, the quarterly period for Q2 planning is actually coming up."}
+{"input": "um we need to um establish clear kpis for um q1 to measure um our partnership success", "output": "We need to establish clear KPIs for Q1 to measure our partnership success."}
+{"input": "cant deploy until we fix the dependency hell in the package dot json file period", "output": "Can't deploy until we fix the dependency hell in the package.json file."}
+{"input": "we should merge this pr into main no scratch that into develop first", "output": "We should merge this PR into develop first."}
+{"input": "uh we need to um reconfigure the redis cluster er to use persistent storage and uh terraform should handle the um provisioning but um we also need to uh validate the networking policies", "output": "We need to reconfigure the Redis cluster to use persistent storage and Terraform should handle the provisioning but we also need to validate the networking policies."}
+{"input": "the book i read last week was uh very interesting period i think you like it", "output": "The book I read last week was very interesting. I think you'll like it."}
+{"input": "uh we need to uh nip it in the butt before it affects the whole deployment", "output": "We need to nip it in the bud before it affects the whole deployment."}
+{"input": "um your supposed to use the sequel query uh to uh check if the servers alright", "output": "You're supposed to use the SQL query to check if the server's all right."}
+{"input": "our effect size improvement is marginal period but still significant", "output": "Our effect size improvement is marginal. But still significant."}
+{"input": "so the the monitoring dashboard is uh showing high latency on the um nginx server", "output": "The monitoring dashboard is showing high latency on the Nginx server."}
+{"input": "uh the arr um projections show um a strong um uptick if we um align on these um terms", "output": "The ARR projections show a strong uptick if we align on these terms."}
+{"input": "uh its defiantly going to effect the kubernetes cluster performance", "output": "It's definitely going to affect the Kubernetes cluster performance."}
+{"input": "running the dependency audit and uh it found 12 vulnerabilities in transitive dependencies period", "output": "Running the dependency audit and it found 12 vulnerabilities in transitive dependencies."}
+{"input": "uh their going to use o auth to uh secure the api right", "output": "They're going to use OAuth to secure the API, right?"}
+{"input": "so the the rate limiter is uh incorrectly rejecting valid requests to our um api endpoints", "output": "The rate limiter is incorrectly rejecting valid requests to our API endpoints."}
+{"input": "we we need to uh configure better um notifications for when the cpu usage exceeds 80 percent", "output": "We need to configure better notifications for when the CPU usage exceeds 80 percent."}
+{"input": "the cache should invalidate after 48 hours i mean 72 hours for um consistency", "output": "The cache should invalidate after 72 hours for consistency."}
+{"input": "the web socket library uh needs a major version bump comma its breaking changes though period", "output": "The WebSocket library needs a major version bump, its breaking changes though."}
+{"input": "we didnt get informed consent from half the participants", "output": "We didn't get informed consent from half the participants."}
+{"input": "the project manager email is john at company dot com slash contact period", "output": "The project manager email is john@company.com/contact."}
+{"input": "i think we we need to audit the database permissions uh before end of quarter or or we risk compliance violations", "output": "I think we need to audit the database permissions before end of quarter, or we risk compliance violations."}
+{"input": "this svelte component needs a refactor um actually the parent component needs refactoring", "output": "The parent component needs refactoring."}
+{"input": "we need 5 code reviewers um sorry i mean we need at least 2 approvals", "output": "We need at least 2 approvals."}
+{"input": "so uh when we deploy the um kubernetes cluster we need to uh configure the redis instance er properly to handle the uh message queue load", "output": "So when we deploy the Kubernetes cluster we need to configure the Redis instance properly to handle the message queue load."}
+{"input": "uh this approach is supposably better than the other one for all intensive purposes", "output": "This approach is supposedly better than the other one for all intents and purposes."}
+{"input": "we should automate this with git hub actions comma it saves a lot of time period", "output": "We should automate this with GitHub Actions, it saves a lot of time."}
+{"input": "the docker image keeps failing because uh the base image is outdated period", "output": "The Docker image keeps failing because the base image is outdated."}
+{"input": "our meta analysis shows a significant effect size period", "output": "Our meta-analysis shows a significant effect size."}
+{"input": "the react component uh needs updating comma specifically the form validation exclamation point", "output": "The React component needs updating, specifically the form validation!"}
+{"input": "i think we should uh use typescript no wait actually we should stick with javascript for the react components", "output": "I think we should stick with JavaScript for the React components."}
+{"input": "have you try the new coffee shop question mark it is amazing", "output": "Have you tried the new coffee shop? It is amazing."}
+{"input": "ill need to document the effect size calculations comma okay question mark", "output": "I'll need to document the effect size calculations, okay?"}
+{"input": "um so the type script configuration file uh its definitely going to effect your build process", "output": "So the TypeScript configuration file\u2014it's definitely going to affect your build process."}
+{"input": "the meta analysis methodology needs revision period", "output": "The meta-analysis methodology needs revision."}
+{"input": "the meta analysis data looks promising comma dont you think question mark", "output": "The meta-analysis data looks promising, don't you think?"}
+{"input": "um im thinking we should add um more granular metrics to our monitoring pipeline for better visibility", "output": "I'm thinking we should add more granular metrics to our monitoring pipeline for better visibility."}
+{"input": "um we need to um set up better alerts for the postgres database before it crashes", "output": "We need to set up better alerts for the PostgreSQL database before it crashes."}
+{"input": "wait the office equipment order period ends tomorrow", "output": "Wait, the office equipment order period ends tomorrow."}
+{"input": "you know like i actually like this approach for the q4 pipeline", "output": "You know, like I actually like this approach for the Q4 pipeline."}
+{"input": "uh so kafka is um backing up messages er because the uh consumers are timing out and um we need to scale up the uh container replicas immediately", "output": "So Kafka is backing up messages because the consumers are timing out and we need to scale up the container replicas immediately."}
+{"input": "the database migration uh the database migration is complete period", "output": "The database migration is complete."}
+{"input": "um our um stakeholders um expect um transparent reporting um on um all um key um metrics", "output": "Our stakeholders expect transparent reporting on all key metrics."}
+{"input": "this dependency should be added to dev dependencies no wait to production dependencies", "output": "This dependency should be added to production dependencies."}
+{"input": "i want the team to um focus on hardening the rust backend no wait the frontend first sorry the backend", "output": "I want the team to focus on hardening the Rust backend first."}
+{"input": "basically we need to wait for the vendor to deliver the office supplies", "output": "Basically, we need to wait for the vendor to deliver the office supplies."}
+{"input": "uh the kafka brokers are um running hot and uh we need to er increase the replication factor but um that means we have to uh reconfigure the svelte monitoring interface to um show the new topology", "output": "The Kafka brokers are running hot and we need to increase the replication factor but that means we have to reconfigure the Svelte monitoring interface to show the new topology."}
+{"input": "the api endpoint is slash api slash v1 slash users question mark", "output": "The API endpoint is /api/v1/users?"}
+{"input": "uh we should uh set up github actions for automated security scanning or maybe implement a manual review process", "output": "We should set up GitHub Actions for automated security scanning."}
+{"input": "you know like we actually need to review the pipeline status", "output": "You know, like we actually need to review the pipeline status."}
+{"input": "we need to update the react dependencies comma especially the ones with security vulnerabilities period", "output": "We need to update the React dependencies, especially the ones with security vulnerabilities."}
+{"input": "so the websocket connection is uh leaking authentication tokens and um we need to fix that like asap", "output": "The WebSocket connection is leaking authentication tokens, and we need to fix that immediately."}
+{"input": "the svelte app is um crashing repeatedly or uh it keeps freezing when we deploy to production", "output": "The Svelte app is crashing repeatedly when we deploy to production."}
+{"input": "the i r b approval came through yesterday comma thats great", "output": "The IRB approval came through yesterday, that's great."}
+{"input": "we need to uh we need to update the postgre sql connection string comma port 5432", "output": "We need to update the PostgreSQL connection string, port 5432."}
+{"input": "uh the redis cache uh the redis cache is configured correctly period", "output": "The Redis cache is configured correctly."}
+{"input": "backup location is slash var slash backups slash database dash 2024 period", "output": "Backup location is /var/backups/database-2024."}
+{"input": "um the web socket connection is uh for all intensive purposes the best solution here", "output": "The WebSocket connection is, for all intents and purposes, the best solution here."}
+{"input": "the tutorial is available at learning platform period com slash courses slash python period you should check it", "output": "The tutorial is available at learningplatform.com/courses/python. You should check it."}
+{"input": "typescript strict mode should be disabled no hold on it should remain enabled", "output": "TypeScript strict mode should remain enabled."}
+{"input": "um basically we gotta we gotta rotate those api keys or or actually we should revoke them entirely", "output": "We need to revoke those API keys entirely."}
+{"input": "ive been running the ci cd pipeline and it says the rust crate version is incompatible period", "output": "I've been running the CI/CD pipeline and it says the Rust crate version is incompatible."}
+{"input": "um the grafana dashboard is uh showing some concerning metrics and uh we should probably um check the terraform state file to see if uh something got misconfigured", "output": "The Grafana dashboard is showing some concerning metrics and we should probably check the Terraform state file to see if something got misconfigured."}
+{"input": "um we um should um document um the um decision um points um from um todays um discussion um for um q1 um planning", "output": "We should document the decision points from todays discussion for Q1 planning."}
+{"input": "i um suggest you watch this movie comma it have very good reviews exclamation point", "output": "I suggest you watch this movie, it has very good reviews!"}
+{"input": "you should try this new restaurant downtown comma the food is really good", "output": "You should try this new restaurant downtown, the food is really good."}
+{"input": "hmm er so the container um orchestration layer is uh not communicating properly with um redis cache and uh the terraform modules are um outdated so we uh need to um rebuild everything", "output": "So the container orchestration layer is not communicating properly with Redis cache and the Terraform modules are outdated so we need to rebuild everything."}
+{"input": "uh given um the um market um conditions um we um need um to um recalibrate um our um arr um targets um and um um timeline um accordingly", "output": "Given the market conditions we need to recalibrate our ARR targets and timeline accordingly."}
+{"input": "um its prolly because the specific requirements uh werent followed in the infrastructure code", "output": "It's probably because the specific requirements weren't followed in the infrastructure code."}
+{"input": "this tool help me save time comma really question mark period yes comma it does period", "output": "This tool helps me save time, really? Yes, it does."}
+{"input": "i like this desk arrangement and i like the new office layout too", "output": "I like this desk arrangement and I like the new office layout too."}
+{"input": "um our our alerting system is uh not catching these timeout errors because the threshold is set too high", "output": "Our alerting system is not catching these timeout errors because the threshold is set too high."}
+{"input": "weve submitted the informed consent forms to the i r b", "output": "We've submitted the informed consent forms to the IRB."}
+{"input": "so uh we should except the pull request and than deploy it to staging", "output": "So we should accept the pull request and then deploy it to staging."}
+{"input": "the npm packages need updating uh like lodash and axios comma theyre throwing deprecation warnings period", "output": "The npm packages need updating, like lodash and axios, they're throwing deprecation warnings."}
+{"input": "you know the trial period is really really important for this okr", "output": "You know, the trial period is really really important for this OKR."}
+{"input": "so uh we need to patch the terraform configuration um before we deploy to production tomorrow", "output": "We need to patch the Terraform configuration before we deploy to production tomorrow."}
+{"input": "steps are colon prepare the database comma run migrations comma verify data period", "output": "Steps are: prepare the database, run migrations, verify data."}
+{"input": "uh i um believe um that um establishing um these um foundational um agreements um will um strengthen um our um long term um relationship", "output": "I believe that establishing these foundational agreements will strengthen our long term relationship."}
+{"input": "the python script uh runs the migration at midnight period", "output": "The Python script runs the migration at midnight."}
+{"input": "basically no the storage room is at capacity right now", "output": "Basically, no, the storage room is at capacity right now."}
+{"input": "i recommend you install the software from website dot com slash download period", "output": "I recommend you install the software from website.com/download."}
+{"input": "hmm well uh the svelte frontend is um experiencing latency issues uh because er the orchestrator is uh rebalancing pods and um the api gateway is uh routing traffic inefficiently", "output": "Well the Svelte frontend is experiencing latency issues because the orchestrator is rebalancing pods and the API gateway is routing traffic inefficiently."}
+{"input": "the websocket connection timeout is set to um 30 seconds rather 60 seconds", "output": "The WebSocket connection timeout is set to 60 seconds."}
+{"input": "like basically the q2 budget actually needs updating soon", "output": "Like basically, the Q2 budget actually needs updating soon."}
+{"input": "the jason schema validation is failing comma we need to upgrade the validator dependency period", "output": "The JSON schema validation is failing, we need to upgrade the validator dependency."}
+{"input": "this app is um really helpful for organize your schedule comma trust me", "output": "This app is really helpful for organizing your schedule, trust me."}
+{"input": "so we gotta we gotta implement um better logging to track these database queries properly", "output": "We have to implement better logging to track these database queries properly."}
+{"input": "uh moving forward um we need um clarity on um resource allocation um and um budget um constraints", "output": "Moving forward we need clarity on resource allocation and budget constraints."}
+{"input": "i think the the graphql endpoint has a um a critical vulnerability that we we should address immediately", "output": "I think the GraphQL endpoint has a critical vulnerability that we should address immediately."}
+{"input": "we need to run a randomized controlled trial period", "output": "We need to run a randomized controlled trial."}
+{"input": "no actually no we should not change the mrr projections right now", "output": "No, actually no, we should not change the MRR projections right now."}
+{"input": "weve got merge conflicts in the lock file because uh everyone updated dependencies differently period", "output": "We've got merge conflicts in the lock file because everyone updated dependencies differently."}
+{"input": "check the logs at slash home slash admin slash migration dot log question mark", "output": "Check the logs at /home/admin/migration.log?"}

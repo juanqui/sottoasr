@@ -1,0 +1,30 @@
+{"text": "The message broker is dropping events during peak traffic because the consumer group can't keep up.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "We should add circuit breaker configuration to the Istio virtual service for the catalog API.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The Playwright end-to-end tests are failing intermittently due to race conditions in the UI rendering.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "I want to set up a GitOps workflow using ArgoCD so that every merge to main automatically deploys to staging.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The OpenAPI specification is out of date and doesn't reflect the changes we made to the user endpoints last sprint.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "We need to implement row-level security in PostgreSQL so that each tenant can only see their own data.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The Svelte store subscriptions are causing a memory leak because components aren't unsubscribing on destroy.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "Let's add Dependabot to automatically create pull requests when our dependencies have security updates.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The CDN cache invalidation is taking up to fifteen minutes which means users see stale content after deployments.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "I recommend we switch from REST to GraphQL for the mobile API to reduce over-fetching and improve battery life.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The client requested a custom report showing year-over-year growth by product line and geographic region.", "domain": "general_business", "source": "synthetic_r5"}
+{"text": "We need to finalize the partnership terms with the European distributor before the end of the fiscal quarter.", "domain": "general_business", "source": "synthetic_r5"}
+{"text": "The customer success team flagged that three enterprise accounts are at risk of churning due to unresolved support tickets.", "domain": "general_business", "source": "synthetic_r5"}
+{"text": "Please prepare a competitive analysis comparing our pricing model to the top three alternatives in the market.", "domain": "general_business", "source": "synthetic_r5"}
+{"text": "The training session for new hires on the CRM system is scheduled for next Wednesday from two to four PM.", "domain": "general_business", "source": "synthetic_r5"}
+{"text": "Start the patient on prednisone forty milligrams daily with a taper over two weeks for the acute flare.", "domain": "medical_health", "source": "synthetic_r5"}
+{"text": "The chest X-ray shows bilateral infiltrates consistent with community-acquired pneumonia.", "domain": "medical_health", "source": "synthetic_r5"}
+{"text": "The hemoglobin dropped from twelve to nine point two over the past forty-eight hours, suggesting active bleeding.", "domain": "medical_health", "source": "synthetic_r5"}
+{"text": "The protective order should cover all documents produced during discovery including electronically stored information.", "domain": "legal_compliance", "source": "synthetic_r5"}
+{"text": "Under the new regulations, all financial advisors must complete the continuing education requirements by December thirty-first.", "domain": "legal_compliance", "source": "synthetic_r5"}
+{"text": "The debt-to-equity ratio improved from three point two to two point one after the equity raise.", "domain": "finance", "source": "synthetic_r5"}
+{"text": "Accounts payable turnover slowed to forty-five days from thirty-two days in the prior quarter.", "domain": "finance", "source": "synthetic_r5"}
+{"text": "Does anyone want to grab lunch at the new Mediterranean place that opened down the street?", "domain": "casual_conversational", "source": "synthetic_r5"}
+{"text": "I left my laptop charger at home, does anyone have a USB-C charger I can borrow?", "domain": "casual_conversational", "source": "synthetic_r5"}
+{"text": "The regression analysis shows a statistically significant negative correlation between screen time and sleep quality.", "domain": "academic_research", "source": "synthetic_r5"}
+{"text": "The focus group transcripts were coded using a thematic analysis framework with inter-rater reliability checks.", "domain": "academic_research", "source": "synthetic_r5"}
+{"text": "The Datadog alert fired because CPU utilization on the worker nodes exceeded ninety percent for over five minutes.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "We should implement a canary analysis step that automatically rolls back if the error rate exceeds the baseline by more than half a percent.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "The feature flag management system needs role-based access control so only engineering leads can toggle production flags.", "domain": "software_engineering", "source": "synthetic_r5"}
+{"text": "Please send the meeting notes to the entire leadership team and CC the project managers.", "domain": "general_business", "source": "synthetic_r5"}

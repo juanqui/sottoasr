@@ -79,3 +79,19 @@ sotto/
 - **Accessibility permissions are required** for the paste-at-cursor functionality (simulated Cmd+V). Code that interacts with accessibility APIs must handle the case where permissions have not been granted and guide the user to enable them.
 - **Local-only processing is a hard constraint.** Never add features that send audio, transcriptions, or usage data to external services.
 - **Experiment logs go in `docs/journals/`**, not alongside code. Benchmark code lives in `benchmarks/`; the narrative of what was tried, measured, and learned lives in `docs/journals/YYYY-MM-DD-slug.md`.
+
+## HuggingFace Artifacts
+
+| Artifact | Repo | Visibility |
+|----------|------|------------|
+| **Training dataset** | [`juanquivilla/sotto-transcript-cleanup`](https://huggingface.co/datasets/juanquivilla/sotto-transcript-cleanup) | Private |
+| **Fine-tuned model** | [`juanquivilla/sotto-cleanup-lfm25-350m`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m) | Private |
+
+- **HF token** is stored in `.env` (gitignored) as `HF_TOKEN`
+- **Naming convention:** `juanquivilla/sotto-{purpose}-{base_model}-{size}` for models; `juanquivilla/sotto-{purpose}` for datasets
+- **Upload process:** After each training run, upload the merged model and updated dataset to HF. Always update the model card with latest benchmark numbers.
+- **Base model:** `LiquidAI/LFM2.5-350M-Base` — full fine-tuned + stage-2 concentrated training, merged for inference
+- **MLX quantized models** for on-device deployment:
+  - [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) — **recommended** (233MB, ROUGE-L 0.926, 99% filler-free)
+  - [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit) — smaller (190MB, ROUGE-L 0.897)
+- **Quantization recipe:** `mlx_lm.convert --hf-path <model> --mlx-path <out> -q --q-bits 5 --q-group-size 64 --trust-remote-code`

@@ -1,0 +1,30 @@
+{"text": "The Kubernetes pod is stuck in CrashLoopBackOff and the logs show an out-of-memory error.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "We need to add a circuit breaker pattern to the external payment provider integration.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The Grafana dashboard shows a 300 millisecond increase in p99 latency since the last deployment.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "I want to implement server-sent events instead of polling for the real-time notification feature.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The Terraform state file got corrupted and we need to import the existing resources manually.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "Our Svelte components are re-rendering too frequently because the reactive declarations are not memoized.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The GitHub Actions workflow needs a matrix strategy to test against Node 18 and Node 20.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "I recommend we use connection pooling with PgBouncer to reduce the overhead of establishing new database connections.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The CORS configuration is blocking requests from the staging frontend because the allowed origins list is outdated.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "We should split the monolithic REST API into separate services for user management, billing, and content delivery.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The board approved a fifteen percent increase in the research and development budget for the next fiscal year.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "We're seeing higher churn rates in the enterprise segment and need to investigate the root cause.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "The partnership agreement with the European distributor needs to be finalized by the end of this month.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "I'd like to propose that we create a dedicated customer success team to handle tier-one accounts.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "The quarterly all-hands meeting has been moved to Thursday at two PM in the main auditorium.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "Discontinue the warfarin and start the patient on apixaban five milligrams twice daily.", "domain": "medical_health", "source": "synthetic_r3"}
+{"text": "The echocardiogram shows reduced left ventricular ejection fraction at approximately thirty-five percent.", "domain": "medical_health", "source": "synthetic_r3"}
+{"text": "Order a complete metabolic panel and a urinalysis to evaluate the patient's kidney function.", "domain": "medical_health", "source": "synthetic_r3"}
+{"text": "The indemnification clause should be amended to cap the seller's liability at the purchase price.", "domain": "legal_compliance", "source": "synthetic_r3"}
+{"text": "The SEC requires all material weaknesses in internal controls to be disclosed in the annual report.", "domain": "legal_compliance", "source": "synthetic_r3"}
+{"text": "EBITDA margin expanded to twenty-two percent from nineteen percent in the prior year period.", "domain": "finance", "source": "synthetic_r3"}
+{"text": "The venture capital fund closed its Series B round at forty-five million with a pre-money valuation of one hundred fifty million.", "domain": "finance", "source": "synthetic_r3"}
+{"text": "Just a heads up the parking lot will be closed tomorrow for resurfacing so plan to park on the street.", "domain": "casual_conversational", "source": "synthetic_r3"}
+{"text": "Can you send me the link to that YouTube video you were talking about at lunch?", "domain": "casual_conversational", "source": "synthetic_r3"}
+{"text": "Happy birthday hope you have a great day lets celebrate this weekend.", "domain": "casual_conversational", "source": "synthetic_r3"}
+{"text": "The regression model achieved an R-squared value of 0.87, suggesting a strong fit to the observed data.", "domain": "academic_research", "source": "synthetic_r3"}
+{"text": "Ethical approval was obtained from the institutional review board prior to participant recruitment.", "domain": "academic_research", "source": "synthetic_r3"}
+{"text": "The content team needs three blog posts and two case studies ready for review by next Wednesday.", "domain": "general_business", "source": "synthetic_r3"}
+{"text": "I want you to set up automated alerts for any API response time exceeding five hundred milliseconds.", "domain": "software_engineering", "source": "synthetic_r3"}
+{"text": "The DNS propagation should complete within 48 hours after we update the nameserver records.", "domain": "software_engineering", "source": "synthetic_r3"}

@@ -1,0 +1,35 @@
+{
+  "total_valid": 20238,
+  "total_generated": 21051,
+  "total_rejected": 783,
+  "total_duplicate": 30,
+  "batch_counter": 2344,
+  "category_counts": {
+    "adversarial": 802,
+    "filler_removal": 2809,
+    "self_correction": 3160,
+    "dictation_commands": 1480,
+    "phonetic_errors": 1207,
+    "preserve_wording": 2066,
+    "crutch_words": 1554,
+    "false_start": 1761,
+    "list_formatting": 1130,
+    "mixed": 1579,
+    "misheard_words": 1228,
+    "grammar": 1461,
+    "long_transcript": 1
+  },
+  "domain_counts": {
+    "general_business": 4141,
+    "software_engineering": 4982,
+    "technical_other": 1080,
+    "casual_conversational": 2863,
+    "finance": 1507,
+    "creative_content": 1062,
+    "medical_health": 2083,
+    "legal_compliance": 1651,
+    "academic_research": 869
+  },
+  "target": 20000,
+  "timestamp": 1775054711.965514
+}

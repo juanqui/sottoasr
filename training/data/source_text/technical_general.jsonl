@@ -1,0 +1,55 @@
+{"text": "The load balancer is distributing traffic unevenly across the three backend instances.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "We need to add retry logic with exponential backoff to the payment processing service.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The Prometheus alerting rules need to be updated to catch memory leaks earlier.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "I want to refactor the authentication middleware to support both JWT and session-based auth.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The database connection pool is exhausted during peak hours, causing request timeouts.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Let's set up a canary deployment for the new checkout flow before rolling it out to all users.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The GraphQL resolver is making N+1 queries, which is why the dashboard loads so slowly.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "We should move the image processing pipeline to a background job queue instead of handling it synchronously.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The TypeScript compiler is throwing errors because the shared types package hasn't been rebuilt.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "I want to add structured logging with correlation IDs so we can trace requests across microservices.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Can you check if the Redis cluster has enough memory to handle the new caching strategy?", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The rollback procedure needs to be documented before we deploy the schema migration to production.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Our test coverage dropped below seventy percent after the last merge, mainly in the notification module.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "I'm thinking we should use feature flags to gradually expose the new search algorithm to users.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The CI pipeline is failing because the Docker image cache was invalidated by the base image update.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Please update the API documentation to reflect the new pagination parameters we added last sprint.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The WebSocket connection drops after exactly thirty seconds, which suggests a proxy timeout issue.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "We need to implement rate limiting on the public API before the product launch next month.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "The Elasticsearch index is growing at two gigabytes per day and we need to set up an index lifecycle policy.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Let's add a health check endpoint that verifies connectivity to all downstream dependencies.", "domain": "software_engineering", "source": "synthetic_r2"}
+{"text": "Please schedule a meeting with the product team to discuss the Q3 roadmap priorities.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "The client wants a revised proposal by end of day Friday with updated pricing for the enterprise tier.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "We need to hire two more senior engineers before the end of the quarter to stay on track.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "The customer satisfaction scores improved by twelve percent after we redesigned the onboarding flow.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "Let's move the weekly standup to Tuesday mornings since half the team has conflicts on Monday.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "The marketing team needs access to the analytics dashboard to track campaign performance.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "Our burn rate is higher than projected, so we need to revisit the hiring plan for Q4.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "I want to set up a feedback loop with the support team to identify recurring customer pain points.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "The vendor contract expires in sixty days and we need to start the renewal negotiation process.", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "Can you draft a summary of yesterday's board meeting and send it to all stakeholders?", "domain": "general_business", "source": "synthetic_r2"}
+{"text": "The patient presented with acute onset chest pain radiating to the left arm and diaphoresis.", "domain": "medical_health", "source": "synthetic_r2"}
+{"text": "Start the patient on lisinopril ten milligrams daily and monitor blood pressure weekly.", "domain": "medical_health", "source": "synthetic_r2"}
+{"text": "The MRI of the lumbar spine shows a herniated disc at L4-L5 with mild nerve root compression.", "domain": "medical_health", "source": "synthetic_r2"}
+{"text": "Refer the patient to endocrinology for evaluation of the thyroid nodule found on ultrasound.", "domain": "medical_health", "source": "synthetic_r2"}
+{"text": "Hemoglobin A1c came back at 8.2 percent, indicating poorly controlled diabetes over the past three months.", "domain": "medical_health", "source": "synthetic_r2"}
+{"text": "The defendant filed a motion to dismiss on grounds of insufficient service of process.", "domain": "legal_compliance", "source": "synthetic_r2"}
+{"text": "Under Section 230 of the Communications Decency Act, the platform may not be liable for user-generated content.", "domain": "legal_compliance", "source": "synthetic_r2"}
+{"text": "The non-compete clause restricts the employee from working for a competitor within a fifty-mile radius for two years.", "domain": "legal_compliance", "source": "synthetic_r2"}
+{"text": "We need to conduct a data protection impact assessment before launching the new customer profiling feature.", "domain": "legal_compliance", "source": "synthetic_r2"}
+{"text": "The arbitration clause in the service agreement requires all disputes to be resolved in Delaware.", "domain": "legal_compliance", "source": "synthetic_r2"}
+{"text": "Net revenue for the quarter was forty-two million, up eighteen percent year over year driven by enterprise expansion.", "domain": "finance", "source": "synthetic_r2"}
+{"text": "The accounts receivable aging report shows fifteen percent of outstanding invoices are more than ninety days overdue.", "domain": "finance", "source": "synthetic_r2"}
+{"text": "We should hedge our foreign currency exposure given the volatility in the euro-dollar exchange rate.", "domain": "finance", "source": "synthetic_r2"}
+{"text": "The internal rate of return on the proposed acquisition is projected at fourteen percent over a five-year horizon.", "domain": "finance", "source": "synthetic_r2"}
+{"text": "Cash flow from operations declined due to higher inventory build-up ahead of the holiday season.", "domain": "finance", "source": "synthetic_r2"}
+{"text": "Hey can you grab coffee and meet me in the lobby in ten minutes?", "domain": "casual_conversational", "source": "synthetic_r2"}
+{"text": "I'm going to be about fifteen minutes late to the standup, just start without me.", "domain": "casual_conversational", "source": "synthetic_r2"}
+{"text": "That new Thai place on Market Street is really good, we should go there for team lunch.", "domain": "casual_conversational", "source": "synthetic_r2"}
+{"text": "I totally forgot about the dentist appointment, I need to leave early today.", "domain": "casual_conversational", "source": "synthetic_r2"}
+{"text": "Thanks for covering for me yesterday, I owe you one.", "domain": "casual_conversational", "source": "synthetic_r2"}
+{"text": "The preliminary results from our randomized controlled trial suggest a statistically significant effect at the p equals 0.01 level.", "domain": "academic_research", "source": "synthetic_r2"}
+{"text": "We need to address the reviewer's concern about selection bias in our sampling methodology.", "domain": "academic_research", "source": "synthetic_r2"}
+{"text": "The grant proposal deadline is April fifteenth and we still need to finalize the budget justification.", "domain": "academic_research", "source": "synthetic_r2"}
+{"text": "Our meta-analysis included forty-seven studies with a combined sample size of over twelve thousand participants.", "domain": "academic_research", "source": "synthetic_r2"}
+{"text": "The principal component analysis revealed three factors explaining eighty-two percent of the total variance.", "domain": "academic_research", "source": "synthetic_r2"}

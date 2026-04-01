@@ -1,0 +1,24 @@
+{
+  "total_valid": 109,
+  "total_generated": 111,
+  "total_rejected": 2,
+  "total_duplicate": 0,
+  "batch_counter": 29,
+  "category_counts": {
+    "mixed": 20,
+    "phonetic_errors": 10,
+    "adversarial": 10,
+    "filler_removal": 20,
+    "dictation_commands": 19,
+    "misheard_words": 20,
+    "self_correction": 10
+  },
+  "domain_counts": {
+    "software_engineering": 70,
+    "general_business": 20,
+    "academic_research": 10,
+    "casual_conversational": 9
+  },
+  "target": 50,
+  "timestamp": 1775053934.6288068
+}

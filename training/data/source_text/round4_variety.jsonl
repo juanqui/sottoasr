@@ -1,0 +1,30 @@
+{"text": "The Helm chart values need to be overridden for the production namespace with the correct resource limits.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "We're getting intermittent 502 errors from the ingress controller when traffic spikes above two thousand requests per second.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "I want to add OpenTelemetry tracing to all our gRPC endpoints so we can visualize the request flow.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The Prisma schema needs a many-to-many relation between users and organizations through a membership table.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "Let's implement a dead letter queue for messages that fail processing after three retry attempts.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The Next.js build time increased from two minutes to eight minutes after adding the internationalization plugin.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "I suggest we use Tailwind CSS for the design system instead of writing custom SCSS for every component.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The SSL certificate for the API subdomain expires in fourteen days and auto-renewal failed.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "We need to implement column-level encryption for the social security numbers stored in the employee table.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The ArgoCD sync is stuck because the target revision doesn't exist in the Git repository anymore.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "Please forward the signed NDA to outside counsel before the due diligence process begins.", "domain": "legal_compliance", "source": "synthetic_r4"}
+{"text": "The force majeure clause needs to explicitly cover pandemic-related disruptions based on our experience in 2020.", "domain": "legal_compliance", "source": "synthetic_r4"}
+{"text": "Annual recurring revenue crossed the ten million dollar threshold for the first time last quarter.", "domain": "finance", "source": "synthetic_r4"}
+{"text": "The working capital ratio has been declining for three consecutive quarters and is approaching one point zero.", "domain": "finance", "source": "synthetic_r4"}
+{"text": "Schedule a follow-up appointment with cardiology in two weeks to review the stress test results.", "domain": "medical_health", "source": "synthetic_r4"}
+{"text": "The patient's white blood cell count is elevated at fourteen thousand, suggesting a possible infection.", "domain": "medical_health", "source": "synthetic_r4"}
+{"text": "Can someone pick up printer paper from the supply room on the third floor?", "domain": "casual_conversational", "source": "synthetic_r4"}
+{"text": "The wifi password for the guest network is capital T lowercase echo four seven nine exclamation point.", "domain": "casual_conversational", "source": "synthetic_r4"}
+{"text": "Data collection was completed across all six study sites between January and March of this year.", "domain": "academic_research", "source": "synthetic_r4"}
+{"text": "The effect size was moderate according to Cohen's d at 0.54, with a ninety-five percent confidence interval.", "domain": "academic_research", "source": "synthetic_r4"}
+{"text": "Rename the feature branch to match the Jira ticket number before pushing to the remote.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The product team wants to A/B test two variations of the checkout page with equal traffic splits.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "I think we should archive the old API version but keep the documentation available for legacy integrators.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The board of directors unanimously approved the proposed acquisition at a valuation of three hundred million.", "domain": "finance", "source": "synthetic_r4"}
+{"text": "Our net promoter score improved from forty-two to fifty-eight after the product redesign.", "domain": "general_business", "source": "synthetic_r4"}
+{"text": "The competitive analysis shows that our pricing is about twenty percent higher than the market average.", "domain": "general_business", "source": "synthetic_r4"}
+{"text": "I need to reschedule the one-on-one with my manager to later this afternoon.", "domain": "casual_conversational", "source": "synthetic_r4"}
+{"text": "The mutation testing report shows that fifteen percent of our test assertions are weak and need strengthening.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "Make sure the database backup completes before starting the maintenance window at midnight.", "domain": "software_engineering", "source": "synthetic_r4"}
+{"text": "The patient reports persistent headaches for the past two weeks with associated photophobia and neck stiffness.", "domain": "medical_health", "source": "synthetic_r4"}

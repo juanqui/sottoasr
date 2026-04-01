@@ -1,6 +1,6 @@
 [package]
 name = "sottoasr"
-version = "0.4.0"
+version = "0.5.0"
 description = "SottoASR — Local, privacy-first speech-to-text for macOS"
 authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"
@@ -40,7 +40,7 @@ fluidaudio-rs = { git = "https://github.com/FluidInference/fluidaudio-rs.git", o
 # parakeet-rs: ONNX Runtime, cross-platform CPU — ~20-30x RTF
 parakeet-rs = { version = "0.3", optional = true }
 
-# HTTP client for model downloads (parakeet-rs and llm-qwen)
+# HTTP client for model downloads (parakeet-rs)
 reqwest = { version = "0.12", features = ["stream"], optional = true }
 futures-util = { version = "0.3", optional = true }
 
@@ -57,7 +57,7 @@ core-foundation = "0.10"
 arboard = "3"
 
 [features]
-default = ["custom-protocol", "asr-fluidaudio", "llm-qwen"]
+default = ["custom-protocol", "asr-fluidaudio", "llm-cleanup"]
 
 # ASR backend selection — pick ONE
 # FluidAudio: macOS only, CoreML/Apple Neural Engine, best performance
@@ -65,7 +65,7 @@ asr-fluidaudio = ["dep:fluidaudio-rs"]
 # parakeet-rs: Cross-platform, ONNX Runtime CPU, wider compatibility
 asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:futures-util"]
 
-# LLM cleanup via MLX Python sidecar (no native ML dependencies)
-llm-qwen = []
+# LLM cleanup via fine-tuned LFM2.5-350M MLX model (Python sidecar)
+llm-cleanup = []
 
 custom-protocol = ["tauri/custom-protocol"]

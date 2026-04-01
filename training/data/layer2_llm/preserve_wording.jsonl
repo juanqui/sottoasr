@@ -1,0 +1,120 @@
+{"input": "ship it", "output": "Ship it.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "merge the pr", "output": "Merge the PR.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "looks good to me", "output": "Looks good to me.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "deploy to staging", "output": "Deploy to staging.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "run the tests", "output": "Run the tests.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "approve the pull request", "output": "Approve the pull request.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "revert that commit", "output": "Revert that commit.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "close the ticket", "output": "Close the ticket.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "send the invoice", "output": "Send the invoice.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "schedule the meeting for thursday", "output": "Schedule the meeting for Thursday.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "file the motion", "output": "File the motion.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "order the blood work", "output": "Order the blood work.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "submit the abstract", "output": "Submit the abstract.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "publish the post", "output": "Publish the post.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "check the balance", "output": "Check the balance.", "category": "preserve_wording", "domain": "finance"}
+{"input": "this is really important and we need to address it today", "output": "This is really important and we need to address it today.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the performance is really good after the optimization", "output": "The performance is really good after the optimization.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "i am really excited about the new feature", "output": "I am really excited about the new feature.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "this is really not acceptable for a production environment", "output": "This is really not acceptable for a production environment.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the patient is really struggling with mobility", "output": "The patient is really struggling with mobility.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the results are very promising", "output": "The results are very promising.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the response time is very fast", "output": "The response time is very fast.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "this is very well written", "output": "This is very well written.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "the margin is very thin on this deal", "output": "The margin is very thin on this deal.", "category": "preserve_wording", "domain": "finance"}
+{"input": "we are very close to the deadline", "output": "We are very close to the deadline.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the network latency is very high right now", "output": "The network latency is very high right now.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "i definitely think we should go with option two", "output": "I definitely think we should go with option two.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "we should definitely add more test coverage", "output": "We should definitely add more test coverage.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the clause definitely needs to be reworded", "output": "The clause definitely needs to be reworded.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the patient definitely needs a follow up scan", "output": "The patient definitely needs a follow-up scan.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "there are a lot of edge cases we need to handle", "output": "There are a lot of edge cases we need to handle.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "we have a lot of open tickets this sprint", "output": "We have a lot of open tickets this sprint.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "there is a lot of uncertainty in the market right now", "output": "There is a lot of uncertainty in the market right now.", "category": "preserve_wording", "domain": "finance"}
+{"input": "we received a lot of feedback from the beta users", "output": "We received a lot of feedback from the beta users.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "there is a lot of prior work in this area", "output": "There is a lot of prior work in this area.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "go ahead and merge it when you are ready", "output": "Go ahead and merge it when you are ready.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "go ahead and schedule the demo for next week", "output": "Go ahead and schedule the demo for next week.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "go ahead and file the amended complaint", "output": "Go ahead and file the amended complaint.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "go ahead and start the infusion", "output": "Go ahead and start the infusion.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "go ahead and submit the paper", "output": "Go ahead and submit the paper.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "go ahead and publish the article", "output": "Go ahead and publish the article.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "go ahead and place the trade", "output": "Go ahead and place the trade.", "category": "preserve_wording", "domain": "finance"}
+{"input": "go ahead and update the firmware", "output": "Go ahead and update the firmware.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "i want you to review the security audit findings", "output": "I want you to review the security audit findings.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "i want you to prepare a summary of the case", "output": "I want you to prepare a summary of the case.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "i want you to run the regression tests before we release", "output": "I want you to run the regression tests before we release.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "i want you to draft the press release by end of day", "output": "I want you to draft the press release by end of day.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "i want you to check the patients vitals every hour", "output": "I want you to check the patient's vitals every hour.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "i want you to reconcile the accounts before the audit", "output": "I want you to reconcile the accounts before the audit.", "category": "preserve_wording", "domain": "finance"}
+{"input": "the implementation is kind of tricky because of the legacy code", "output": "The implementation is kind of tricky because of the legacy code.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the wording is kind of ambiguous in that section", "output": "The wording is kind of ambiguous in that section.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the data is kind of noisy but we can still draw conclusions", "output": "The data is kind of noisy but we can still draw conclusions.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the user interface is kind of confusing for new users", "output": "The user interface is kind of confusing for new users.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the patient is kind of anxious about the procedure", "output": "The patient is kind of anxious about the procedure.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the signal is kind of weak on the lower frequencies", "output": "The signal is kind of weak on the lower frequencies.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "the api returns a json object with the user data", "output": "The API returns a JSON object with the user data.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "we need to update the dns records for the new domain", "output": "We need to update the DNS records for the new domain.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the mri shows no signs of progression", "output": "The MRI shows no signs of progression.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the gdpr compliance review is due next month", "output": "The GDPR compliance review is due next month.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the roi on this campaign exceeded our projections", "output": "The ROI on this campaign exceeded our projections.", "category": "preserve_wording", "domain": "finance"}
+{"input": "please add the new endpoint to the swagger documentation", "output": "Please add the new endpoint to the Swagger documentation.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "make sure the kubernetes pods are healthy before scaling", "output": "Make sure the Kubernetes pods are healthy before scaling.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the cbc and metabolic panel came back normal", "output": "The CBC and metabolic panel came back normal.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "we should use terraform for the infrastructure as code", "output": "We should use Terraform for the infrastructure as code.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the board approved the q four budget allocation", "output": "The board approved the Q4 budget allocation.", "category": "preserve_wording", "domain": "finance"}
+{"input": "lets circle back on this after the standup", "output": "Let's circle back on this after the standup.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "i think we should prioritize the bug fixes over new features", "output": "I think we should prioritize the bug fixes over new features.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the team did a great job on the presentation", "output": "The team did a great job on the presentation.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "we are on track to hit our targets for the quarter", "output": "We are on track to hit our targets for the quarter.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the hypothesis is supported by the experimental data", "output": "The hypothesis is supported by the experimental data.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the sample size needs to be larger for statistical significance", "output": "The sample size needs to be larger for statistical significance.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the defendant filed a motion to dismiss on procedural grounds", "output": "The defendant filed a motion to dismiss on procedural grounds.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the patients blood pressure has stabilized at one twenty over eighty", "output": "The patient's blood pressure has stabilized at 120 over 80.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "we need better error handling in the authentication flow", "output": "We need better error handling in the authentication flow.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the cache invalidation strategy needs to be rethought", "output": "The cache invalidation strategy needs to be rethought.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "can you take a look at my pull request when you get a chance", "output": "Can you take a look at my pull request when you get a chance?", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "do you have time for a quick sync this afternoon", "output": "Do you have time for a quick sync this afternoon?", "category": "preserve_wording", "domain": "general_business"}
+{"input": "when is the next release scheduled", "output": "When is the next release scheduled?", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "has the patient been cleared for discharge", "output": "Has the patient been cleared for discharge?", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "did you see the new research paper on transformer architectures", "output": "Did you see the new research paper on transformer architectures?", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "are the production servers running the latest version", "output": "Are the production servers running the latest version?", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "hey can you grab coffee later", "output": "Hey, can you grab coffee later?", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "sure thing ill handle it", "output": "Sure thing, I'll handle it.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "sounds good lets do it", "output": "Sounds good, let's do it.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "cool ill ping you when its done", "output": "Cool, I'll ping you when it's done.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "yeah that works for me", "output": "Yeah, that works for me.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "no worries take your time", "output": "No worries, take your time.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "the antenna gain is three dbi at five gigahertz", "output": "The antenna gain is 3 dBi at 5 GHz.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "the sensor readings are within the expected tolerance range", "output": "The sensor readings are within the expected tolerance range.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "the power supply unit needs to be rated for at least five hundred watts", "output": "The power supply unit needs to be rated for at least 500 watts.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "the thermal paste needs to be reapplied on the heat sink", "output": "The thermal paste needs to be reapplied on the heat sink.", "category": "preserve_wording", "domain": "technical_nonsoftware"}
+{"input": "we are targeting a click through rate of at least two percent", "output": "We are targeting a click-through rate of at least 2%.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "the blog post needs a stronger call to action", "output": "The blog post needs a stronger call to action.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "the headline should be more engaging for the target audience", "output": "The headline should be more engaging for the target audience.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "the color palette works well with the brand guidelines", "output": "The color palette works well with the brand guidelines.", "category": "preserve_wording", "domain": "creative_content"}
+{"input": "the p e ratio looks elevated compared to the sector average", "output": "The P/E ratio looks elevated compared to the sector average.", "category": "preserve_wording", "domain": "finance"}
+{"input": "we should diversify the portfolio to reduce concentration risk", "output": "We should diversify the portfolio to reduce concentration risk.", "category": "preserve_wording", "domain": "finance"}
+{"input": "the yield curve inversion suggests a potential recession", "output": "The yield curve inversion suggests a potential recession.", "category": "preserve_wording", "domain": "finance"}
+{"input": "the operating expenses were higher than budgeted last quarter", "output": "The operating expenses were higher than budgeted last quarter.", "category": "preserve_wording", "domain": "finance"}
+{"input": "i honestly think the database schema is the bottleneck", "output": "I honestly think the database schema is the bottleneck.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "we basically need to rewrite the entire module", "output": "We basically need to rewrite the entire module.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the test suite essentially covers all the critical paths", "output": "The test suite essentially covers all the critical paths.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the medication essentially prevents the immune system from overreacting", "output": "The medication essentially prevents the immune system from overreacting.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "well i think the first option is better", "output": "Well, I think the first option is better.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "okay lets move on to the next agenda item", "output": "Okay, let's move on to the next agenda item.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "alright here is the plan for next quarter", "output": "Alright, here is the plan for next quarter.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "so the main takeaway is that we need more resources", "output": "So the main takeaway is that we need more resources.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the database migration should be done during the maintenance window", "output": "The database migration should be done during the maintenance window.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "we need to rotate the ssl certificates before they expire", "output": "We need to rotate the SSL certificates before they expire.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the load balancer is distributing traffic unevenly across the nodes", "output": "The load balancer is distributing traffic unevenly across the nodes.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "prescribe metformin five hundred milligrams twice daily with meals", "output": "Prescribe metformin 500 milligrams twice daily with meals.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the ecg shows normal sinus rhythm with no st changes", "output": "The ECG shows normal sinus rhythm with no ST changes.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "refer the patient to orthopedics for further evaluation", "output": "Refer the patient to orthopedics for further evaluation.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the appellate court upheld the lower courts ruling", "output": "The appellate court upheld the lower court's ruling.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the statute of limitations has not yet expired", "output": "The statute of limitations has not yet expired.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "we need to disclose this in the annual report", "output": "We need to disclose this in the annual report.", "category": "preserve_wording", "domain": "legal_compliance"}
+{"input": "the correlation coefficient is zero point nine five", "output": "The correlation coefficient is 0.95.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the control group showed no significant improvement", "output": "The control group showed no significant improvement.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the literature review covers publications from the last decade", "output": "The literature review covers publications from the last decade.", "category": "preserve_wording", "domain": "academic_research"}
+{"input": "the bandwidth allocation needs to account for peak usage hours", "output": "The bandwidth allocation needs to account for peak usage hours.", "category": "preserve_wording", "domain": "technical_nonsoftware"}

@@ -5,10 +5,6 @@ fn default_true() -> bool {
     true
 }
 
-fn default_llm_model_size() -> String {
-    "2b".into()
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
@@ -58,10 +54,6 @@ pub struct Settings {
     pub launch_at_login: bool,
     #[serde(default)]
     pub llm_cleanup_enabled: bool,
-    #[serde(default)]
-    pub llm_markdown_mode: bool,
-    #[serde(default = "default_llm_model_size")]
-    pub llm_model_size: String,
 }
 
 impl Settings {
@@ -110,8 +102,6 @@ impl Default for Settings {
             max_history: 500,
             launch_at_login: false,
             llm_cleanup_enabled: false,
-            llm_markdown_mode: false,
-            llm_model_size: "2b".into(),
         }
     }
 }
@@ -125,6 +115,8 @@ pub struct LlmStatus {
     pub loaded: bool,
     pub model_name: String,
     pub model_path: Option<String>,
+    #[serde(default)]
+    pub update_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

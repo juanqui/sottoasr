@@ -1,0 +1,45 @@
+{"input": "deploy the app to the cube er netties cluster in production", "output": "Deploy the app to the Kubernetes cluster in production."}
+{"input": "the web socket connection keeps timing out after thirty seconds", "output": "The WebSocket connection keeps timing out after thirty seconds."}
+{"input": "we need to update the engine x config for the reverse proxy", "output": "We need to update the Nginx config for the reverse proxy."}
+{"input": "the jason payload from the api is malformed", "output": "The JSON payload from the API is malformed."}
+{"input": "set up oh auth two point oh for the login flow", "output": "Set up OAuth 2.0 for the login flow."}
+{"input": "check if the post gress database is accepting connections", "output": "Check if the Postgres database is accepting connections."}
+{"input": "the elastic search index is getting too large", "output": "The Elasticsearch index is getting too large."}
+{"input": "configure the git hub actions workflow for continuous deployment", "output": "Configure the GitHub Actions workflow for continuous deployment."}
+{"input": "the type script compiler is throwing errors on the new module", "output": "The TypeScript compiler is throwing errors on the new module."}
+{"input": "we should use rabbit mq for the message queue", "output": "We should use RabbitMQ for the message queue."}
+{"input": "the terra form state file is locked by another process", "output": "The Terraform state file is locked by another process."}
+{"input": "update the dock er compose file with the new service", "output": "Update the Docker Compose file with the new service."}
+{"input": "the graph cue el query is returning too much data", "output": "The GraphQL query is returning too much data."}
+{"input": "check the pro me thee us metrics for the memory leak", "output": "Check the Prometheus metrics for the memory leak."}
+{"input": "the graf ana dashboard shows a spike in latency", "output": "The Grafana dashboard shows a spike in latency."}
+{"input": "install the tail wind css framework for the frontend", "output": "Install the Tailwind CSS framework for the frontend."}
+{"input": "the argo see dee sync failed on the production namespace", "output": "The ArgoCD sync failed on the production namespace."}
+{"input": "we need to configure the eye am roles for the lambda function", "output": "We need to configure the IAM roles for the Lambda function."}
+{"input": "the next dot js build is taking too long", "output": "The Next.js build is taking too long."}
+{"input": "the play right tests are flaky on the checkout page", "output": "The Playwright tests are flaky on the checkout page."}
+{"input": "use the sentry for error tracking in production", "output": "Use Sentry for error tracking in production."}
+{"input": "the ver cell deployment is stuck in a pending state", "output": "The Vercel deployment is stuck in a pending state."}
+{"input": "configure the ess queue el database for the analytics service", "output": "Configure the SQL database for the analytics service."}
+{"input": "the redis sentinel cluster needs a third node for quorum", "output": "The Redis Sentinel cluster needs a third node for quorum."}
+{"input": "check the kafka consumer lag on the events topic", "output": "The Kafka consumer lag on the events topic needs checking."}
+{"input": "the see eye see dee pipeline is broken on the main branch", "output": "The CI/CD pipeline is broken on the main branch."}
+{"input": "deploy the helm chart to the cube er netties namespace", "output": "Deploy the Helm chart to the Kubernetes namespace."}
+{"input": "the ans a bull playbook failed on the staging servers", "output": "The Ansible playbook failed on the staging servers."}
+{"input": "the yam l config file has a syntax error on line twelve", "output": "The YAML config file has a syntax error on line twelve."}
+{"input": "use pea gee bouncer for connection pooling with post gress", "output": "Use PgBouncer for connection pooling with Postgres."}
+{"input": "the jay double you tee token expired and the user got logged out", "output": "The JWT token expired and the user got logged out."}
+{"input": "configure the cloud flare dns records for the new subdomain", "output": "Configure the Cloudflare DNS records for the new subdomain."}
+{"input": "the web pack bundle size increased to eight megabytes", "output": "The webpack bundle size increased to eight megabytes."}
+{"input": "the open a pee eye spec needs to be updated for version three", "output": "The OpenAPI spec needs to be updated for version three."}
+{"input": "we need to set up data dog monitoring for the new service", "output": "We need to set up Datadog monitoring for the new service."}
+{"input": "the fire base cloud functions are timing out", "output": "The Firebase Cloud Functions are timing out."}
+{"input": "the tensor flow model is using too much gpu memory", "output": "The TensorFlow model is using too much GPU memory."}
+{"input": "use pie test for the unit tests instead of unit test", "output": "Use pytest for the unit tests instead of unittest."}
+{"input": "the sell ree worker is not processing tasks from the queue", "output": "The Celery worker is not processing tasks from the queue."}
+{"input": "configure the eye stee oh service mesh for the microservices", "output": "Configure the Istio service mesh for the microservices."}
+{"input": "the on ex runtime is slower than expected for inference", "output": "The ONNX Runtime is slower than expected for inference."}
+{"input": "the ess three bucket permissions are too permissive", "output": "The S3 bucket permissions are too permissive."}
+{"input": "the dynamo dee bee table needs a global secondary index", "output": "The DynamoDB table needs a global secondary index."}
+{"input": "use the svelt kit framework for the new web application", "output": "Use the SvelteKit framework for the new web application."}
+{"input": "the g r p c service is not handling errors correctly", "output": "The gRPC service is not handling errors correctly."}

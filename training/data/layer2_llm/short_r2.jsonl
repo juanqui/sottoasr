@@ -1,0 +1,99 @@
+{"input": "uh hi", "output": "Hi.", "category": "short"}
+{"input": "yeah", "output": "Yeah.", "category": "short"}
+{"input": "nope", "output": "Nope.", "category": "short"}
+{"input": "uh maybe", "output": "Maybe.", "category": "short"}
+{"input": "um okay", "output": "Okay.", "category": "short"}
+{"input": "uh thanks a lot", "output": "Thanks a lot.", "category": "short"}
+{"input": "sounds uh great", "output": "Sounds great.", "category": "short"}
+{"input": "perfect", "output": "Perfect.", "category": "short"}
+{"input": "absolutely", "output": "Absolutely.", "category": "short"}
+{"input": "uh not sure yet", "output": "Not sure yet.", "category": "short"}
+{"input": "will do", "output": "Will do.", "category": "short"}
+{"input": "roger that", "output": "Roger that.", "category": "short"}
+{"input": "um let me think", "output": "Let me think.", "category": "short"}
+{"input": "uh ill check", "output": "I'll check.", "category": "short"}
+{"input": "no worries", "output": "No worries.", "category": "short"}
+{"input": "uh good question", "output": "Good question.", "category": "short"}
+{"input": "yeah totally", "output": "Yeah, totally.", "category": "short"}
+{"input": "um i think so", "output": "I think so.", "category": "short"}
+{"input": "uh probably not", "output": "Probably not.", "category": "short"}
+{"input": "hmm interesting", "output": "Interesting.", "category": "short"}
+{"input": "uh go for it", "output": "Go for it.", "category": "short"}
+{"input": "um one sec", "output": "One sec.", "category": "short"}
+{"input": "my bad", "output": "My bad.", "category": "short"}
+{"input": "uh same here", "output": "Same here.", "category": "short"}
+{"input": "fair enough", "output": "Fair enough.", "category": "short"}
+{"input": "uh copy that", "output": "Copy that.", "category": "short"}
+{"input": "makes sense", "output": "Makes sense.", "category": "short"}
+{"input": "uh need more time", "output": "Need more time.", "category": "short"}
+{"input": "um working on it", "output": "Working on it.", "category": "short"}
+{"input": "almost done", "output": "Almost done.", "category": "short"}
+{"input": "uh be right back", "output": "Be right back.", "category": "short"}
+{"input": "uh nice work", "output": "Nice work.", "category": "short"}
+{"input": "well done", "output": "Well done.", "category": "short"}
+{"input": "um excuse me", "output": "Excuse me.", "category": "short"}
+{"input": "uh after you", "output": "After you.", "category": "short"}
+{"input": "lets uh do this", "output": "Let's do this.", "category": "short"}
+{"input": "uh im ready", "output": "I'm ready.", "category": "short"}
+{"input": "good to go", "output": "Good to go.", "category": "short"}
+{"input": "uh negative", "output": "Negative.", "category": "short"}
+{"input": "confirmed", "output": "Confirmed.", "category": "short"}
+{"input": "uh try again", "output": "Try again.", "category": "short"}
+{"input": "um not yet done", "output": "Not yet done.", "category": "short"}
+{"input": "uh still working", "output": "Still working.", "category": "short"}
+{"input": "blocked on this", "output": "Blocked on this.", "category": "short"}
+{"input": "uh needs review", "output": "Needs review.", "category": "short"}
+{"input": "lgtm", "output": "LGTM.", "category": "short"}
+{"input": "um approved merge it", "output": "Approved. Merge it.", "category": "short"}
+{"input": "revert it", "output": "Revert it.", "category": "short"}
+{"input": "uh push it", "output": "Push it.", "category": "short"}
+{"input": "cherry pick that commit", "output": "Cherry-pick that commit.", "category": "short"}
+{"input": "uh rebuild the image", "output": "Rebuild the image.", "category": "short"}
+{"input": "restart the service", "output": "Restart the service.", "category": "short"}
+{"input": "uh clear the cache", "output": "Clear the cache.", "category": "short"}
+{"input": "um check the dashboard", "output": "Check the dashboard.", "category": "short"}
+{"input": "uh rotate the keys", "output": "Rotate the keys.", "category": "short"}
+{"input": "scale up the pods", "output": "Scale up the pods.", "category": "short"}
+{"input": "uh roll it back", "output": "Roll it back.", "category": "short"}
+{"input": "bump the version", "output": "Bump the version.", "category": "short"}
+{"input": "uh ping me when done", "output": "Ping me when done.", "category": "short"}
+{"input": "update the ticket", "output": "Update the ticket.", "category": "short"}
+{"input": "uh close the issue", "output": "Close the issue.", "category": "short"}
+{"input": "file a bug", "output": "File a bug.", "category": "short"}
+{"input": "uh add a comment", "output": "Add a comment.", "category": "short"}
+{"input": "skip that test", "output": "Skip that test.", "category": "short"}
+{"input": "uh its a flaky test", "output": "It's a flaky test.", "category": "short"}
+{"input": "um the pipeline broke", "output": "The pipeline broke.", "category": "short"}
+{"input": "uh out of disk space", "output": "Out of disk space.", "category": "short"}
+{"input": "memory leak found", "output": "Memory leak found.", "category": "short"}
+{"input": "uh null pointer exception", "output": "Null pointer exception.", "category": "short"}
+{"input": "um race condition", "output": "Race condition.", "category": "short"}
+{"input": "uh timeout error", "output": "Timeout error.", "category": "short"}
+{"input": "permission denied", "output": "Permission denied.", "category": "short"}
+{"input": "uh four oh four not found", "output": "404 not found.", "category": "short"}
+{"input": "five hundred internal server error", "output": "500 internal server error.", "category": "short"}
+{"input": "uh connection refused", "output": "Connection refused.", "category": "short"}
+{"input": "ssl certificate expired", "output": "SSL certificate expired.", "category": "short"}
+{"input": "uh dns resolution failed", "output": "DNS resolution failed.", "category": "short"}
+{"input": "um patient is stable", "output": "Patient is stable.", "category": "short"}
+{"input": "uh vitals look good", "output": "Vitals look good.", "category": "short"}
+{"input": "blood pressure is normal", "output": "Blood pressure is normal.", "category": "short"}
+{"input": "uh discharge the patient", "output": "Discharge the patient.", "category": "short"}
+{"input": "um order a ct scan", "output": "Order a CT scan.", "category": "short"}
+{"input": "uh send to radiology", "output": "Send to radiology.", "category": "short"}
+{"input": "meeting is canceled", "output": "Meeting is canceled.", "category": "short"}
+{"input": "uh budget approved", "output": "Budget approved.", "category": "short"}
+{"input": "um deal closed", "output": "Deal closed.", "category": "short"}
+{"input": "uh offer accepted", "output": "Offer accepted.", "category": "short"}
+{"input": "contract signed", "output": "Contract signed.", "category": "short"}
+{"input": "uh motion denied", "output": "Motion denied.", "category": "short"}
+{"input": "um case dismissed", "output": "Case dismissed.", "category": "short"}
+{"input": "uh objection sustained", "output": "Objection sustained.", "category": "short"}
+{"input": "earnings beat expectations", "output": "Earnings beat expectations.", "category": "short"}
+{"input": "uh stock is up", "output": "Stock is up.", "category": "short"}
+{"input": "um revenue missed", "output": "Revenue missed.", "category": "short"}
+{"input": "uh happy birthday", "output": "Happy birthday!", "category": "short"}
+{"input": "um congratulations", "output": "Congratulations!", "category": "short"}
+{"input": "uh good morning everyone", "output": "Good morning, everyone.", "category": "short"}
+{"input": "see you uh monday", "output": "See you Monday.", "category": "short"}
+{"input": "have a good weekend", "output": "Have a good weekend.", "category": "short"}

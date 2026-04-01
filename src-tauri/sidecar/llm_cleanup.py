@@ -1,74 +1,30 @@
 #!/usr/bin/env python3
-"""SottoASR LLM Cleanup Sidecar — runs Qwen3.5-0.8B via MLX for transcript cleanup.
+"""SottoASR LLM Cleanup Sidecar — runs fine-tuned LFM2.5-350M via MLX.
 
 Protocol: reads JSON requests from stdin (one per line), writes JSON responses to stdout.
 
 Request format:
-  {"action": "cleanup", "text": "raw transcript", "mode": "standard"|"markdown"}
+  {"action": "cleanup", "text": "raw transcript"}
   {"action": "status"}
   {"action": "download"}
+  {"action": "load"}
   {"action": "quit"}
 
 Response format:
   {"ok": true, "text": "cleaned transcript", "elapsed_ms": 123, "tokens": 45}
-  {"ok": true, "status": "ready"|"not_downloaded"|"downloading"|"error", ...}
+  {"ok": true, "status": "ready"|"not_downloaded"|"downloaded", ...}
   {"ok": false, "error": "message"}
 """
 
-import argparse
 import json
-import re
 import sys
 import time
-import os
 
-DEFAULT_MODEL_ID = "mlx-community/Qwen3.5-2B-OptiQ-4bit"
-MODEL_ID = DEFAULT_MODEL_ID  # overridden by --model CLI arg
-
-STANDARD_PROMPT = (
-    "Clean this speech-to-text transcript.\n\n"
-    "You MUST apply ALL of these changes:\n"
-    "1. Remove fillers (uh, um, uhm, er) and crutch words (basically, you know, "
-    "I mean, honestly, literally, anyway, and filler uses of "
-    "like/so/okay/yeah/right)\n"
-    "2. Remove stuttered repetitions (\"the the\" → \"the\") and false starts\n"
-    "3. Fix punctuation, capitalization, grammar, and misheard terms\n"
-    "4. Convert spoken punctuation: \"period\" → \".\", \"dot\" → \".\", "
-    "\"comma\" → \",\", \"slash\" → \"/\", \"question mark\" → \"?\", "
-    "\"exclamation point\" → \"!\"\n"
-    "5. Self-corrections (\"wait\", \"actually\", \"no\", \"scratch that\"): "
-    "DELETE the original, keep ONLY the correction\n"
-    "6. Format numbered items (first/second/third, one/two/three) as a "
-    "numbered list\n\n"
-    "You MUST NOT paraphrase or reword. Preserve emphasis (really, very, "
-    "definitely) and phrases like \"go ahead and\", \"a lot of\". "
-    "Do not summarize.\n\n"
-    "Examples:\n"
-    "IN: \"I uh think we should use Redis, wait no, Memcached would be better\"\n"
-    "OUT: \"I think we should use Memcached.\"\n\n"
-    "IN: \"So basically the uh database is uh timing out period\"\n"
-    "OUT: \"The database is timing out.\"\n\n"
-    "IN: \"Let's go ahead and really focus on this\"\n"
-    "OUT: \"Let's go ahead and really focus on this.\"\n\n"
-    "Output only the cleaned text."
-)
-
-MARKDOWN_PROMPT = (
-    "You are a transcript-to-markdown converter. Take the raw speech transcript "
-    "and convert it into well-structured Markdown.\n\n"
-    "Rules:\n"
-    "1. Remove filler words (uh, um, like, you know)\n"
-    "2. Fix grammar and misheard words\n"
-    "3. Organize content with headings (## for main topics)\n"
-    "4. Use bullet lists for items and details\n"
-    "5. Use numbered lists for sequential items or action items\n"
-    "6. Use bold for emphasis on key terms\n"
-    "7. Keep all information — do not summarize\n\n"
-    "Output ONLY the markdown, no commentary."
-)
+MODEL_ID = "juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit"
 
 _model = None
 _tokenizer = None
+_sampler = None
 
 
 def log(msg):
@@ -77,14 +33,16 @@ def log(msg):
 
 
 def load_model():
-    global _model, _tokenizer
+    global _model, _tokenizer, _sampler
     if _model is not None:
         return True
 
     try:
         from mlx_lm import load
+        from mlx_lm.sample_utils import make_sampler
         log(f"Loading {MODEL_ID}...")
         _model, _tokenizer = load(MODEL_ID)
+        _sampler = make_sampler(temp=0.0)  # Greedy — deterministic output
         log("Model loaded successfully")
         return True
     except Exception as e:
@@ -92,90 +50,92 @@ def load_model():
         return False
 
 
-def strip_thinking_tags(text):
-    """Strip <think>...</think> blocks from model output.
+def cleanup_chunk(text):
+    """Clean a single chunk of transcript text (up to ~200 words)."""
+    from mlx_lm import generate
 
-    Qwen3/3.5 models may emit thinking blocks even when enable_thinking=False
-    is passed to apply_chat_template (e.g. if the MLX tokenizer doesn't fully
-    support that flag). This ensures only the actual response is returned.
-    """
-    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    # Also handle unclosed <think> (model stopped mid-thought)
-    cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
-    if cleaned != text.strip():
-        log(f"Stripped thinking tags ({len(text)} → {len(cleaned)} chars)")
-    return cleaned
+    prompt = f"### Input:\n{text}\n\n### Output:\n"
+    input_words = len(text.split())
+    max_output_tokens = max(256, int(input_words * 1.5))
 
-
-def cleanup_text(text, mode="standard"):
-    """Clean up transcript text using the loaded model."""
-    from mlx_lm import stream_generate
-    from mlx_lm.sample_utils import make_sampler, make_logits_processors
-
-    if _model is None or _tokenizer is None:
-        return None, "Model not loaded"
-
-    system = STANDARD_PROMPT if mode == "standard" else MARKDOWN_PROMPT
-
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": text},
-    ]
-
-    prompt = _tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=False,
-    )
-
-    sampler = make_sampler(temp=0.3, top_p=0.9)
-    logits_processors = make_logits_processors(repetition_penalty=1.10)
-
-    start = time.perf_counter()
-    segments = []
-    last_resp = None
-    for resp in stream_generate(
+    output = generate(
         _model,
         _tokenizer,
         prompt=prompt,
-        max_tokens=4096,
-        sampler=sampler,
-        logits_processors=logits_processors,
-    ):
-        segments.append(resp.text)
-        last_resp = resp
+        max_tokens=max_output_tokens,
+        sampler=_sampler,
+        verbose=False,
+    )
+
+    output = output.strip()
+    if "###" in output:
+        output = output[:output.index("###")].strip()
+
+    return output
+
+
+def cleanup_text(text):
+    """Clean up transcript text using the fine-tuned model."""
+    if _model is None or _tokenizer is None:
+        return None, "Model not loaded"
+
+    start = time.perf_counter()
+    output = cleanup_chunk(text)
     elapsed = time.perf_counter() - start
-
-    output = "".join(segments).strip()
-    gen_tokens = last_resp.generation_tokens if last_resp else 0
-
-    # Strip any thinking blocks the model may have emitted
-    output = strip_thinking_tags(output)
-
-    return output, None, elapsed, gen_tokens
+    return output, None, elapsed
 
 
-def check_model_downloaded():
-    """Check if model files are cached locally."""
+def get_local_revision():
+    """Get the locally cached model revision (commit hash), or None."""
     try:
         from huggingface_hub import scan_cache_dir
         cache = scan_cache_dir()
         for repo in cache.repos:
             if MODEL_ID.replace("/", "--") in str(repo.repo_id).replace("/", "--"):
-                return True
-        return False
+                # Get the latest revision from the cached repo
+                revisions = list(repo.revisions)
+                if revisions:
+                    return revisions[0].commit_hash
+        return None
     except Exception:
-        return False
+        return None
+
+
+def get_remote_revision():
+    """Get the latest revision from HuggingFace Hub, or None on error."""
+    try:
+        from huggingface_hub import repo_info
+        info = repo_info(MODEL_ID, repo_type="model", timeout=10)
+        return info.sha
+    except Exception as e:
+        log(f"Could not check remote revision: {e}")
+        return None
+
+
+def check_model_downloaded():
+    """Check if model files are cached locally."""
+    return get_local_revision() is not None
+
+
+def check_update_available():
+    """Check if a newer model version is available on HuggingFace."""
+    local = get_local_revision()
+    if not local:
+        return False, None, None  # Not downloaded, can't update
+    remote = get_remote_revision()
+    if not remote:
+        return False, local, None  # Can't check remote
+    update_available = local != remote
+    return update_available, local, remote
 
 
 def download_model():
-    """Download the model (delegated to huggingface_hub)."""
+    """Download (or update) the model from HuggingFace."""
     try:
         from huggingface_hub import snapshot_download
         log(f"Downloading {MODEL_ID}...")
-        snapshot_download(MODEL_ID)
-        log("Download complete")
+        path = snapshot_download(MODEL_ID)
+        log(f"Download complete: {path}")
         return True, None
     except Exception as e:
         return False, str(e)
@@ -192,13 +152,24 @@ def handle_request(req):
     if action == "status":
         downloaded = check_model_downloaded()
         loaded = _model is not None
+        local_rev = get_local_revision()
         respond({
             "ok": True,
             "status": "ready" if loaded else ("not_downloaded" if not downloaded else "downloaded"),
             "downloaded": downloaded,
             "loaded": loaded,
-            "model_name": MODEL_ID.split("/")[-1] if "/" in MODEL_ID else MODEL_ID,
+            "model_name": "SottoASR Cleanup",
             "model_id": MODEL_ID,
+            "local_revision": local_rev,
+        })
+
+    elif action == "check_update":
+        update_available, local_rev, remote_rev = check_update_available()
+        respond({
+            "ok": True,
+            "update_available": update_available,
+            "local_revision": local_rev,
+            "remote_revision": remote_rev,
         })
 
     elif action == "download":
@@ -217,48 +188,36 @@ def handle_request(req):
 
     elif action == "cleanup":
         text = req.get("text", "")
-        mode = req.get("mode", "standard")
 
         if not text.strip():
             respond({"ok": True, "text": text, "elapsed_ms": 0, "tokens": 0})
             return
 
-        # Skip very short inputs
+        # Skip very short inputs (< 5 words)
         if len(text.split()) < 5:
             respond({"ok": True, "text": text, "elapsed_ms": 0, "tokens": 0})
             return
 
-        # Auto-load model if not loaded
+        # Check if model is downloaded before attempting load
         if _model is None:
+            if not check_model_downloaded():
+                respond({"ok": False, "error": "model_not_downloaded"})
+                return
             if not load_model():
-                respond({"ok": False, "error": "Model not available"})
+                respond({"ok": False, "error": "Failed to load model"})
                 return
 
-        result = cleanup_text(text, mode)
+        result = cleanup_text(text)
         if result[1] is not None:  # error
             respond({"ok": False, "error": result[1]})
         else:
-            output, _, elapsed, tokens = result
-            # Validate output length ratio
-            ratio = len(output) / len(text) if text else 1.0
-            if ratio < 0.3 or ratio > 2.5:
-                log(f"Output ratio {ratio:.2f} outside bounds (input={len(text)}, output={len(output)}), using raw text")
-                log(f"  First 200 chars of output: {output[:200]!r}")
-                respond({
-                    "ok": True,
-                    "text": text,
-                    "elapsed_ms": int(elapsed * 1000),
-                    "tokens": tokens,
-                    "fallback": True,
-                    "fallback_reason": f"output ratio {ratio:.2f} outside bounds",
-                })
-            else:
-                respond({
-                    "ok": True,
-                    "text": output,
-                    "elapsed_ms": int(elapsed * 1000),
-                    "tokens": tokens,
-                })
+            output, _, elapsed = result
+            respond({
+                "ok": True,
+                "text": output,
+                "elapsed_ms": int(elapsed * 1000),
+                "tokens": 0,
+            })
 
     elif action == "quit":
         respond({"ok": True})
@@ -269,14 +228,7 @@ def handle_request(req):
 
 
 def main():
-    global MODEL_ID
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=DEFAULT_MODEL_ID, help="HuggingFace model ID")
-    args = parser.parse_args()
-    MODEL_ID = args.model
-
-    log(f"Sidecar started (model={MODEL_ID}), waiting for requests on stdin...")
+    log(f"SottoASR cleanup sidecar started (model={MODEL_ID})")
 
     for line in sys.stdin:
         line = line.strip()

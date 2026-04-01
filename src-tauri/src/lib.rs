@@ -72,7 +72,9 @@ pub fn run() {
             commands::setup::complete_setup,
             // LLM transcript cleanup
             commands::llm::get_llm_status,
+            commands::llm::check_llm_update,
             commands::llm::download_llm_model,
+            commands::llm::update_llm_model,
             commands::llm::cancel_llm_download,
             commands::llm::delete_llm_model,
             commands::llm::load_llm_model,

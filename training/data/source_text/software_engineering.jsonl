@@ -1,0 +1,150 @@
+{"text": "Can you take a look at my pull request for the authentication refactor when you get a chance?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Redis cache is returning stale data because we forgot to invalidate the session keys after the user updates their profile.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I just deployed the hotfix to production and the error rate dropped back to normal within five minutes.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to add an index on the created_at column in the orders table because that query is doing a full table scan.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The React component is re-rendering on every keystroke because we're not memoizing the callback passed to the child component.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's schedule a meeting to discuss the migration from MongoDB to PostgreSQL, figure out the timeline for the data transfer, decide how we'll handle the schema mapping for the nested document structures, and determine whether we need a dual-write period to avoid downtime during the cutover.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "GitHub Actions failed on the lint step again.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I think we should use a message queue like RabbitMQ or Amazon SQS to decouple the notification service from the main API so we can handle spikes in traffic without dropping events.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Docker container keeps running out of memory because the Node.js process has no heap limit set.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can someone review the Terraform changes before I apply them to the staging environment?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I updated the OpenAPI spec to include the new pagination parameters for the list endpoints.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The flaky test in the checkout flow is caused by a race condition between the payment webhook and the order confirmation handler.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should enable branch protection rules on the main branch to require at least two approvals before merging.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to spend the afternoon profiling the API response times because the P99 latency has been creeping up over the past week.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Kubernetes pod is stuck in a crash loop because the health check endpoint returns a 503 before the database connection pool is initialized.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please add unit tests for the new discount calculation logic before we merge this into the release branch.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The CI pipeline takes forty-five minutes now and we really need to look into parallelizing the test suite.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I pushed a commit that fixes the CORS issue on the staging server.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We're seeing intermittent 502 errors from the load balancer, and I suspect it's because the backend instances are taking too long to respond to the health checks during garbage collection pauses.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The TypeScript compiler is throwing an error because the interface we defined doesn't match the shape of the API response.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's move the shared validation logic into a utility module so both the frontend and the backend can use the same rules.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I set up a new Grafana dashboard for monitoring the queue depth and consumer lag on the Kafka topics.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The database migration script needs a rollback step in case the deployment fails halfway through.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Hey team, quick update: the feature flag for dark mode is now enabled in staging and ready for QA testing.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to rotate the SSL certificates before they expire next Friday.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Svelte component isn't reactive because we forgot to use the dollar sign prefix on the store variable.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm investigating a memory leak in the WebSocket handler that causes the server to consume an additional gigabyte of RAM every hour under sustained load.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you bump the version in the package.json and create a new tag for the release?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The GraphQL resolver is doing an N plus one query because we're fetching related records inside a loop instead of batching them with a DataLoader.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I think the best approach is to use a circuit breaker pattern for the external payment API so we don't cascade failures to the rest of the system.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Nginx configuration needs to be updated to proxy WebSocket connections correctly.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should add a dead letter queue for messages that fail processing more than three times so we can investigate them later without blocking the pipeline.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I just finished writing integration tests for the user registration flow and all twelve test cases are passing.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The build is broken on the feature branch because someone merged main without resolving the conflicts in the router configuration.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please update the README with the new environment variables required to run the project locally.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Our Elasticsearch cluster is running low on disk space and we need to set up an index lifecycle policy to automatically delete old logs.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The API rate limiter is configured to allow one hundred requests per minute per user, but we should increase that to two hundred for premium tier accounts.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I noticed that the error boundary in the React app isn't catching errors thrown inside async event handlers.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's use Tailwind CSS for the new dashboard page so we stay consistent with the rest of the frontend.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The PostgreSQL connection pool is exhausted because the background workers are holding connections open during long-running report generation jobs.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I created a Jira ticket for the accessibility audit and linked it to the Q2 compliance epic.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should implement structured logging with JSON output so that our log aggregation system can parse and index the fields automatically.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The end-to-end tests are failing in CI because the Playwright browser binary wasn't installed in the Docker image.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you check if the cron job that cleans up expired sessions is still running on the production server?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to refactor the authentication middleware to support both JWT and API key authentication methods in a single unified handler.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The S3 bucket policy needs to be tightened because right now any authenticated AWS user can list objects in it.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We switched from REST to gRPC for the internal microservice communication and saw a thirty percent reduction in latency.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The linter is complaining about unused imports in the utils file.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I added a pre-commit hook that runs Prettier and ESLint so we catch formatting issues before they make it into the PR.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The staging database needs to be seeded with the latest anonymized production data for the QA team to use during their testing cycle, and we also need to make sure the personal identifiable information scrubbing script runs correctly before any data is copied over to avoid compliance violations.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's add a retry mechanism with exponential backoff to the HTTP client so transient network failures don't cause the entire batch job to fail.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm seeing a segmentation fault in the Rust FFI layer when we pass a null pointer across the boundary.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The feature branch is twelve commits behind main so please rebase before opening the pull request.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to add CSRF protection to the form submission endpoints because the current implementation only validates the session cookie.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I deployed the canary release to five percent of traffic and the error rate looks stable so far.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Vue component's computed property is not updating because we're mutating the array directly instead of using the reactive setter.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you add a health check endpoint that returns the application version and the status of all downstream dependencies?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I ran the load test with ten thousand concurrent users and the API started returning 429 status codes after about two minutes.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The ArgoCD sync is failing because the Helm chart values reference a secret that doesn't exist in the target namespace.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should move the email sending logic out of the request handler and into a background worker so the API response time isn't affected by SMTP latency.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I need to write a database migration that adds a nullable JSON column to the users table for storing notification preferences.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Sentry dashboard shows a spike in unhandled promise rejections starting around noon today.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's pair on the service mesh configuration this afternoon because I'm not sure my Istio virtual service routes are correct.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Python type checker is flagging the return type of the serializer because it can return either a list or a single object depending on the input.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I updated the GitHub Actions workflow to cache the Cargo build artifacts so subsequent runs should be about ten minutes faster.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We found a SQL injection vulnerability in the search endpoint because user input is being interpolated directly into the query string.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The mobile app is crashing on launch because the API changed the response format and the client wasn't updated to handle the new structure.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please make sure the environment variables are set correctly in the Kubernetes config map before you deploy.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to set up a PagerDuty integration so the on-call engineer gets alerted when the error rate exceeds one percent.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Next.js build is failing because we're importing a server-only module in a client component.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should use database transactions for the order placement flow to ensure that inventory deduction and order creation happen atomically.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'll cherry-pick that bug fix into the release branch so we can ship it without waiting for the full feature merge.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The DynamoDB table is being throttled because we exceeded the provisioned read capacity during the morning traffic peak.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you update the Docker Compose file to pin the Postgres image to version 16 instead of using the latest tag?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The async iterator in the stream processing pipeline is not yielding results because the backpressure mechanism is pausing the producer indefinitely.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I added Dependabot configuration to the repository so we get automated pull requests when dependencies have security patches available.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's discuss the trade-offs between using a monorepo versus separate repositories for the frontend and backend services at tomorrow's architecture meeting.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The OAuth callback URL is wrong in the production configuration and that's why users can't log in with Google.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to implement rate limiting on the public API using a sliding window algorithm to prevent abuse from automated clients.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to add a Prometheus metrics endpoint to the service so we can track request duration histograms and error counters in our monitoring stack.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Go goroutine is leaking because we never close the done channel when the context is cancelled.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please review my changes to the Webpack configuration because I'm not confident the code splitting is set up correctly for the lazy-loaded routes.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The staging environment is down because someone applied the Terraform destroy command to the wrong workspace.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I think we should adopt the strangler fig pattern to incrementally migrate the monolith to microservices without a big-bang rewrite.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The npm audit report shows three high-severity vulnerabilities in our transitive dependencies that we need to address before the release.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I wrote a custom ESLint rule to enforce that all API handler functions include proper error handling with try-catch blocks.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Vercel deployment preview is showing a blank page because the build output directory is misconfigured in the project settings.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to set up a read replica for the primary database to handle the increasing volume of analytics queries without impacting write performance.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm adding a feature flag check at the top of the new checkout flow so we can gradually roll it out to users by percentage.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Swift compiler is showing a retain cycle warning in the closure because we're capturing self strongly instead of using a weak reference.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you run the Flyway migration locally and confirm it applies cleanly before I merge the pull request?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The WebAssembly module loads in about two hundred milliseconds which is fast enough for our use case.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm seeing a deadlock in the connection pool because two transactions are waiting on locks held by each other.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's add OpenTelemetry tracing to the payment service so we can see the full request lifecycle across all three microservices involved in a transaction.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The lambda function timed out because the VPC configuration doesn't have a NAT gateway for outbound internet access.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I need to refactor this class to use dependency injection so we can properly mock the external service in our unit tests.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The content security policy header is blocking our inline scripts and we need to add a nonce-based exception for the analytics tag.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Sprint retrospective note: we underestimated the complexity of the payment integration and should allocate more buffer time for third-party API work in future sprints, especially since the Stripe API documentation was outdated and we had to reverse-engineer the correct webhook signature verification flow by reading their SDK source code.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I configured the Redis Sentinel setup with three nodes for automatic failover in case the primary instance goes down.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Android build is failing because the Gradle version in the wrapper properties file is incompatible with the latest Android Gradle plugin.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please squash the last four commits into one before merging so the git history stays clean.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should implement idempotency keys on the payment endpoint to prevent duplicate charges when the client retries a failed request.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Jest test suite is passing locally but failing in CI because the timezone is different on the build server.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I added a composite index on customer_id and order_date which brought the query time down from eight seconds to fifty milliseconds.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can someone help me debug this YAML indentation issue in the Kubernetes deployment manifest?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The API gateway is stripping the authorization header before forwarding requests to the downstream service.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to write a data migration script that backfills the new email_verified column for all existing users based on their last login date.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We ran into a circular dependency between the user module and the notification module that we need to resolve by extracting a shared interface.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The CloudFront distribution is serving cached content even after we deployed the new version because we forgot to create an invalidation.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I set up SonarQube for static analysis and the initial scan found over two hundred code smells in the legacy codebase.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's use server-sent events instead of polling for the real-time notification feature because it will reduce the load on our API significantly.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Rust borrow checker is rejecting this code because we're trying to mutably borrow the vector while an immutable reference to one of its elements is still in scope.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I need to update the Swagger documentation to reflect the breaking changes we made to the user endpoint response format.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The load balancer session affinity setting is causing uneven traffic distribution because most long-lived connections are landing on the same backend pod.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you check the CloudWatch logs for the Lambda function to see why the scheduled job didn't run last night?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should add snapshot testing for the UI components to catch unintended visual regressions.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm implementing a blue-green deployment strategy using AWS CodeDeploy so we can switch traffic instantly and roll back if something goes wrong.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Prisma schema needs to be updated to add the new many-to-many relationship between projects and tags.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We discovered that the third-party analytics SDK is sending user data to an external server, which violates our privacy policy.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The GitHub webhook is not triggering the CI pipeline because the secret token in the repository settings doesn't match the one configured in Jenkins.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I want to introduce a caching layer between the API and the database using Redis with a five-minute TTL for frequently accessed product listings.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The compiler is warning us about an implicit conversion from a 64-bit integer to a 32-bit integer which could cause data truncation.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please add the new service account credentials to HashiCorp Vault instead of storing them as plain text in the config file.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We're going to decompose the monolithic order service into three separate microservices for inventory, pricing, and fulfillment, each with its own PostgreSQL database and communicating through an event bus so that teams can deploy and scale them independently without coordinating release schedules across the organization.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The test coverage report shows that the error handling paths in the payment module are completely untested.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I fixed the race condition by wrapping the shared state access in a mutex and the intermittent test failure hasn't reproduced since.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Tailwind JIT compiler is not picking up our custom utility classes because the content paths in the config don't include the component library directory.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Let's set up a staging environment that mirrors production exactly, including the same instance types, network topology, load balancer configuration, and database replication setup, so that when we run our performance benchmarks and integration tests the results will actually be representative of what users experience in production.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I need someone to pair with me on writing the database seed script for the new multi-tenant architecture.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The API response time degraded because the ORM is generating a suboptimal query with multiple unnecessary joins for the dashboard endpoint.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should automate the certificate renewal process using Certbot with a cron job instead of manually renewing every three months.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I just discovered that our Docker images are three gigabytes because we're using the full Ubuntu base instead of Alpine.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The event sourcing implementation needs a projection rebuild mechanism for when we change the shape of the read model.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you add the missing TypeScript types for the configuration object so the IDE autocompletion works correctly?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The RabbitMQ consumer is acknowledging messages before processing them, which means we lose data if the worker crashes mid-execution.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I optimized the SQL query by replacing the correlated subquery with a lateral join and the execution time dropped from twelve seconds to under one hundred milliseconds.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to implement soft deletes on the customer records table to comply with the data retention requirements from legal.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Cypress test for the login flow is timing out because the mock server isn't returning the expected response for the token refresh endpoint.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm setting up GitHub Actions to run the security scanning workflow on every pull request targeting the main branch.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The DNS propagation for the new subdomain hasn't completed yet so some users are still hitting the old server.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We should consider using a write-ahead log for the event store to guarantee durability even if the process crashes before flushing to disk.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I rolled back the deployment because the new version introduced a regression in the search results ranking algorithm.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The Spring Boot application context is failing to start because there are two beans of the same type and no qualifier annotation to disambiguate them.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Please create a separate branch for the experimental machine learning feature so it doesn't interfere with the main release cycle.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The API endpoint returns a 413 error for file uploads larger than ten megabytes because the Nginx client_max_body_size directive is too low.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "I'm going to set up a Datadog APM dashboard that shows the latency breakdown for each service in the request chain.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "We need to hash and salt the passwords using bcrypt instead of storing them with a simple SHA-256 digest.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "The serverless function cold start time is over three seconds which makes it unsuitable for user-facing API calls.", "domain": "software_engineering", "source": "synthetic"}
+{"text": "Can you verify that the backup restoration procedure actually works by spinning up a fresh instance and restoring last night's snapshot?", "domain": "software_engineering", "source": "synthetic"}
+{"text": "During the post-mortem we identified that the root cause of the four-hour outage was a misconfigured autoscaling policy that prevented new instances from launching when the CPU utilization on the existing nodes exceeded ninety percent, which caused a cascading failure across all three availability zones.", "domain": "software_engineering", "source": "synthetic"}

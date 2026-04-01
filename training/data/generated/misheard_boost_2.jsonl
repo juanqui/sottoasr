@@ -1,0 +1,45 @@
+{"input": "the patient presents with tacky card ya at one twenty beats per minute", "output": "The patient presents with tachycardia at 120 beats per minute."}
+{"input": "order a comp you ted tom ography scan of the abdomen", "output": "Order a computed tomography scan of the abdomen."}
+{"input": "the echo card yo gram shows reduced ejection fraction", "output": "The echocardiogram shows reduced ejection fraction."}
+{"input": "start the patient on met form in five hundred milligrams twice daily", "output": "Start the patient on metformin 500 milligrams twice daily."}
+{"input": "the patient has anna fill axis to penicillin", "output": "The patient has anaphylaxis to penicillin."}
+{"input": "prescribe a tor va stat in forty milligrams nightly", "output": "Prescribe atorvastatin 40 milligrams nightly."}
+{"input": "the new moan ya is bilateral on the chest x ray", "output": "The pneumonia is bilateral on the chest X-ray."}
+{"input": "check the hemo globe in a one c levels for diabetes control", "output": "Check the hemoglobin A1C levels for diabetes control."}
+{"input": "the patient has hyper tension and die a beat ease", "output": "The patient has hypertension and diabetes."}
+{"input": "order a pair of card yal effusion drainage", "output": "Order a pericardial effusion drainage."}
+{"input": "the patient needs an electro card yo gram stat", "output": "The patient needs an electrocardiogram stat."}
+{"input": "start lev a terra seem for the seizure control", "output": "Start levetiracetam for the seizure control."}
+{"input": "check the brain natty you ret ick peptide levels", "output": "Check the brain natriuretic peptide levels."}
+{"input": "the patient has gas tro ee sof a gee al reflux", "output": "The patient has gastroesophageal reflux."}
+{"input": "order a mag net ick resonance imaging of the lumbar spine", "output": "Order a magnetic resonance imaging of the lumbar spine."}
+{"input": "the rehab ill itation protocol includes three sessions per week", "output": "The rehabilitation protocol includes three sessions per week."}
+{"input": "prescribe oh mep raz ole twenty milligrams daily", "output": "Prescribe omeprazole 20 milligrams daily."}
+{"input": "the patient shows signs of sep tuh see mee ah", "output": "The patient shows signs of septicemia."}
+{"input": "start anti co ag you lation therapy with a pix a ban", "output": "Start anticoagulation therapy with apixaban."}
+{"input": "the path all oh gee report confirms malignancy", "output": "The pathology report confirms malignancy."}
+{"input": "the plane tiff filed a motion for summary judgment", "output": "The plaintiff filed a motion for summary judgment."}
+{"input": "issue a sub pee na for the electronic communications", "output": "Issue a subpoena for the electronic communications."}
+{"input": "the force ma jure clause covers pandemic related disruptions", "output": "The force majeure clause covers pandemic-related disruptions."}
+{"input": "the in dem niff ick ation clause caps liability at the purchase price", "output": "The indemnification clause caps liability at the purchase price."}
+{"input": "schedule the dep oh zish un for next tuesday", "output": "Schedule the deposition for next Tuesday."}
+{"input": "the hay bee us corpus petition was filed in federal court", "output": "The habeas corpus petition was filed in federal court."}
+{"input": "review the no low con ten dare plea agreement", "output": "Review the nolo contendere plea agreement."}
+{"input": "the statue of limitations expires in three years", "output": "The statute of limitations expires in three years."}
+{"input": "the ee bit da margin expanded to twenty two percent", "output": "The EBITDA margin expanded to twenty-two percent."}
+{"input": "the a more tization schedule spans fifteen years", "output": "The amortization schedule spans fifteen years."}
+{"input": "the dee see eff model shows a fourteen percent irr", "output": "The DCF model shows a fourteen percent IRR."}
+{"input": "check the whack for the capital structure analysis", "output": "Check the WACC for the capital structure analysis."}
+{"input": "the so fur rate replaced libor for the benchmark", "output": "The SOFR rate replaced LIBOR for the benchmark."}
+{"input": "review the ten k filing for material weaknesses", "output": "Review the 10-K filing for material weaknesses."}
+{"input": "the accounts re see vable aging is at ninety days", "output": "The accounts receivable aging is at ninety days."}
+{"input": "run a buy see an regression analysis on the dataset", "output": "Run a Bayesian regression analysis on the dataset."}
+{"input": "the pea value is below point oh five indicating significance", "output": "The p-value is below 0.05, indicating significance."}
+{"input": "use the co hens dee metric for effect size measurement", "output": "Use the Cohen's d metric for effect size measurement."}
+{"input": "the eye are bee approved the study protocol", "output": "The IRB approved the study protocol."}
+{"input": "apply the bon fair oh knee correction for multiple comparisons", "output": "Apply the Bonferroni correction for multiple comparisons."}
+{"input": "the man whitney you test is appropriate for non parametric data", "output": "The Mann-Whitney U test is appropriate for non-parametric data."}
+{"input": "the cry oh electron microscopy images show protein structure", "output": "The cryo-electron microscopy images show protein structure."}
+{"input": "use principal component analysis to reduce die mention ality", "output": "Use principal component analysis to reduce dimensionality."}
+{"input": "the anova test shows significant between group differences", "output": "The ANOVA test shows significant between-group differences."}
+{"input": "the kaplan my er survival curve shows median survival of eight months", "output": "The Kaplan-Meier survival curve shows median survival of eight months."}

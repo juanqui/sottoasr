@@ -492,8 +492,6 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 // LLM cleanup (if enabled and input is long enough)
                 let settings = state.settings.lock().await;
                 let llm_enabled = settings.llm_cleanup_enabled;
-                let markdown_mode = settings.llm_markdown_mode;
-                let llm_model_size = settings.llm_model_size.clone();
                 let auto_paste = settings.auto_paste;
                 let restore_clipboard = settings.restore_clipboard;
                 let restore_focus_before_paste = settings.restore_focus_before_paste;
@@ -504,34 +502,14 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     state.set_state(AppStateEnum::CleaningUp);
                     let _ = app_clone.emit("state-changed", &AppStateEnum::CleaningUp);
 
-                    let mode = if markdown_mode {
-                        crate::llm::prompts::CleanupMode::Markdown
-                    } else {
-                        crate::llm::prompts::CleanupMode::Standard
-                    };
-
-                    let selected_model_id = crate::llm::engine::model_id_for_size(&llm_model_size).to_string();
-
                     {
                         let mut llm_guard = state.llm_engine.lock().await;
 
-                        // Respawn sidecar if model changed or not running
-                        let needs_spawn = match llm_guard.as_ref() {
-                            None => true,
-                            Some(engine) => engine.model_id != selected_model_id,
-                        };
-
-                        if needs_spawn {
-                            // Shut down old sidecar if model changed
-                            if let Some(mut old) = llm_guard.take() {
-                                log::info!("Model changed, shutting down old sidecar");
-                                old.quit();
-                            }
-
-                            log::info!("Spawning LLM sidecar for {}...", selected_model_id);
-                            let model_id_for_spawn = selected_model_id.clone();
+                        // Spawn sidecar if not running
+                        if llm_guard.is_none() {
+                            log::info!("Spawning LLM sidecar...");
                             match tokio::task::spawn_blocking(move || {
-                                crate::llm::engine::LlmEngine::spawn_with_model(&model_id_for_spawn)
+                                crate::llm::engine::LlmEngine::spawn()
                             }).await {
                                 Ok(Ok(engine)) => {
                                     *llm_guard = Some(engine);
@@ -550,9 +528,9 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                             let text_for_cleanup = final_text.clone();
 
                             let cleanup_result = tokio::time::timeout(
-                                std::time::Duration::from_secs(30),
+                                std::time::Duration::from_secs(120), // 2 min — long transcriptions need time
                                 tokio::task::spawn_blocking(move || {
-                                    let result = llm.cleanup(&text_for_cleanup, mode);
+                                    let result = llm.cleanup(&text_for_cleanup);
                                     (llm, result)
                                 }),
                             ).await;
@@ -861,25 +839,30 @@ pub fn precreate_overlay(app: &AppHandle) {
 
 /// Show the floating overlay pill panel. Creates it if it doesn't exist.
 /// Panel operations (show/hide/create) must run on the main thread for NSPanel.
+///
+/// Positioning uses native macOS APIs (NSScreen, CGWindowList, setFrameOrigin:)
+/// to bypass Tauri's buggy multi-monitor coordinate handling.
 fn show_overlay(app: &AppHandle) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
+        // Determine which screen to show the overlay on.
+        // Uses the focused app's window first, then mouse cursor, then primary.
+        let state = app.state::<AppState>();
+        let target_pid = state.target_pid.load(Ordering::SeqCst);
+        let target_screen = select_target_screen(target_pid);
+
         // Try to show an existing panel first
         if let Ok(panel) = app.get_webview_panel("overlay") {
             panel.show();
             // Re-apply floating level after show — this is required to fix
             // Tauri issue #13530 where the setting is lost after hide/show.
-            // The PanelLevel::Floating keeps the window above normal windows.
             use tauri_nspanel::PanelLevel;
             panel.set_level(PanelLevel::Floating.into());
-            // Re-apply floating panel behavior to ensure consistent layering
             panel.set_floating_panel(true);
-            // Bring to front without activating
             panel.order_front_regardless();
-            if let Some(window) = app.get_webview_window("overlay") {
-                if let Some(pos) = compute_overlay_position(&window) {
-                    let _ = window.set_position(pos);
-                }
+            // Position natively (bypassing Tauri set_position)
+            if let Some(ref screen) = target_screen {
+                position_overlay_native(panel.as_panel(), screen);
             }
             log::info!("Overlay shown (existing panel, floating level reapplied)");
             return;
@@ -889,9 +872,7 @@ fn show_overlay(app: &AppHandle) {
         // conversion failed in the past and we have a plain window instead).
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.show();
-            if let Some(pos) = compute_overlay_position(&window) {
-                let _ = window.set_position(pos);
-            }
+            // Best-effort positioning via Tauri for non-panel fallback
             log::info!("Overlay shown (existing window fallback)");
             return;
         }
@@ -922,11 +903,6 @@ fn show_overlay(app: &AppHandle) {
             }
         };
 
-        // Position the window
-        if let Some(pos) = compute_overlay_position(&window) {
-            let _ = window.set_position(pos);
-        }
-
         // Convert to NSPanel for true transparency.
         match window.to_panel::<OverlayPanel>() {
             Ok(panel) => {
@@ -940,6 +916,11 @@ fn show_overlay(app: &AppHandle) {
 
                 // Synchronously clear backgrounds on ALL views in the hierarchy.
                 clear_all_backgrounds(panel.as_panel());
+
+                // Position natively before showing
+                if let Some(ref screen) = target_screen {
+                    position_overlay_native(panel.as_panel(), screen);
+                }
 
                 panel.show();
                 log::info!("Overlay panel created and shown");
@@ -963,6 +944,18 @@ fn hide_overlay(app: &AppHandle) {
         }
 
         if let Ok(panel) = app.get_webview_panel("overlay") {
+            // Save the user's position before hiding.
+            // Find which screen the overlay center is on and persist for that display.
+            let panel_ref = panel.as_panel();
+            let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
+                tauri_nspanel::objc2::msg_send![panel_ref, frame]
+            };
+            let center_x = frame.origin.x + frame.size.width / 2.0;
+            let center_y = frame.origin.y + frame.size.height / 2.0;
+            let screens = get_native_screens();
+            if let Some(idx) = screen_containing_point(&screens, center_x, center_y) {
+                save_panel_position(panel_ref, screens[idx].display_id);
+            }
             panel.hide();
             log::info!("Overlay hidden");
         } else if let Some(window) = app.get_webview_window("overlay") {
@@ -1025,66 +1018,329 @@ fn clear_all_backgrounds(panel: &tauri_nspanel::NSPanel) {
     }
 }
 
-/// Compute overlay position: centered horizontally, 100 logical pixels above bottom.
-/// Uses the monitor containing the mouse cursor (active screen), falling back to primary.
-fn compute_overlay_position(window: &tauri::WebviewWindow) -> Option<tauri::PhysicalPosition<i32>> {
-    // Prefer the monitor under the mouse cursor (the screen the user is actively on)
-    let monitor = window.available_monitors().ok()
-        .and_then(|monitors| {
-            let mouse_pos = get_mouse_position();
-            monitors.into_iter().find(|m| {
-                let pos = m.position();
-                let size = m.size();
-                mouse_pos.0 >= pos.x && mouse_pos.0 < pos.x + size.width as i32
-                    && mouse_pos.1 >= pos.y && mouse_pos.1 < pos.y + size.height as i32
-            })
-        })
-        .or_else(|| window.current_monitor().ok().flatten())
-        .or_else(|| window.primary_monitor().ok().flatten())?;
+// ---------------------------------------------------------------------------
+// Native multi-monitor overlay positioning
+//
+// Bypasses Tauri's buggy monitor/positioning APIs (see tauri#10980, #7890,
+// #14825) by using macOS native APIs directly:
+//   - NSScreen.screens        → screen enumeration
+//   - CGWindowListCopyWindowInfo → focused-app window bounds
+//   - NSEvent.mouseLocation   → cursor position
+//   - NSPanel.setFrameOrigin: → window placement
+//
+// All coordinates stay in Cocoa's coordinate system (logical points, origin
+// at bottom-left of primary display) to avoid cross-system conversion bugs.
+//
+// The overlay is draggable. User-chosen positions are remembered per monitor
+// (keyed by CGDirectDisplayID) and restored on subsequent recordings.
+// ---------------------------------------------------------------------------
 
-    let screen = monitor.size();
-    let scale = monitor.scale_factor();
-    let pos = monitor.position();
-
-    let win_phys_w = (OVERLAY_WIDTH * scale) as i32;
-    let win_phys_h = (OVERLAY_HEIGHT * scale) as i32;
-
-    let x = pos.x + (screen.width as i32 - win_phys_w) / 2;
-    let margin_bottom = (100.0 * scale) as i32;
-    let y = pos.y + screen.height as i32 - win_phys_h - margin_bottom;
-
-    log::info!(
-        "Overlay at ({}, {}) — screen {}x{} scale={} margin_bottom={}px",
-        x, y, screen.width, screen.height, scale, margin_bottom
-    );
-
-    Some(tauri::PhysicalPosition::new(x, y))
+/// Saved overlay position for a specific monitor.
+/// Stored as absolute Cocoa coordinates — validated against current visibleFrame on restore.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct SavedOverlayPosition {
+    x: f64,
+    y: f64,
 }
 
-/// Get the current mouse cursor position in global (physical) coordinates.
-fn get_mouse_position() -> (i32, i32) {
-    unsafe {
-        // NSEvent.mouseLocation returns the position in screen coordinates
-        // with origin at bottom-left. Tauri uses top-left origin, so we need
-        // to flip the Y coordinate using the main screen height.
-        let mouse_loc: tauri_nspanel::objc2_foundation::NSPoint =
-            tauri_nspanel::objc2::msg_send![
-                tauri_nspanel::objc2::class!(NSEvent),
-                mouseLocation
-            ];
-        // Get main screen height for Y-flip
-        let screens: *const tauri_nspanel::objc2_foundation::NSArray<tauri_nspanel::objc2_app_kit::NSScreen> =
-            tauri_nspanel::objc2::msg_send![
-                tauri_nspanel::objc2::class!(NSScreen),
-                screens
-            ];
-        let main_screen: *const tauri_nspanel::objc2_app_kit::NSScreen =
-            tauri_nspanel::objc2::msg_send![&*screens, objectAtIndex: 0usize];
-        let main_frame: tauri_nspanel::objc2_foundation::NSRect =
-            tauri_nspanel::objc2::msg_send![main_screen, frame];
+/// Map from display_id (as string) to saved position.
+type OverlayPositions = std::collections::HashMap<String, SavedOverlayPosition>;
 
-        let x = mouse_loc.x as i32;
-        let y = (main_frame.size.height - mouse_loc.y) as i32;
+fn overlay_positions_path() -> Option<std::path::PathBuf> {
+    let data_dir = dirs::data_dir()?;
+    let app_dir = data_dir.join("com.sottoasr.app");
+    std::fs::create_dir_all(&app_dir).ok()?;
+    Some(app_dir.join("overlay_positions.json"))
+}
+
+fn load_overlay_positions() -> OverlayPositions {
+    let path = match overlay_positions_path() {
+        Some(p) if p.exists() => p,
+        _ => return OverlayPositions::new(),
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
+        Err(_) => OverlayPositions::new(),
+    }
+}
+
+fn save_overlay_positions(positions: &OverlayPositions) {
+    if let Some(path) = overlay_positions_path() {
+        if let Ok(data) = serde_json::to_string_pretty(positions) {
+            let _ = std::fs::write(&path, data);
+        }
+    }
+}
+
+/// Save the current panel position for a specific display.
+fn save_panel_position(panel: &tauri_nspanel::objc2_app_kit::NSPanel, display_id: u32) {
+    let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
+        tauri_nspanel::objc2::msg_send![panel, frame]
+    };
+    let mut positions = load_overlay_positions();
+    positions.insert(display_id.to_string(), SavedOverlayPosition {
+        x: frame.origin.x,
+        y: frame.origin.y,
+    });
+    save_overlay_positions(&positions);
+    log::info!(
+        "Saved overlay position ({:.0}, {:.0}) for display {}",
+        frame.origin.x, frame.origin.y, display_id
+    );
+}
+
+/// Look up a saved position for this display and verify it's within the visible frame.
+fn get_saved_position(display_id: u32, visible: &tauri_nspanel::objc2_foundation::NSRect) -> Option<(f64, f64)> {
+    let positions = load_overlay_positions();
+    let saved = positions.get(&display_id.to_string())?;
+    // Clamp to ensure the overlay stays fully within the visible frame
+    let clamped_x = saved.x
+        .max(visible.origin.x)
+        .min(visible.origin.x + visible.size.width - OVERLAY_WIDTH);
+    let clamped_y = saved.y
+        .max(visible.origin.y)
+        .min(visible.origin.y + visible.size.height - OVERLAY_HEIGHT);
+    log::info!(
+        "Restored overlay position ({:.0}, {:.0}) for display {} (clamped from {:.0}, {:.0})",
+        clamped_x, clamped_y, display_id, saved.x, saved.y
+    );
+    Some((clamped_x, clamped_y))
+}
+
+/// Native screen info in Cocoa coordinates (logical points, origin bottom-left).
+#[derive(Clone, Copy)]
+struct NativeScreen {
+    frame: tauri_nspanel::objc2_foundation::NSRect,
+    visible_frame: tauri_nspanel::objc2_foundation::NSRect,
+    scale_factor: f64,
+    /// CGDirectDisplayID — unique, stable identifier for a physical monitor.
+    display_id: u32,
+}
+
+/// Get all connected screens via [NSScreen screens].
+/// Returns frames in Cocoa coordinates (points, origin at bottom-left of primary).
+fn get_native_screens() -> Vec<NativeScreen> {
+    unsafe {
+        let screens: *const tauri_nspanel::objc2_foundation::NSArray<
+            tauri_nspanel::objc2_app_kit::NSScreen,
+        > = tauri_nspanel::objc2::msg_send![
+            tauri_nspanel::objc2::class!(NSScreen),
+            screens
+        ];
+        let count: usize = tauri_nspanel::objc2::msg_send![&*screens, count];
+        let mut result = Vec::with_capacity(count);
+        for i in 0..count {
+            let screen: *const tauri_nspanel::objc2_app_kit::NSScreen =
+                tauri_nspanel::objc2::msg_send![&*screens, objectAtIndex: i];
+            let frame: tauri_nspanel::objc2_foundation::NSRect =
+                tauri_nspanel::objc2::msg_send![screen, frame];
+            let visible: tauri_nspanel::objc2_foundation::NSRect =
+                tauri_nspanel::objc2::msg_send![screen, visibleFrame];
+            let scale: f64 =
+                tauri_nspanel::objc2::msg_send![screen, backingScaleFactor];
+            // Extract CGDirectDisplayID from NSScreen.deviceDescription[@"NSScreenNumber"]
+            let desc: *const tauri_nspanel::objc2_foundation::NSDictionary<
+                tauri_nspanel::objc2_foundation::NSString,
+                tauri_nspanel::objc2_foundation::NSObject,
+            > = tauri_nspanel::objc2::msg_send![screen, deviceDescription];
+            let key = tauri_nspanel::objc2_foundation::NSString::from_str("NSScreenNumber");
+            let num_obj: *const tauri_nspanel::objc2_foundation::NSObject =
+                tauri_nspanel::objc2::msg_send![&*desc, objectForKey: &*key];
+            let display_id: u32 = if !num_obj.is_null() {
+                tauri_nspanel::objc2::msg_send![num_obj, unsignedIntValue]
+            } else {
+                0
+            };
+            result.push(NativeScreen { frame, visible_frame: visible, scale_factor: scale, display_id });
+        }
+        result
+    }
+}
+
+/// Get the mouse location in Cocoa coordinates (points, origin bottom-left).
+fn get_mouse_location_cocoa() -> tauri_nspanel::objc2_foundation::NSPoint {
+    unsafe {
+        tauri_nspanel::objc2::msg_send![
+            tauri_nspanel::objc2::class!(NSEvent),
+            mouseLocation
+        ]
+    }
+}
+
+/// Get the bounds of the frontmost on-screen window belonging to `pid`.
+/// Returns (x, y, width, height) in Quartz coordinates (origin top-left of primary).
+fn get_frontmost_window_bounds(pid: i32) -> Option<(f64, f64, f64, f64)> {
+    use core_graphics::window::*;
+    use core_graphics::geometry::CGRect;
+    use core_foundation::base::TCFType;
+
+    extern "C" {
+        fn CGRectMakeWithDictionaryRepresentation(
+            dict: core_foundation::dictionary::CFDictionaryRef,
+            rect: *mut CGRect,
+        ) -> bool;
+    }
+
+    let windows = copy_window_info(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID,
+    )?;
+
+    let arr_ref = windows.as_concrete_TypeRef();
+    let len = unsafe { core_foundation::array::CFArrayGetCount(arr_ref) };
+
+    for i in 0..len {
+        unsafe {
+            let dict_ptr = core_foundation::array::CFArrayGetValueAtIndex(arr_ref, i)
+                as core_foundation::dictionary::CFDictionaryRef;
+            if dict_ptr.is_null() { continue; }
+
+            // Helper: read a numeric value from the window-info dictionary.
+            let get_i32 = |key: core_foundation::string::CFStringRef| -> i32 {
+                let mut value: *const std::ffi::c_void = std::ptr::null();
+                if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict_ptr, key as *const std::ffi::c_void, &mut value,
+                ) != 0 && !value.is_null() {
+                    let num = core_foundation::number::CFNumber::wrap_under_get_rule(
+                        value as core_foundation::number::CFNumberRef,
+                    );
+                    num.to_i32().unwrap_or(0)
+                } else {
+                    0
+                }
+            };
+
+            let owner_pid = get_i32(kCGWindowOwnerPID);
+            let layer = get_i32(kCGWindowLayer);
+
+            if owner_pid == pid && layer == 0 {
+                let mut bounds_val: *const std::ffi::c_void = std::ptr::null();
+                if core_foundation::dictionary::CFDictionaryGetValueIfPresent(
+                    dict_ptr, kCGWindowBounds as *const std::ffi::c_void, &mut bounds_val,
+                ) != 0 && !bounds_val.is_null() {
+                    let mut rect = CGRect::new(
+                        &core_graphics::geometry::CGPoint::new(0.0, 0.0),
+                        &core_graphics::geometry::CGSize::new(0.0, 0.0),
+                    );
+                    if CGRectMakeWithDictionaryRepresentation(
+                        bounds_val as core_foundation::dictionary::CFDictionaryRef,
+                        &mut rect,
+                    ) {
+                        return Some((
+                            rect.origin.x, rect.origin.y,
+                            rect.size.width, rect.size.height,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Find which screen contains the given point (Cocoa coordinates).
+fn screen_containing_point(screens: &[NativeScreen], x: f64, y: f64) -> Option<usize> {
+    screens.iter().position(|s| {
+        x >= s.frame.origin.x
+            && x < s.frame.origin.x + s.frame.size.width
+            && y >= s.frame.origin.y
+            && y < s.frame.origin.y + s.frame.size.height
+    })
+}
+
+/// Select the screen where the overlay should appear.
+///
+/// Priority: 1) screen with focused app's window  2) mouse cursor  3) primary
+fn select_target_screen(target_pid: i32) -> Option<NativeScreen> {
+    let screens = get_native_screens();
+    if screens.is_empty() {
+        log::error!("No screens detected — cannot position overlay");
+        return None;
+    }
+
+    log_screen_configuration(&screens);
+
+    // 1. Try the screen containing the focused app's frontmost window
+    if target_pid > 0 {
+        if let Some((bx, by, bw, bh)) = get_frontmost_window_bounds(target_pid) {
+            let center_x = bx + bw / 2.0;
+            let center_y_quartz = by + bh / 2.0;
+            // Convert Quartz Y (top-left origin) → Cocoa Y (bottom-left origin)
+            let primary_h = screens[0].frame.size.height;
+            let center_y_cocoa = primary_h - center_y_quartz;
+            if let Some(idx) = screen_containing_point(&screens, center_x, center_y_cocoa) {
+                log::info!(
+                    "Overlay target: screen {} (focused app PID {}, window center {:.0},{:.0})",
+                    idx, target_pid, center_x, center_y_cocoa
+                );
+                return Some(screens[idx]);
+            }
+            log::warn!(
+                "Focused app PID {} window center ({:.0},{:.0}) not on any screen",
+                target_pid, center_x, center_y_cocoa
+            );
+        } else {
+            log::info!("No on-screen windows found for PID {}", target_pid);
+        }
+    }
+
+    // 2. Fall back to the screen under the mouse cursor
+    let mouse = get_mouse_location_cocoa();
+    if let Some(idx) = screen_containing_point(&screens, mouse.x, mouse.y) {
+        log::info!("Overlay target: screen {} (mouse cursor fallback at {:.0},{:.0})", idx, mouse.x, mouse.y);
+        return Some(screens[idx]);
+    }
+
+    // 3. Last resort: primary screen (screens[0] = menu-bar screen)
+    log::info!("Overlay target: primary screen (final fallback)");
+    Some(screens[0])
+}
+
+/// Position the overlay on the target screen using native Cocoa APIs.
+///
+/// If the user previously dragged the overlay on this monitor, restores that
+/// position (clamped to current visibleFrame). Otherwise defaults to
+/// bottom-center, just above the Dock.
+fn position_overlay_native(
+    panel: &tauri_nspanel::objc2_app_kit::NSPanel,
+    target: &NativeScreen,
+) {
+    let vis = &target.visible_frame;
+
+    let (x, y) = if let Some(saved) = get_saved_position(target.display_id, vis) {
+        saved
+    } else {
+        // Default: centered horizontally, just above the Dock (8pt padding)
+        let margin_bottom: f64 = 8.0;
+        let x = vis.origin.x + (vis.size.width - OVERLAY_WIDTH) / 2.0;
+        let y = vis.origin.y + margin_bottom;
         (x, y)
+    };
+
+    unsafe {
+        let origin = tauri_nspanel::objc2_foundation::NSPoint { x, y };
+        let _: () = tauri_nspanel::objc2::msg_send![panel, setFrameOrigin: origin];
+    }
+
+    log::info!(
+        "Overlay positioned at ({:.0}, {:.0}) on display {} — visible=({:.0},{:.0} {:.0}x{:.0})",
+        x, y, target.display_id,
+        vis.origin.x, vis.origin.y, vis.size.width, vis.size.height,
+    );
+}
+
+/// Log the current screen configuration for diagnostics.
+fn log_screen_configuration(screens: &[NativeScreen]) {
+    log::info!("=== Screen Configuration ({} screens) ===", screens.len());
+    for (i, s) in screens.iter().enumerate() {
+        log::info!(
+            "  Screen {}: display={} frame=({:.0},{:.0} {:.0}x{:.0}) visible=({:.0},{:.0} {:.0}x{:.0}) scale={}",
+            i, s.display_id,
+            s.frame.origin.x, s.frame.origin.y,
+            s.frame.size.width, s.frame.size.height,
+            s.visible_frame.origin.x, s.visible_frame.origin.y,
+            s.visible_frame.size.width, s.visible_frame.size.height,
+            s.scale_factor,
+        );
     }
 }

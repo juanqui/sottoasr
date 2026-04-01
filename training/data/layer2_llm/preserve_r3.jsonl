@@ -1,0 +1,50 @@
+{"input": "the deployment completed successfully with zero downtime", "output": "The deployment completed successfully with zero downtime.", "category": "preserve_wording"}
+{"input": "we need to schedule a code review before merging this feature branch", "output": "We need to schedule a code review before merging this feature branch.", "category": "preserve_wording"}
+{"input": "the redis cache hit rate is ninety seven percent which is excellent", "output": "The Redis cache hit rate is ninety-seven percent, which is excellent.", "category": "preserve_wording"}
+{"input": "i want you to investigate the memory leak in the notification service", "output": "I want you to investigate the memory leak in the notification service.", "category": "preserve_wording"}
+{"input": "go ahead and provision the new kubernetes cluster in the eu west region", "output": "Go ahead and provision the new Kubernetes cluster in the EU West region.", "category": "preserve_wording"}
+{"input": "there are a lot of open pull requests that need attention this week", "output": "There are a lot of open pull requests that need attention this week.", "category": "preserve_wording"}
+{"input": "the api response time is really fast averaging twelve milliseconds", "output": "The API response time is really fast, averaging twelve milliseconds.", "category": "preserve_wording"}
+{"input": "i definitely think we should add more integration tests for the payment flow", "output": "I definitely think we should add more integration tests for the payment flow.", "category": "preserve_wording"}
+{"input": "the database migration ran smoothly and all data integrity checks passed", "output": "The database migration ran smoothly, and all data integrity checks passed.", "category": "preserve_wording"}
+{"input": "lets go ahead and set up the staging environment for the new microservice", "output": "Let's go ahead and set up the staging environment for the new microservice.", "category": "preserve_wording"}
+{"input": "the monitoring dashboard shows all services are healthy", "output": "The monitoring dashboard shows all services are healthy.", "category": "preserve_wording"}
+{"input": "please create a jira ticket for the accessibility improvements", "output": "Please create a Jira ticket for the accessibility improvements.", "category": "preserve_wording"}
+{"input": "the customer reported that the search feature is working much better now", "output": "The customer reported that the search feature is working much better now.", "category": "preserve_wording"}
+{"input": "i really appreciate the team staying late to fix the production issue", "output": "I really appreciate the team staying late to fix the production issue.", "category": "preserve_wording"}
+{"input": "we have a lot of technical debt that we need to address in the next quarter", "output": "We have a lot of technical debt that we need to address in the next quarter.", "category": "preserve_wording"}
+{"input": "the load test results show we can handle ten thousand concurrent users", "output": "The load test results show we can handle ten thousand concurrent users.", "category": "preserve_wording"}
+{"input": "go ahead and merge this into main when the checks pass", "output": "Go ahead and merge this into main when the checks pass.", "category": "preserve_wording"}
+{"input": "the sprint velocity has been very consistent over the last four sprints", "output": "The sprint velocity has been very consistent over the last four sprints.", "category": "preserve_wording"}
+{"input": "i want you to document the api changes in the changelog before the release", "output": "I want you to document the API changes in the changelog before the release.", "category": "preserve_wording"}
+{"input": "the error rate dropped to zero after we deployed the hotfix", "output": "The error rate dropped to zero after we deployed the hotfix.", "category": "preserve_wording"}
+{"input": "this is very much aligned with our product roadmap for the year", "output": "This is very much aligned with our product roadmap for the year.", "category": "preserve_wording"}
+{"input": "the vendor demo went really well and the team is excited about the integration", "output": "The vendor demo went really well, and the team is excited about the integration.", "category": "preserve_wording"}
+{"input": "our retention rate improved significantly after the onboarding redesign", "output": "Our retention rate improved significantly after the onboarding redesign.", "category": "preserve_wording"}
+{"input": "the board meeting is scheduled for next thursday at nine am", "output": "The board meeting is scheduled for next Thursday at nine AM.", "category": "preserve_wording"}
+{"input": "we should definitely explore partnerships with complementary products", "output": "We should definitely explore partnerships with complementary products.", "category": "preserve_wording"}
+{"input": "the patient responded well to the antibiotic therapy and can be discharged tomorrow", "output": "The patient responded well to the antibiotic therapy and can be discharged tomorrow.", "category": "preserve_wording"}
+{"input": "the ct scan results are unremarkable with no evidence of acute pathology", "output": "The CT scan results are unremarkable, with no evidence of acute pathology.", "category": "preserve_wording"}
+{"input": "continue the current treatment plan and schedule a follow up in three months", "output": "Continue the current treatment plan and schedule a follow-up in three months.", "category": "preserve_wording"}
+{"input": "the arbitration clause in section twelve needs to be reviewed by outside counsel", "output": "The arbitration clause in Section 12 needs to be reviewed by outside counsel.", "category": "preserve_wording"}
+{"input": "the court granted the motion for summary judgment on all counts", "output": "The court granted the motion for summary judgment on all counts.", "category": "preserve_wording"}
+{"input": "net income increased twenty three percent year over year to fifteen million", "output": "Net income increased twenty-three percent year over year to fifteen million.", "category": "preserve_wording"}
+{"input": "the return on invested capital exceeded our target of twelve percent", "output": "The return on invested capital exceeded our target of twelve percent.", "category": "preserve_wording"}
+{"input": "the preliminary findings support our initial hypothesis", "output": "The preliminary findings support our initial hypothesis.", "category": "preserve_wording"}
+{"input": "data collection is complete and we are now in the analysis phase", "output": "Data collection is complete, and we are now in the analysis phase.", "category": "preserve_wording"}
+{"input": "just wanted to say great job on the presentation today", "output": "Just wanted to say great job on the presentation today.", "category": "preserve_wording"}
+{"input": "ill be working from home tomorrow if anyone needs me just ping me on slack", "output": "I'll be working from home tomorrow. If anyone needs me, just ping me on Slack.", "category": "preserve_wording"}
+{"input": "the new office space is really nice and the team seems happy with the move", "output": "The new office space is really nice, and the team seems happy with the move.", "category": "preserve_wording"}
+{"input": "i think we should go ahead and order lunch for the team since we are working through noon", "output": "I think we should go ahead and order lunch for the team since we are working through noon.", "category": "preserve_wording"}
+{"input": "the ci pipeline takes about twelve minutes to run all the tests", "output": "The CI pipeline takes about twelve minutes to run all the tests.", "category": "preserve_wording"}
+{"input": "we need two more senior engineers to meet the q4 delivery timeline", "output": "We need two more senior engineers to meet the Q4 delivery timeline.", "category": "preserve_wording"}
+{"input": "the feature flag is enabled for ten percent of users in the beta group", "output": "The feature flag is enabled for ten percent of users in the beta group.", "category": "preserve_wording"}
+{"input": "all dependencies have been updated and no breaking changes were found", "output": "All dependencies have been updated, and no breaking changes were found.", "category": "preserve_wording"}
+{"input": "the docker image size was reduced from two gigabytes to four hundred megabytes", "output": "The Docker image size was reduced from two gigabytes to four hundred megabytes.", "category": "preserve_wording"}
+{"input": "the grpc service handles about fifty thousand requests per second at peak", "output": "The gRPC service handles about fifty thousand requests per second at peak.", "category": "preserve_wording"}
+{"input": "we migrated from jenkins to github actions and the build time dropped by forty percent", "output": "We migrated from Jenkins to GitHub Actions, and the build time dropped by forty percent.", "category": "preserve_wording"}
+{"input": "the security audit found no critical vulnerabilities in the application", "output": "The security audit found no critical vulnerabilities in the application.", "category": "preserve_wording"}
+{"input": "the new hire starts on monday and will be joining the platform team", "output": "The new hire starts on Monday and will be joining the platform team.", "category": "preserve_wording"}
+{"input": "customer satisfaction scores are at an all time high of ninety two percent", "output": "Customer satisfaction scores are at an all-time high of ninety-two percent.", "category": "preserve_wording"}
+{"input": "the product launch is on track for the first week of april", "output": "The product launch is on track for the first week of April.", "category": "preserve_wording"}
+{"input": "we closed three new enterprise deals this month totaling two point five million", "output": "We closed three new enterprise deals this month totaling two point five million.", "category": "preserve_wording"}

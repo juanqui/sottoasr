@@ -1,0 +1,32 @@
+{"input": "i guess what im trying to say is that the server is down", "output": "The server is down."}
+{"input": "i guess what im trying to say is that we need more resources", "output": "We need more resources."}
+{"input": "i guess what im saying is the tests are failing", "output": "The tests are failing."}
+{"input": "what im trying to say is basically the deployment failed", "output": "The deployment failed."}
+{"input": "what i mean is that we should use redis instead", "output": "We should use Redis instead."}
+{"input": "the thing is what im getting at is we need more time", "output": "We need more time."}
+{"input": "okay uh so basically yeah its done", "output": "It's done."}
+{"input": "okay so basically yeah the build passed", "output": "The build passed."}
+{"input": "yeah so okay basically um were ready to deploy", "output": "We're ready to deploy."}
+{"input": "right so yeah basically okay the fix is in", "output": "The fix is in."}
+{"input": "so yeah okay um basically the migration is complete", "output": "The migration is complete."}
+{"input": "okay yeah so um basically right the feature is done", "output": "The feature is done."}
+{"input": "you know the thing is you know we need more time", "output": "We need more time."}
+{"input": "you know what i think is that you know the api is slow", "output": "The API is slow."}
+{"input": "the thing is you know basically we dont have enough tests", "output": "We don't have enough tests."}
+{"input": "you know like the problem is you know the database is full", "output": "The database is full."}
+{"input": "me and the team is working on fixing it", "output": "The team and I are working on fixing it."}
+{"input": "me and him was debugging the issue all morning", "output": "He and I were debugging the issue all morning."}
+{"input": "me and her is gonna present the results", "output": "She and I are going to present the results."}
+{"input": "him and me dont understand the requirements", "output": "He and I don't understand the requirements."}
+{"input": "me and the designer was working on the mockups", "output": "The designer and I were working on the mockups."}
+{"input": "her and me needs to review the contract", "output": "She and I need to review the contract."}
+{"input": "the tests is failing because the config dont match", "output": "The tests are failing because the config doesn't match."}
+{"input": "there is twenty bugs that needs fixing before release", "output": "There are twenty bugs that need fixing before release."}
+{"input": "the deadline is friday no monday we have until monday", "output": "The deadline is Monday."}
+{"input": "send it to marketing no engineering they need it first", "output": "Send it to engineering. They need it first."}
+{"input": "the meeting is at two no three pm in the main room", "output": "The meeting is at three PM in the main room."}
+{"input": "use python no actually rust for this service", "output": "Use Rust for this service."}
+{"input": "so first we need to fix the login bug second add search and third update the docs", "output": "1. Fix the login bug\n2. Add search\n3. Update the docs"}
+{"input": "three things one update schema two migrate data three run tests", "output": "1. Update schema\n2. Migrate data\n3. Run tests"}
+{"input": "the priorities are first security second performance third testing", "output": "The priorities are:\n1. Security\n2. Performance\n3. Testing"}
+{"input": "steps to deploy first build the image second push to registry third update the manifest", "output": "Steps to deploy:\n1. Build the image\n2. Push to registry\n3. Update the manifest"}

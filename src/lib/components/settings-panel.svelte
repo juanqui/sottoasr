@@ -30,6 +30,8 @@
   // LLM status
   let llmStatus: LlmStatus | null = $state(null);
   let llmDownloading = $state(false);
+  let llmUpdateAvailable = $state(false);
+  let llmUpdating = $state(false);
   let llmError = $state('');
   let llmDeleteConfirm = $state(false);
 
@@ -42,16 +44,8 @@
   );
 
 
-  // Available LLM models
-  const llmModels = [
-    { value: '0.8b', label: 'Qwen3.5 0.8B — Fast (~570 MB)', sizeMb: 570 },
-    { value: '2b', label: 'Qwen3.5 2B — Balanced (~1.4 GB)', sizeMb: 1430 },
-    { value: '4b', label: 'Qwen3.5 4B — Best quality (~3 GB)', sizeMb: 2970 },
-  ];
-
-  let selectedModelInfo = $derived(
-    llmModels.find((m) => m.value === settingsStore.current.llm_model_size) ?? llmModels[2]
-  );
+  // SottoASR cleanup model info
+  const cleanupModel = { label: 'SottoASR Cleanup (233 MB)', sizeMb: 233 };
 
   // Available languages
   const languages = [
@@ -170,6 +164,12 @@
   async function refreshLlmStatus() {
     try {
       llmStatus = await getLlmStatus();
+      // Check for updates in background if model is downloaded
+      if (llmStatus?.downloaded) {
+        import('../utils/tauri').then(({ checkLlmUpdate }) =>
+          checkLlmUpdate().then(available => { llmUpdateAvailable = available; }).catch(() => {})
+        );
+      }
     } catch (err) {
       console.error('Failed to get LLM status:', err);
     }
@@ -186,6 +186,21 @@
     }
   }
 
+  async function handleLlmUpdate() {
+    llmUpdating = true;
+    llmError = '';
+    try {
+      const { updateLlmModel } = await import('../utils/tauri');
+      await updateLlmModel();
+      llmUpdateAvailable = false;
+      llmUpdating = false;
+      refreshLlmStatus();
+    } catch (err: any) {
+      llmError = err?.toString() || 'Update failed';
+      llmUpdating = false;
+    }
+  }
+
   async function handleLlmDelete() {
     if (!llmDeleteConfirm) {
       llmDeleteConfirm = true;
@@ -193,7 +208,6 @@
     }
     try {
       settingsStore.update('llm_cleanup_enabled', false);
-      settingsStore.update('llm_markdown_mode', false);
       await deleteLlmModel();
       llmDeleteConfirm = false;
       refreshLlmStatus();
@@ -341,7 +355,7 @@
       <div class="toggle-field">
         <div class="toggle-info">
           <span class="toggle-label">Clean up transcriptions with AI</span>
-          <span class="toggle-hint">Uses {selectedModelInfo.label.split(' —')[0]} running locally via MLX on Metal GPU</span>
+          <span class="toggle-hint">Fine-tuned SottoASR model running locally via MLX on Metal GPU (233 MB)</span>
         </div>
         <label class="switch">
           <input
@@ -369,43 +383,23 @@
         </label>
       </div>
 
-      <!-- Model selector -->
-      <div class="field" style="margin-top: 8px;">
-        <label for="llm-model">Model size</label>
-        <select
-          id="llm-model"
-          class="select-input"
-          value={settingsStore.current.llm_model_size}
-          onchange={(e) => {
-            const newSize = (e.target as HTMLSelectElement).value;
-            settingsStore.update('llm_model_size', newSize);
-            // Unload current sidecar so it respawns with the new model
-            import('../utils/tauri').then(({ unloadLlmModel }) => unloadLlmModel().catch(() => {}));
-            // Refresh status to check if new model is downloaded
-            refreshLlmStatus();
-          }}
-        >
-          {#each llmModels as model}
-            <option value={model.value}>{model.label}</option>
-          {/each}
-        </select>
-        <span class="field-hint">Larger models produce better results but use more memory and disk space</span>
-      </div>
-
       <!-- Model status -->
-      <div class="llm-status">
-        {#if llmDownloading}
+      <div class="llm-status" style="margin-top: 8px;">
+        {#if llmDownloading || llmUpdating}
           <div class="llm-downloading">
             <div class="spinner-small"></div>
-            <span>Downloading model...</span>
+            <span>{llmUpdating ? 'Updating model...' : 'Downloading model...'}</span>
           </div>
         {:else if llmStatus?.downloaded}
           <span class="llm-badge ready">Model Ready</span>
+          {#if llmUpdateAvailable}
+            <button class="update-btn" onclick={handleLlmUpdate} type="button" style="margin-left: 8px;">
+              Update Available — Install
+            </button>
+          {/if}
         {:else}
           <button class="download-btn" onclick={handleLlmDownload} type="button">
-            Download Model (~{selectedModelInfo.sizeMb >= 1000
-              ? (selectedModelInfo.sizeMb / 1000).toFixed(1) + ' GB'
-              : selectedModelInfo.sizeMb + ' MB'})
+            Download Cleanup Model (~{cleanupModel.sizeMb} MB)
           </button>
         {/if}
       </div>
@@ -414,30 +408,13 @@
         <div class="llm-error">{llmError}</div>
       {/if}
 
-      {#if settingsStore.current.llm_cleanup_enabled}
-        <div class="toggle-field">
-          <div class="toggle-info">
-            <span class="toggle-label">Format as Markdown</span>
-            <span class="toggle-hint">Structures longer dictations with headings and lists (experimental)</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" bind:checked={settingsStore.current.llm_markdown_mode} />
-            <span class="slider"></span>
-          </label>
-        </div>
-      {/if}
-
       {#if llmStatus?.downloaded}
         <button
           class="delete-btn"
           onclick={handleLlmDelete}
           type="button"
         >
-          {llmDeleteConfirm ? 'Are you sure? Click again to confirm' : `Delete Model (~${
-            selectedModelInfo.sizeMb >= 1000
-              ? (selectedModelInfo.sizeMb / 1000).toFixed(1) + ' GB'
-              : selectedModelInfo.sizeMb + ' MB'
-          })`}
+          {llmDeleteConfirm ? 'Are you sure? Click again to confirm' : `Delete Model (~${cleanupModel.sizeMb} MB)`}
         </button>
       {/if}
     </section>
@@ -936,6 +913,21 @@
 
   .download-btn:hover {
     background: var(--bg-hover);
+  }
+
+  .update-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    background: rgba(59, 130, 246, 0.1);
+    color: rgba(59, 130, 246, 0.9);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .update-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: rgb(59, 130, 246);
   }
 
   .delete-btn {

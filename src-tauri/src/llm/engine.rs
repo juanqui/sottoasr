@@ -2,8 +2,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::llm::prompts::CleanupMode;
-
 /// Monotonic job ID for stale-result prevention.
 static NEXT_JOB_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -12,21 +10,19 @@ pub fn next_job_id() -> u64 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
 
-/// The LLM engine manages a Python sidecar process running mlx-lm.
+/// The LLM engine manages a Python sidecar process for transcript cleanup.
 pub struct LlmEngine {
     child: Child,
     stdin: std::io::BufWriter<std::process::ChildStdin>,
     stdout: BufReader<std::process::ChildStdout>,
-    /// The model ID this engine was spawned with.
-    pub model_id: String,
 }
 
 // We manage the sidecar as a single-owner resource behind TokioMutex.
 unsafe impl Send for LlmEngine {}
 
 impl LlmEngine {
-    /// Spawn the Python sidecar process for the given model.
-    pub fn spawn_with_model(model_id: &str) -> Result<Self, String> {
+    /// Spawn the Python sidecar process.
+    pub fn spawn() -> Result<Self, String> {
         // Ensure venv exists
         if !is_venv_ready() {
             log::info!("LLM venv not found, setting up...");
@@ -35,11 +31,10 @@ impl LlmEngine {
 
         let python = venv_python()?;
         let sidecar_path = Self::sidecar_script_path()?;
-        log::info!("Spawning LLM sidecar: {} {} --model {}", python.display(), sidecar_path.display(), model_id);
+        log::info!("Spawning LLM sidecar: {} {}", python.display(), sidecar_path.display());
 
         let mut child = Command::new(&python)
             .arg(&sidecar_path)
-            .args(["--model", model_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit()) // sidecar logs go to app stderr
@@ -55,10 +50,13 @@ impl LlmEngine {
             child,
             stdin: std::io::BufWriter::new(stdin),
             stdout: BufReader::new(stdout),
-            model_id: model_id.to_string(),
         })
     }
 
+    /// Send a raw request and read a response (blocking). Public for direct protocol access.
+    pub fn request_raw(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String> {
+        self.request(req)
+    }
 
     /// Send a request and read a response (blocking).
     fn request(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -84,16 +82,10 @@ impl LlmEngine {
     }
 
     /// Clean up a transcript.
-    pub fn cleanup(&mut self, text: &str, mode: CleanupMode) -> Result<String, String> {
-        let mode_str = match mode {
-            CleanupMode::Standard => "standard",
-            CleanupMode::Markdown => "markdown",
-        };
-
+    pub fn cleanup(&mut self, text: &str) -> Result<String, String> {
         let resp = self.request(&serde_json::json!({
             "action": "cleanup",
             "text": text,
-            "mode": mode_str,
         }))?;
 
         if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
@@ -104,12 +96,6 @@ impl LlmEngine {
             if let Some(ms) = resp.get("elapsed_ms").and_then(|v| v.as_u64()) {
                 log::info!("LLM cleanup completed in {}ms", ms);
             }
-            if resp.get("fallback").and_then(|v| v.as_bool()) == Some(true) {
-                let reason = resp.get("fallback_reason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                log::warn!("LLM cleanup fell back to raw text: {}", reason);
-            }
             Ok(cleaned)
         } else {
             let error = resp.get("error")
@@ -117,6 +103,12 @@ impl LlmEngine {
                 .unwrap_or("Unknown error");
             Err(error.to_string())
         }
+    }
+
+    /// Get model status from the sidecar.
+    #[allow(dead_code)]
+    pub fn status(&mut self) -> Result<serde_json::Value, String> {
+        self.request(&serde_json::json!({"action": "status"}))
     }
 
     /// Tell the sidecar to download the model.
@@ -143,21 +135,15 @@ impl LlmEngine {
     pub fn quit(&mut self) {
         let _ = self.request(&serde_json::json!({"action": "quit"}));
 
-        // Wait for the process to exit with a timeout, then kill if needed.
-        // Use non-blocking try_wait to properly handle the timeout.
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(3);
         let sleep_interval = std::time::Duration::from_millis(100);
 
         loop {
             match self.child.try_wait() {
-                Ok(Some(_status)) => {
-                    // Process exited normally
-                    break;
-                }
+                Ok(Some(_status)) => break,
                 Ok(None) => {
                     if start.elapsed() >= timeout {
-                        // Timeout expired - force kill the process
                         let _ = self.child.kill();
                         let _ = self.child.wait();
                         break;
@@ -165,7 +151,6 @@ impl LlmEngine {
                     std::thread::sleep(sleep_interval);
                 }
                 Err(_e) => {
-                    // On error, attempt to kill and wait to avoid leaving a zombie.
                     let _ = self.child.kill();
                     let _ = self.child.wait();
                     break;
@@ -208,7 +193,6 @@ pub fn is_platform_supported() -> bool {
     if !cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         return false;
     }
-    // Just check that python3 exists (ships with Xcode CLI tools / Homebrew)
     Command::new("python3")
         .arg("--version")
         .stdout(Stdio::null())
@@ -241,7 +225,6 @@ pub fn setup_venv() -> Result<(), String> {
     let venv = venv_dir()?;
     log::info!("Creating LLM Python venv at {:?}...", venv);
 
-    // Create venv
     let status = Command::new("python3")
         .args(["-m", "venv", &venv.to_string_lossy()])
         .status()
@@ -250,22 +233,16 @@ pub fn setup_venv() -> Result<(), String> {
         return Err("python3 -m venv failed".into());
     }
 
-    // Use the venv's python3 -m pip (not the pip3 binary) to ensure we always
-    // get the correct pip version, especially after upgrading
     let python = venv.join("bin").join("python3");
 
-    // Upgrade pip first — the venv inherits the system pip which may be too old
-    // to resolve modern dependency trees
     log::info!("Upgrading pip in venv...");
     let _ = Command::new(&python)
         .args(["-m", "pip", "install", "--upgrade", "pip"])
         .output();
 
-    // Install mlx-lm and huggingface_hub (the sidecar imports huggingface_hub directly
-    // for model downloading/caching, so it must be explicitly installed)
     log::info!("Installing mlx-lm and huggingface_hub into venv...");
     let output = Command::new(&python)
-        .args(["-m", "pip", "install", "mlx-lm", "huggingface_hub"])
+        .args(["-m", "pip", "install", "--upgrade", "mlx-lm", "huggingface_hub"])
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
     if !output.status.success() {
@@ -279,50 +256,23 @@ pub fn setup_venv() -> Result<(), String> {
 
 /// Check if the feature was compiled in.
 pub fn is_feature_compiled() -> bool {
-    cfg!(feature = "llm-qwen")
+    cfg!(feature = "llm-cleanup")
 }
 
-/// Available model configurations.
+/// The single model configuration for SottoASR transcript cleanup.
 pub struct ModelConfig {
     pub id: &'static str,
     pub display_name: &'static str,
     pub download_size_mb: u64,
 }
 
-pub const MODEL_0_8B: ModelConfig = ModelConfig {
-    id: "mlx-community/Qwen3.5-0.8B-OptiQ-4bit",
-    display_name: "Qwen3.5-0.8B",
-    download_size_mb: 570,
+pub const SOTTO_MODEL: ModelConfig = ModelConfig {
+    id: "juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit",
+    display_name: "SottoASR Cleanup",
+    download_size_mb: 233,
 };
 
-pub const MODEL_2B: ModelConfig = ModelConfig {
-    id: "mlx-community/Qwen3.5-2B-OptiQ-4bit",
-    display_name: "Qwen3.5-2B",
-    download_size_mb: 1_430,
-};
-
-pub const MODEL_4B: ModelConfig = ModelConfig {
-    id: "mlx-community/Qwen3.5-4B-OptiQ-4bit",
-    display_name: "Qwen3.5-4B",
-    download_size_mb: 2_970,
-};
-
-/// Get the model config for a settings size string ("0.8b", "2b", "4b").
-pub fn model_config_for_size(size: &str) -> &'static ModelConfig {
-    match size {
-        "0.8b" => &MODEL_0_8B,
-        "2b" => &MODEL_2B,
-        "4b" => &MODEL_4B,
-        _ => &MODEL_2B,
-    }
-}
-
-/// Get the HuggingFace model ID for a settings size string.
-pub fn model_id_for_size(size: &str) -> &'static str {
-    model_config_for_size(size).id
-}
-
-/// Return all model configs for UI display.
-pub fn all_model_configs() -> Vec<&'static ModelConfig> {
-    vec![&MODEL_0_8B, &MODEL_2B, &MODEL_4B]
+/// Get the model configuration.
+pub fn model_config() -> &'static ModelConfig {
+    &SOTTO_MODEL
 }

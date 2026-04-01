@@ -1,0 +1,40 @@
+{"input": "uh yes", "output": "Yes.", "category": "short", "domain": "casual_conversational"}
+{"input": "um no i dont think so", "output": "No, I don't think so.", "category": "short", "domain": "casual_conversational"}
+{"input": "lets uh merge it", "output": "Let's merge it.", "category": "short", "domain": "software_engineering"}
+{"input": "ship it", "output": "Ship it.", "category": "short", "domain": "software_engineering"}
+{"input": "looks good to me", "output": "Looks good to me.", "category": "short", "domain": "software_engineering"}
+{"input": "can you uh fix that bug", "output": "Can you fix that bug?", "category": "short", "domain": "software_engineering"}
+{"input": "um approved", "output": "Approved.", "category": "short", "domain": "software_engineering"}
+{"input": "yeah that works", "output": "That works.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh the test is uh passing now", "output": "The test is passing now.", "category": "short", "domain": "software_engineering"}
+{"input": "okay uh so basically yeah its done", "output": "It's done.", "category": "short", "domain": "casual_conversational"}
+{"input": "sounds good", "output": "Sounds good.", "category": "short", "domain": "casual_conversational"}
+{"input": "got it thanks", "output": "Got it. Thanks.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh sure thing", "output": "Sure thing.", "category": "short", "domain": "casual_conversational"}
+{"input": "deploy it", "output": "Deploy it.", "category": "short", "domain": "software_engineering"}
+{"input": "the build uh passed", "output": "The build passed.", "category": "short", "domain": "software_engineering"}
+{"input": "all tests green", "output": "All tests green.", "category": "short", "domain": "software_engineering"}
+{"input": "merge the pr", "output": "Merge the PR.", "category": "short", "domain": "software_engineering"}
+{"input": "uh ill handle it", "output": "I'll handle it.", "category": "short", "domain": "software_engineering"}
+{"input": "yeah im on it", "output": "I'm on it.", "category": "short", "domain": "casual_conversational"}
+{"input": "um not yet", "output": "Not yet.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh hold on", "output": "Hold on.", "category": "short", "domain": "casual_conversational"}
+{"input": "basically yes", "output": "Yes.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh no thats wrong", "output": "No, that's wrong.", "category": "short", "domain": "casual_conversational"}
+{"input": "ok lets do it", "output": "Let's do it.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh one moment", "output": "One moment.", "category": "short", "domain": "casual_conversational"}
+{"input": "exactly right", "output": "Exactly right.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh thats correct", "output": "That's correct.", "category": "short", "domain": "casual_conversational"}
+{"input": "yeah no problem", "output": "No problem.", "category": "short", "domain": "casual_conversational"}
+{"input": "um could you repeat that", "output": "Could you repeat that?", "category": "short", "domain": "casual_conversational"}
+{"input": "uh the server is down", "output": "The server is down.", "category": "short", "domain": "software_engineering"}
+{"input": "its uh broken again", "output": "It's broken again.", "category": "short", "domain": "software_engineering"}
+{"input": "basically just revert it", "output": "Just revert it.", "category": "short", "domain": "software_engineering"}
+{"input": "uh run the tests first", "output": "Run the tests first.", "category": "short", "domain": "software_engineering"}
+{"input": "check the logs", "output": "Check the logs.", "category": "short", "domain": "software_engineering"}
+{"input": "on my way", "output": "On my way.", "category": "short", "domain": "casual_conversational"}
+{"input": "see you tomorrow", "output": "See you tomorrow.", "category": "short", "domain": "casual_conversational"}
+{"input": "um thanks for letting me know", "output": "Thanks for letting me know.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh whats the status", "output": "What's the status?", "category": "short", "domain": "software_engineering"}
+{"input": "ready to go", "output": "Ready to go.", "category": "short", "domain": "casual_conversational"}
+{"input": "uh yeah i agree", "output": "Yeah, I agree.", "category": "short", "domain": "casual_conversational"}

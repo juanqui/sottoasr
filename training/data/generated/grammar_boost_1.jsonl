@@ -1,0 +1,50 @@
+{"input": "we gonna need more time for this feature", "output": "We're going to need more time for this feature."}
+{"input": "the tests is failing on the ci pipeline", "output": "The tests are failing on the CI pipeline."}
+{"input": "me and him will work on the migration", "output": "He and I will work on the migration."}
+{"input": "theres three bugs that needs to be fixed", "output": "There are three bugs that need to be fixed."}
+{"input": "the data have been migrated successful", "output": "The data has been migrated successfully."}
+{"input": "we should of tested this before deploying", "output": "We should have tested this before deploying."}
+{"input": "me and the team is working on fixing it", "output": "The team and I are working on fixing it."}
+{"input": "the code dont work on production it keeps crashing", "output": "The code doesn't work in production. It keeps crashing."}
+{"input": "each of the developers need to update their environment", "output": "Each of the developers needs to update their environment."}
+{"input": "its important that we test the edge cases its gonna save us time", "output": "It's important that we test the edge cases. It's going to save us time."}
+{"input": "him and me was working on that bug since tuesday", "output": "He and I have been working on that bug since Tuesday."}
+{"input": "the server dont respond when theres too many connections", "output": "The server doesn't respond when there are too many connections."}
+{"input": "we gotta fix this before the release or its gonna break everything", "output": "We have to fix this before the release, or it's going to break everything."}
+{"input": "the team wanna deploy it today but we aint ready", "output": "The team wants to deploy it today, but we aren't ready."}
+{"input": "nobody dont know why the build is failing", "output": "Nobody knows why the build is failing."}
+{"input": "me and sarah is gonna handle the frontend refactor", "output": "Sarah and I are going to handle the frontend refactor."}
+{"input": "the database indexes needs to be rebuild", "output": "The database indexes need to be rebuilt."}
+{"input": "he dont understand how the api works yet", "output": "He doesn't understand how the API works yet."}
+{"input": "we could of avoided this if we had better tests", "output": "We could have avoided this if we had better tests."}
+{"input": "the logs shows that the error happen at midnight", "output": "The logs show that the error happened at midnight."}
+{"input": "her and me is responsible for the code review", "output": "She and I are responsible for the code review."}
+{"input": "the function dont return nothing when the input is null", "output": "The function doesn't return anything when the input is null."}
+{"input": "we been waiting for the approval since last week", "output": "We've been waiting for the approval since last week."}
+{"input": "the customer dont want to pay for the upgrade they says its too expensive", "output": "The customer doesn't want to pay for the upgrade. They say it's too expensive."}
+{"input": "the pipeline keep failing because the tests was written wrong", "output": "The pipeline keeps failing because the tests were written incorrectly."}
+{"input": "us developers needs better tools for debugging", "output": "We developers need better tools for debugging."}
+{"input": "there was twenty users affected by the outage", "output": "There were twenty users affected by the outage."}
+{"input": "the metrics shows that performance have improved", "output": "The metrics show that performance has improved."}
+{"input": "him and the team gonna present the results tomorrow", "output": "He and the team are going to present the results tomorrow."}
+{"input": "she should of ran the tests before merging", "output": "She should have run the tests before merging."}
+{"input": "the patient dont want take the medication no more", "output": "The patient doesn't want to take the medication anymore."}
+{"input": "me and the lawyer is reviewing the contract", "output": "The lawyer and I are reviewing the contract."}
+{"input": "the revenue numbers looks good but expenses is too high", "output": "The revenue numbers look good, but expenses are too high."}
+{"input": "we wanna make sure the deployment goes smooth", "output": "We want to make sure the deployment goes smoothly."}
+{"input": "the intern dont know how to use git properly", "output": "The intern doesn't know how to use Git properly."}
+{"input": "there is multiple issues with the current implementation", "output": "There are multiple issues with the current implementation."}
+{"input": "the results was better then we expected", "output": "The results were better than we expected."}
+{"input": "me and him gonna fix the memory leak this sprint", "output": "He and I are going to fix the memory leak this sprint."}
+{"input": "the service keep crashing every time it gets more then fifty requests", "output": "The service keeps crashing every time it gets more than fifty requests."}
+{"input": "we should of caught this during code review", "output": "We should have caught this during code review."}
+{"input": "the junior developer dont understand dependency injection yet", "output": "The junior developer doesn't understand dependency injection yet."}
+{"input": "the database have been running slow since the migration", "output": "The database has been running slowly since the migration."}
+{"input": "its gonna take atleast two weeks to finish this", "output": "It's going to take at least two weeks to finish this."}
+{"input": "the team dont got enough resources for this project", "output": "The team doesn't have enough resources for this project."}
+{"input": "the client says they dont want no changes to the interface", "output": "The client says they don't want any changes to the interface."}
+{"input": "him and me should of started this project earlier", "output": "He and I should have started this project earlier."}
+{"input": "the stakeholders wants to see the demo before friday", "output": "The stakeholders want to see the demo before Friday."}
+{"input": "the servers was down for three hours last night", "output": "The servers were down for three hours last night."}
+{"input": "we gonna need to hire more people if we wanna hit the deadline", "output": "We're going to need to hire more people if we want to hit the deadline."}
+{"input": "the algorithm dont handle edge cases good", "output": "The algorithm doesn't handle edge cases well."}

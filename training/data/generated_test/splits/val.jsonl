@@ -1,0 +1,71 @@
+{"input": "use contrast for the mri wait actually non contrast is safer", "output": "Use non contrast for the mri."}
+{"input": "i like this spot um uh but the monthly fee is high period so i am not going to reserve it", "output": "I like this spot, but the monthly fee is high period, so I am not going to reserve it."}
+{"input": "did you finish the project question mark i need it by monday period for sure", "output": "Did you finish the project? I need it by Monday. For sure."}
+{"input": "can you tell me the status of the um q4 plan er strategy meeting tomorrow", "output": "Can you tell me the status of the Q4 plan strategy meeting tomorrow."}
+{"input": "uh we are collecting data every epoch but um im not sure if the epoch size is correct", "output": "We are collecting data every epoch but I'm not sure if the epoch size is correct."}
+{"input": "the churn rate was high um like five percent actually i mean the retention was low last month", "output": "The retention was low last month."}
+{"input": "basically the prometheus metrics are failing", "output": "The Prometheus metrics are failing."}
+{"input": "the server is running low on memory and we cant launch yet right", "output": "The server is running low on memory, and we can't launch yet, right?"}
+{"input": "lock the schema version wait actually we should use versioning headers instead for compatibility", "output": "We should use versioning headers instead for compatibility."}
+{"input": "the graphql query is taking uh too long", "output": "The GraphQL query is taking too long."}
+{"input": "so the depreciation schedule needs to be fixed weve got to upload it before audit", "output": "The depreciation schedule needs to be fixed. We've got to upload it before audit."}
+{"input": "i was uh trying to uh scale the stateful set but the um storage class was binding wrong so the um volumes are stuck in pending state for the new storage", "output": "I was trying to scale the stateful set but the storage class was binding wrong so the volumes are stuck in pending state for the new storage."}
+{"input": "baseline ejection fraction is 55 no actually 50 you know", "output": "Baseline ejection fraction is 50."}
+{"input": "run npm build wait no yarn build is faster for our monorepo setup", "output": "Run Yarn build for our monorepo setup."}
+{"input": "run the docker build in the ci pipeline wait no actually run it in the staging environment first to check compatibility wait scratch that run it in the staging environment first to check compatibility before pushing to production", "output": "Run it in the staging environment first to check compatibility before pushing to production."}
+{"input": "we calculated an uh npv of 50000 dollars period", "output": "We calculated an NPV of 50000 dollars."}
+{"input": "this is very critical so we should definitely merge the pr", "output": "This is very critical so we should definitely merge the PR."}
+{"input": "okay the ci pipeline will fail if we dont merge", "output": "The CI pipeline will fail if we don't merge."}
+{"input": "we can discharge the patient tomorrow wait hold on theyre labs are not back so keep them admitted for another day please", "output": "Keep them admitted for another day please."}
+{"input": "your kindness is very important to us uh period", "output": "Your kindness is very important to us."}
+{"input": "we have 3 gift ideas for the party um 1 book uh 2 headphones 3 a watch", "output": "We have 3 gift ideas for the party. 1. Book. 2. Headphones. 3. A watch."}
+{"input": "so the candidate pool is looking thin weve got to hire more", "output": "So the candidate pool is looking thin. We've got to hire more."}
+{"input": "operating leverage is high um wait yes it is comma we need to adjust period", "output": "Operating leverage is high, yes it is, we need to adjust."}
+{"input": "so if you know they ask about the contract renewal i think we should say yes but check with legal first", "output": "If they ask about the contract renewal, I think we should say yes but check with legal first."}
+{"input": "um uh check the npv calculation slash 2 million dollars comma make sure depreciation is correct period", "output": "Check the NPV calculation / $2 million, make sure depreciation is correct."}
+{"input": "use techcorp wait no sorry lets stick with globex for the contract renewal", "output": "Let's stick with globex for the contract renewal."}
+{"input": "what is the uh return on investment question mark", "output": "What is the return on investment?"}
+{"input": "did you send the script to the editor or the 3 tests is failing", "output": "Did you send the script to the editor, or are the 3 tests failing?"}
+{"input": "it is definitely time for q2 planning now", "output": "It is definitely time for Q2 planning now."}
+{"input": "this software are the best we found", "output": "This software is the best we found."}
+{"input": "you know basically the rule is one branch per feature and you never merge to main without testing right", "output": "The rule is one branch per feature and you never merge to main without testing."}
+{"input": "absolutely go ahead and deploy this to staging", "output": "Absolutely, go ahead and deploy this to staging."}
+{"input": "the go service crashed with er a panic", "output": "The Go service crashed with a panic."}
+{"input": "theres a merge conflict on the origin remote", "output": "There's a merge conflict on the origin remote."}
+{"input": "we have like 20 dependencies um actually 32 now after adding svelte last week", "output": "We have 32 dependencies after adding Svelte."}
+{"input": "uh my devices is connected to the vlan", "output": "My devices are connected to the VLAN."}
+{"input": "um uh so please review the accounts receivable aging report slash 500 dollars period for the audit", "output": "Please review the accounts receivable aging report / $500 for the audit."}
+{"input": "uh can you uh tell me if the grafana dashboard is um showing the right metrics for the redis instances or is it just the um cpu utilization we are looking at for the last 500 requests", "output": "Can you tell me if the Grafana dashboard is showing the right metrics for the Redis instances or is it just the CPU utilization we are looking at for the last 500 requests?"}
+{"input": "okay basically you should change the subnet to 19216810 slash 24 now um please", "output": "You should change the subnet to 192.168.1.0/24 now."}
+{"input": "scale to 500 pods wait uh no 500 nodes are needed", "output": "Scale to 500 nodes."}
+{"input": "rebass the feature branch before we merge", "output": "Rebase the feature branch before we merge."}
+{"input": "you should use this email address its free", "output": "You should use this email address. It's free."}
+{"input": "okay so we have to update the terms of service for the new gdpr rules", "output": "We have to update the terms of service for the new GDPR rules."}
+{"input": "patch the vulnerability uh the critical issue is in python actually apply the patch before the end of week", "output": "Apply the patch before the end of week."}
+{"input": "uh the rust service is down period", "output": "The Rust service is down."}
+{"input": "uh one check the indemnification form two update the sox settings right im confused", "output": "1. Check the indemnification form\n2. Update the sox settings"}
+{"input": "uh just check the go logs again", "output": "Just check the Go logs again."}
+{"input": "weve updated the config wait uh hold on the yaml file is correct", "output": "The YAML file is correct."}
+{"input": "we have to onboard the new hires by next monday uh", "output": "We have to onboard the new hires by next Monday."}
+{"input": "i mean the version compatibility is critical for the release", "output": "The version compatibility is critical for the release."}
+{"input": "i think the doctors say we got to fix the encryption its not hipaa ready yet no wait the data isnt secure", "output": "I think the doctors say we have to fix the encryption. It's not HIPAA ready yet. No, wait, the data isn't secure."}
+{"input": "the deployment period um uh must be at least 24 hours for the audit team", "output": "The deployment period must be at least 24 hours for the audit team."}
+{"input": "weve uh noticed latency issues in the database so the um team is optimizing queries", "output": "We've noticed latency issues in the database so the team is optimizing queries."}
+{"input": "uh first verify the arbitration clause um second check the deposition schedule right", "output": "1. Verify the arbitration clause\n2. Check the deposition schedule"}
+{"input": "tier 1 is free like wait actually tier 0 is free with a membership card dont worry", "output": "Tier 0 is free with a membership card. Don't worry."}
+{"input": "um i want you to ship it when the tests pass", "output": "Um, I want you to ship it when the tests pass."}
+{"input": "i really think the p value is very low", "output": "I really think the p value is very low."}
+{"input": "the subway station is closed er ah um so i have to walk to the office", "output": "The subway station is closed so I have to walk to the office."}
+{"input": "save the wacc rate as 5 actually 6 for the audit", "output": "Save the WACC rate as 6 for the audit."}
+{"input": "we have 4 items for the list uh like one flowers 2 chocolate 3 gift card", "output": "We have 4 items for the list. 1. Flowers. 2. Chocolate. 3. Gift card."}
+{"input": "honestly theres a conflict in the python requirements", "output": "There's a conflict in the Python requirements."}
+{"input": "um update the typescript file with new changes period", "output": "Update the TypeScript file with new changes."}
+{"input": "uh the sofr rate is uh four percent comma no wait three point five percent period", "output": "The SOFR rate is 3.5%."}
+{"input": "call the api endpoint v1 um no the v2 endpoint has the validation data", "output": "The v2 endpoint has the validation data."}
+{"input": "i was thinking about maybe moving some folks to q2 but uh no wait i mean the budget is tight so were gonna freeze hiring and um the team lead needs to report weekly on progress", "output": "I was thinking about moving some folks to Q2, but the budget is tight. We're going to freeze hiring, and the team lead needs to report weekly on progress."}
+{"input": "im deploying to kubernetes cluster wait no use docker compose for local testing instead", "output": "Use Docker Compose for local testing."}
+{"input": "literally we found a breach in the database so we need to report it", "output": "We found a breach in the database so we need to report it."}
+{"input": "wait i meant q2 not q1 for the hiring budget", "output": "I meant Q2 not Q1 for the hiring budget."}
+{"input": "ship it before the meeting", "output": "Ship it before the meeting."}
+{"input": "weve uh calculated the depreciation period", "output": "We've calculated the depreciation."}
+{"input": "we should start metformin wait actually no theyre on dialysis so stop metformin and start atorvastatin instead", "output": "Stop metformin and start atorvastatin instead."}

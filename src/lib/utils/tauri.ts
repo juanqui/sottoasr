@@ -31,8 +31,6 @@ export interface Settings {
   max_history: number;
   launch_at_login: boolean;
   llm_cleanup_enabled: boolean;
-  llm_markdown_mode: boolean;
-  llm_model_size: string;
 }
 
 export interface ModelStatus {
@@ -179,14 +177,23 @@ export interface LlmStatus {
   loaded: boolean;
   model_name: string;
   model_path: string | null;
+  update_available: boolean;
 }
 
 export function getLlmStatus(): Promise<LlmStatus> {
   return invoke('get_llm_status');
 }
 
+export function checkLlmUpdate(): Promise<boolean> {
+  return invoke('check_llm_update');
+}
+
 export function downloadLlmModel(): Promise<void> {
   return invoke('download_llm_model');
+}
+
+export function updateLlmModel(): Promise<void> {
+  return invoke('update_llm_model');
 }
 
 export function cancelLlmDownload(): Promise<void> {

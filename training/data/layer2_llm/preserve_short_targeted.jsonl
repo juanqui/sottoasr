@@ -1,0 +1,25 @@
+{"input": "yes", "output": "Yes.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "no", "output": "No.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "thanks", "output": "Thanks.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "ok", "output": "OK.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "sure", "output": "Sure.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "done", "output": "Done.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "approved", "output": "Approved.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "deploy to staging", "output": "Deploy to staging.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "merge the pull request", "output": "Merge the pull request.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "lets go ahead and ship this", "output": "Let's go ahead and ship this.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the build is passing", "output": "The build is passing.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "i really like this approach", "output": "I really like this approach.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "we have a lot of work to do", "output": "We have a lot of work to do.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the client is very happy with the results", "output": "The client is very happy with the results.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "i definitely think we should move forward with this plan", "output": "I definitely think we should move forward with this plan.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "the performance metrics look good across the board", "output": "The performance metrics look good across the board.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "schedule a follow up in two weeks", "output": "Schedule a follow-up in two weeks.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "the patients vitals are stable", "output": "The patient's vitals are stable.", "category": "preserve_wording", "domain": "medical_health"}
+{"input": "go ahead and close the ticket", "output": "Go ahead and close the ticket.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "i want you to review this carefully before we proceed", "output": "I want you to review this carefully before we proceed.", "category": "preserve_wording", "domain": "software_engineering"}
+{"input": "the results are very promising and we should continue", "output": "The results are very promising, and we should continue.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "great job everyone", "output": "Great job, everyone.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "ill take care of it", "output": "I'll take care of it.", "category": "preserve_wording", "domain": "casual_conversational"}
+{"input": "the deadline is next friday", "output": "The deadline is next Friday.", "category": "preserve_wording", "domain": "general_business"}
+{"input": "please send me the updated report by end of day", "output": "Please send me the updated report by end of day.", "category": "preserve_wording", "domain": "general_business"}

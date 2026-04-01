@@ -2,6 +2,37 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.5.0] — 2026-04-01
+
+Reliable multi-monitor overlay, draggable positioning, and a switch to SottoASR's own fine-tuned cleanup model.
+
+### Added
+
+- **Multi-monitor overlay reliability** — The overlay now reliably appears on the correct monitor by bypassing Tauri's buggy monitor APIs (tauri#10980, #7890, #14825) in favor of native macOS APIs (`NSScreen`, `CGWindowListCopyWindowInfo`, `setFrameOrigin:`).
+- **Overlay follows focused app** — The overlay appears on the monitor containing the focused application's window (like Spotlight/Raycast), not the mouse cursor. Falls back to mouse → primary screen.
+- **Draggable overlay** — The recording pill can be dragged to any position on screen.
+- **Per-monitor position memory** — Dragged positions are saved per monitor (keyed by `CGDirectDisplayID`) and restored on subsequent recordings. Positions are clamped to the current visible frame on restore.
+- **LLM model update support** — Settings panel can check for and apply updates to the cleanup model.
+- **Multi-monitor diagnostic logging** — Screen configuration, target selection reasoning, and final position are logged for debugging.
+
+### Changed
+
+- **Overlay position lowered** — Default position is now just above the Dock (8pt padding) instead of 100pt above the bottom, making better use of screen space.
+- **Switched to fine-tuned SottoASR cleanup model** — Replaced generic Qwen3.5 models (0.8B/2B/4B) with a purpose-built `sotto-cleanup-lfm25-350m` model (233 MB, 5-bit quantized). Faster inference, better transcript cleanup quality (ROUGE-L 0.926, 99% filler-free).
+- **Removed model size selector** — Single optimized model replaces the previous three-size choice. Settings fields `llm_model_size` and `llm_markdown_mode` removed.
+- **LLM cleanup timeout extended** — Increased from 30s to 120s to handle long transcriptions.
+- **Feature flag renamed** — `llm-qwen` → `llm-cleanup` to reflect the model change.
+
+### Fixed
+
+- **Overlay appearing off-screen on multi-monitor setups** — Coordinate system mismatch between `NSEvent.mouseLocation` (Cocoa logical points) and Tauri's physical pixel monitor bounds caused wrong monitor detection on mixed-DPI setups.
+- **Overlay left-aligned instead of centered** — Tauri's `set_position()` applied broken coordinate transforms on secondary monitors. Replaced with native `setFrameOrigin:` in Cocoa coordinates.
+
+### Infrastructure
+
+- **Spec:** `docs/specs/2026-04-01-multi-monitor-overlay-reliability.md` — full investigation, root cause analysis, and implementation record.
+- **Research:** Fine-tuned model training documentation and synthetic data generation research.
+
 ## [0.4.0] — 2026-03-30
 
 LLM transcript cleanup quality improvements and comprehensive audit remediation.

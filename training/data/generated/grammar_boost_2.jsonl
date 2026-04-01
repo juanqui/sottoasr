@@ -1,0 +1,40 @@
+{"input": "the report need to be submitted by end of day", "output": "The report needs to be submitted by end of day."}
+{"input": "every one of the servers need a security patch", "output": "Every one of the servers needs a security patch."}
+{"input": "neither the frontend or the backend is working correct", "output": "Neither the frontend nor the backend is working correctly."}
+{"input": "the amount of bugs are increasing every sprint", "output": "The number of bugs is increasing every sprint."}
+{"input": "less developers showed up to the standup today", "output": "Fewer developers showed up to the standup today."}
+{"input": "the data needs backed up before we proceed", "output": "The data needs to be backed up before we proceed."}
+{"input": "me and her reviewed all the pull requests yesterday", "output": "She and I reviewed all the pull requests yesterday."}
+{"input": "the new feature work good on chrome but not safari", "output": "The new feature works well on Chrome but not Safari."}
+{"input": "we would of finished sooner if the requirements was clear", "output": "We would have finished sooner if the requirements were clear."}
+{"input": "the app crash whenever you try to upload a large file", "output": "The app crashes whenever you try to upload a large file."}
+{"input": "the kubernetes cluster have three worker nodes", "output": "The Kubernetes cluster has three worker nodes."}
+{"input": "them issues is all related to the same root cause", "output": "Those issues are all related to the same root cause."}
+{"input": "everybody in the team have completed their tasks", "output": "Everybody in the team has completed their tasks."}
+{"input": "the monitoring system dont alert us when cpu usage spike", "output": "The monitoring system doesn't alert us when CPU usage spikes."}
+{"input": "we been deploying to production every friday without issues", "output": "We've been deploying to production every Friday without issues."}
+{"input": "the endpoint dont accept post requests only get", "output": "The endpoint doesn't accept POST requests, only GET."}
+{"input": "there is too many microservices for the team to manage", "output": "There are too many microservices for the team to manage."}
+{"input": "the cache layer dont work proper with the new database", "output": "The cache layer doesn't work properly with the new database."}
+{"input": "them changes shouldnt of been merged without review", "output": "Those changes shouldn't have been merged without review."}
+{"input": "the ci pipeline run slow because it rebuild everything from scratch", "output": "The CI pipeline runs slowly because it rebuilds everything from scratch."}
+{"input": "the patient condition have improved since the surgery", "output": "The patient's condition has improved since the surgery."}
+{"input": "the defendant attorney argue that the evidence is inadmissible", "output": "The defendant's attorney argued that the evidence is inadmissible."}
+{"input": "the quarterly earnings was better then analyst expectations", "output": "The quarterly earnings were better than analyst expectations."}
+{"input": "the research team havent publish their findings yet", "output": "The research team hasn't published their findings yet."}
+{"input": "we aint got time to refactor this before the release", "output": "We don't have time to refactor this before the release."}
+{"input": "the latency spikes is caused by garbage collection", "output": "The latency spikes are caused by garbage collection."}
+{"input": "me and carlos gonna pair program on the authentication module", "output": "Carlos and I are going to pair program on the authentication module."}
+{"input": "the test suite run for thirty minutes which is way to long", "output": "The test suite runs for thirty minutes, which is way too long."}
+{"input": "the documentation aint been updated in six months", "output": "The documentation hasn't been updated in six months."}
+{"input": "we would of had less downtime if the monitoring was better", "output": "We would have had less downtime if the monitoring were better."}
+{"input": "the sprint velocity have decreased for three consecutive sprints", "output": "The sprint velocity has decreased for three consecutive sprints."}
+{"input": "neither him nor me was available for the on call rotation", "output": "Neither he nor I was available for the on-call rotation."}
+{"input": "the api response time are too slow for the mobile app", "output": "The API response time is too slow for the mobile app."}
+{"input": "the users dont like how the new search work", "output": "The users don't like how the new search works."}
+{"input": "the backup script dont run on weekends it only run on weekdays", "output": "The backup script doesn't run on weekends. It only runs on weekdays."}
+{"input": "the code review comments was really helpful for improving quality", "output": "The code review comments were really helpful for improving quality."}
+{"input": "us three is gonna work on the migration together", "output": "The three of us are going to work on the migration together."}
+{"input": "the disk usage keep growing and nobody dont know why", "output": "The disk usage keeps growing, and nobody knows why."}
+{"input": "the error messages aint helpful they just say something went wrong", "output": "The error messages aren't helpful. They just say something went wrong."}
+{"input": "we gonna need to scale horizontal before black friday", "output": "We're going to need to scale horizontally before Black Friday."}

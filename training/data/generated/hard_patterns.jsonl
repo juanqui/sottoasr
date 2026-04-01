@@ -1,0 +1,185 @@
+{"input": "well yeah so like okay looks good", "output": "Looks good."}
+{"input": "him and me dont know the answer since monday", "output": "He and I don't know the answer since monday."}
+{"input": "okay yeah right so basically tests green", "output": "Tests green."}
+{"input": "so basically what im getting at is the deadline is unrealistic", "output": "The deadline is unrealistic."}
+{"input": "what i want to say is that the migration is risky", "output": "The migration is risky."}
+{"input": "the thing is basically the budget is tight", "output": "The budget is tight."}
+{"input": "the point im trying to make is we cant ship this yet", "output": "We can't ship this yet."}
+{"input": "right so first we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "well yeah so like okay ready to deploy", "output": "Ready to deploy."}
+{"input": "the point im trying to make is the budget is tight", "output": "The budget is tight."}
+{"input": "so uh yeah okay well all clear", "output": "All clear."}
+{"input": "right okay so basically um all clear", "output": "All clear."}
+{"input": "me and the designer is reviewing the mockups for the sprint", "output": "The designer and I are reviewing the mockups for the sprint."}
+{"input": "me and sarah is writing the tests for the sprint", "output": "Sarah and I are writing the tests for the sprint."}
+{"input": "me and the team dont have enough time", "output": "The team and I don't have enough time."}
+{"input": "i guess what im trying to say is that the tests are failing", "output": "The tests are failing."}
+{"input": "honestly what im trying to get across is we cant ship this yet", "output": "We can't ship this yet."}
+{"input": "right okay so basically um ship it", "output": "Ship it."}
+{"input": "you know what i mean like the migration is risky", "output": "The migration is risky."}
+{"input": "basically okay yeah um so ship it", "output": "Ship it."}
+{"input": "right okay so basically um approved", "output": "Approved."}
+{"input": "i mean what im saying is the server is down", "output": "The server is down."}
+{"input": "honestly what im trying to get across is the pipeline is broken", "output": "The pipeline is broken."}
+{"input": "what im trying to say is the pipeline is broken", "output": "The pipeline is broken."}
+{"input": "me and her is gonna fix this for the sprint", "output": "She and I are going to fix this for the sprint."}
+{"input": "him and me should of started earlier this week", "output": "He and I should have started earlier this week."}
+{"input": "okay so first we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "yeah um okay so right fixed it", "output": "Fixed it."}
+{"input": "i mean what im saying is the api is slow", "output": "The api is slow."}
+{"input": "basically okay yeah um so works now", "output": "Works now."}
+{"input": "yeah um okay so right no issues found", "output": "No issues found."}
+{"input": "her and me was assigned to this project before the deadline", "output": "She and I were assigned to this project before the deadline."}
+{"input": "so like the thing is basically the budget is tight", "output": "The budget is tight."}
+{"input": "okay yeah right so basically lets go", "output": "Lets go."}
+{"input": "okay so the thing is right the api is slow", "output": "The api is slow."}
+{"input": "me and the ops team is investigating before the deadline", "output": "The ops team and I are investigating before the deadline."}
+{"input": "i guess what im trying to say is that the api is slow", "output": "The api is slow."}
+{"input": "okay uh so basically yeah its done", "output": "Its done."}
+{"input": "okay one we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "basically first we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "what i want to say is that the deployment failed", "output": "The deployment failed."}
+{"input": "well yeah so like okay fixed it", "output": "Fixed it."}
+{"input": "so like yeah okay basically approved", "output": "Approved."}
+{"input": "what im trying to say is the server is down", "output": "The server is down."}
+{"input": "him and me dont know the answer this week", "output": "He and I don't know the answer this week."}
+{"input": "so the bottom line is the deployment failed", "output": "The deployment failed."}
+{"input": "okay so the thing is right the budget is tight", "output": "The budget is tight."}
+{"input": "you know what i mean like the api is slow", "output": "The api is slow."}
+{"input": "so first thing we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "okay one we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "him and me should of started earlier", "output": "He and I should have started earlier."}
+{"input": "me and the team is working on it this week", "output": "The team and I are working on it this week."}
+{"input": "me and her is gonna fix this before the deadline", "output": "She and I are going to fix this before the deadline."}
+{"input": "at the end of the day the code review found issues", "output": "The code review found issues."}
+{"input": "the thing is basically the tests are failing", "output": "The tests are failing."}
+{"input": "me and the team is working on it for the sprint", "output": "The team and I are working on it for the sprint."}
+{"input": "so basically what im getting at is the performance is acceptable", "output": "The performance is acceptable."}
+{"input": "the point im trying to make is the performance is acceptable", "output": "The performance is acceptable."}
+{"input": "well yeah so like okay merge it", "output": "Merge it."}
+{"input": "at the end of the day the performance is acceptable", "output": "The performance is acceptable."}
+{"input": "me and sarah is writing the tests before the deadline", "output": "Sarah and I are writing the tests before the deadline."}
+{"input": "okay yeah right so basically approved", "output": "Approved."}
+{"input": "you know what i mean like we need more developers", "output": "We need more developers."}
+{"input": "i guess what im trying to say is that the client is unhappy", "output": "The client is unhappy."}
+{"input": "so like yeah okay basically looks good", "output": "Looks good."}
+{"input": "so like yeah okay basically ship it", "output": "Ship it."}
+{"input": "okay so first we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "what im trying to say is the migration is risky", "output": "The migration is risky."}
+{"input": "right so first we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "me and the team is working on it since monday", "output": "The team and I are working on it since monday."}
+{"input": "me and him was debugging all day since monday", "output": "He and I were debugging all day since monday."}
+{"input": "him and me should of started earlier before the deadline", "output": "He and I should have started earlier before the deadline."}
+{"input": "okay so first we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "so basically what im getting at is the database needs upgrading", "output": "The database needs upgrading."}
+{"input": "right so first we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "me and him was debugging all day", "output": "He and I were debugging all day."}
+{"input": "at the end of the day we need more developers", "output": "We need more developers."}
+{"input": "the point im trying to make is the server is down", "output": "The server is down."}
+{"input": "you know what i mean like we cant ship this yet", "output": "We can't ship this yet."}
+{"input": "okay uh so basically yeah all clear", "output": "All clear."}
+{"input": "her and me was assigned to this project this week", "output": "She and I were assigned to this project this week."}
+{"input": "her and me was assigned to this project", "output": "She and I were assigned to this project."}
+{"input": "honestly what im trying to get across is the code review found issues", "output": "The code review found issues."}
+{"input": "me and the designer is reviewing the mockups since monday", "output": "The designer and I are reviewing the mockups since monday."}
+{"input": "so the bottom line is the deadline is unrealistic", "output": "The deadline is unrealistic."}
+{"input": "right so first we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "her and me was assigned to this project for the sprint", "output": "She and I were assigned to this project for the sprint."}
+{"input": "me and the ops team is investigating for the sprint", "output": "The ops team and I are investigating for the sprint."}
+{"input": "yeah um okay so right merge it", "output": "Merge it."}
+{"input": "me and the team dont have enough time for the sprint", "output": "The team and I don't have enough time for the sprint."}
+{"input": "at the end of the day the server is down", "output": "The server is down."}
+{"input": "what i want to say is that we cant ship this yet", "output": "We can't ship this yet."}
+{"input": "so like yeah okay basically lets go", "output": "Lets go."}
+{"input": "so like the thing is basically the code review found issues", "output": "The code review found issues."}
+{"input": "right okay so basically um merge it", "output": "Merge it."}
+{"input": "so uh yeah okay well the build passed", "output": "The build passed."}
+{"input": "me and the designer is reviewing the mockups this week", "output": "The designer and I are reviewing the mockups this week."}
+{"input": "me and him was debugging all day before the deadline", "output": "He and I were debugging all day before the deadline."}
+{"input": "yeah so one we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "what im trying to say is we need more time", "output": "We need more tI'me."}
+{"input": "okay so first we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "okay yeah right so basically ready to deploy", "output": "Ready to deploy."}
+{"input": "me and the ops team is investigating", "output": "The ops team and I are investigating."}
+{"input": "the thing is basically the server is down", "output": "The server is down."}
+{"input": "so like yeah okay basically tests green", "output": "Tests green."}
+{"input": "so first thing we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "what im trying to say is the code review found issues", "output": "The code review found issues."}
+{"input": "at the end of the day the tests are failing", "output": "The tests are failing."}
+{"input": "him and me should of started earlier since monday", "output": "He and I should have started earlier since monday."}
+{"input": "basically okay yeah um so approved", "output": "Approved."}
+{"input": "so first thing we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "okay so the thing is right the deadline is unrealistic", "output": "The deadline is unrealistic."}
+{"input": "the thing is basically we need more developers", "output": "We need more developers."}
+{"input": "me and the ops team is investigating this week", "output": "The ops team and I are investigating this week."}
+{"input": "so like the thing is basically the deployment failed", "output": "The deployment failed."}
+{"input": "so basically what im getting at is we need more time", "output": "We need more tI'me."}
+{"input": "okay one we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "me and her is gonna fix this this week", "output": "She and I are going to fix this this week."}
+{"input": "him and me should of started earlier for the sprint", "output": "He and I should have started earlier for the sprint."}
+{"input": "okay one we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "basically first we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "so uh yeah okay well works now", "output": "Works now."}
+{"input": "right so first we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "okay uh so basically yeah ship it", "output": "Ship it."}
+{"input": "what i want to say is that the tests are failing", "output": "The tests are failing."}
+{"input": "me and the designer is reviewing the mockups", "output": "The designer and I are reviewing the mockups."}
+{"input": "okay so the thing is right we should use redis", "output": "We should use redis."}
+{"input": "him and me dont know the answer for the sprint", "output": "He and I don't know the answer for the sprint."}
+{"input": "honestly what im trying to get across is we need more time", "output": "We need more tI'me."}
+{"input": "yeah um okay so right the build passed", "output": "The build passed."}
+{"input": "so the bottom line is the pipeline is broken", "output": "The pipeline is broken."}
+{"input": "yeah so one we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "okay so the thing is right the code review found issues", "output": "The code review found issues."}
+{"input": "yeah so one we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "me and the team dont have enough time since monday", "output": "The team and I don't have enough time since monday."}
+{"input": "i guess what im trying to say is that the deployment failed", "output": "The deployment failed."}
+{"input": "basically first we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "him and me dont know the answer", "output": "He and I don't know the answer."}
+{"input": "okay so first we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "yeah um okay so right all clear", "output": "All clear."}
+{"input": "him and me dont know the answer before the deadline", "output": "He and I don't know the answer before the deadline."}
+{"input": "well yeah so like okay lets go", "output": "Lets go."}
+{"input": "okay uh so basically yeah approved", "output": "Approved."}
+{"input": "me and sarah is writing the tests", "output": "Sarah and I are writing the tests."}
+{"input": "so the bottom line is the api is slow", "output": "The api is slow."}
+{"input": "i guess what im trying to say is that the code review found issues", "output": "The code review found issues."}
+{"input": "me and him was debugging all day for the sprint", "output": "He and I were debugging all day for the sprint."}
+{"input": "so like the thing is basically we need more time", "output": "We need more tI'me."}
+{"input": "me and the team is working on it", "output": "The team and I are working on it."}
+{"input": "basically first we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "so uh yeah okay well its done", "output": "Its done."}
+{"input": "so uh yeah okay well lets go", "output": "Lets go."}
+{"input": "the point im trying to make is the deployment failed", "output": "The deployment failed."}
+{"input": "me and the designer is reviewing the mockups before the deadline", "output": "The designer and I are reviewing the mockups before the deadline."}
+{"input": "so first thing we need to uh check the logs second we should um fix the error and third uh restart the service right", "output": "1. Check the logs\n2. Fix the error\n3. Restart the service"}
+{"input": "so basically what im getting at is the migration is risky", "output": "The migration is risky."}
+{"input": "i mean what im saying is the deployment failed", "output": "The deployment failed."}
+{"input": "so the bottom line is the budget is tight", "output": "The budget is tight."}
+{"input": "the thing is basically the database needs upgrading", "output": "The database needs upgrading."}
+{"input": "what i want to say is that the code review found issues", "output": "The code review found issues."}
+{"input": "yeah so one we need to uh update the schema second we should um migrate the data and third uh run the tests right", "output": "1. Update the schema\n2. Migrate the data\n3. Run the tests"}
+{"input": "okay one we need to uh fix the login bug second we should um add the search feature and third uh update the documentation right", "output": "1. Fix the login bug\n2. Add the search feature\n3. Update the documentation"}
+{"input": "me and sarah is writing the tests this week", "output": "Sarah and I are writing the tests this week."}
+{"input": "you know what i mean like we need more time", "output": "We need more tI'me."}
+{"input": "okay yeah right so basically all clear", "output": "All clear."}
+{"input": "basically okay yeah um so tests green", "output": "Tests green."}
+{"input": "me and the team dont have enough time this week", "output": "The team and I don't have enough time this week."}
+{"input": "so first thing we need to uh back up the database second we should um apply the patch and third uh verify the fix right", "output": "1. Back up the database\n2. Apply the patch\n3. Verify the fix"}
+{"input": "me and her is gonna fix this since monday", "output": "She and I are going to fix this since monday."}
+{"input": "me and sarah is writing the tests since monday", "output": "Sarah and I are writing the tests since monday."}
+{"input": "me and the team is working on it before the deadline", "output": "The team and I are working on it before the deadline."}
+{"input": "me and him was debugging all day this week", "output": "He and I were debugging all day this week."}
+{"input": "so like the thing is basically the client is unhappy", "output": "The client is unhappy."}
+{"input": "i mean what im saying is the deadline is unrealistic", "output": "The deadline is unrealistic."}
+{"input": "okay uh so basically yeah lets go", "output": "Lets go."}
+{"input": "i mean what im saying is we should use redis", "output": "We should use redis."}
+{"input": "basically first we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "her and me was assigned to this project since monday", "output": "She and I were assigned to this project since monday."}
+{"input": "basically okay yeah um so the build passed", "output": "The build passed."}
+{"input": "yeah so one we need to uh review the code second we should um write tests and third uh deploy to staging right", "output": "1. Review the code\n2. Write tests\n3. Deploy to staging"}
+{"input": "me and the team dont have enough time before the deadline", "output": "The team and I don't have enough time before the deadline."}
+{"input": "me and the ops team is investigating since monday", "output": "The ops team and I are investigating since monday."}
+{"input": "right okay so basically um lets go", "output": "Lets go."}
+{"input": "me and her is gonna fix this", "output": "She and I are going to fix this."}
+{"input": "honestly what im trying to get across is the client is unhappy", "output": "The client is unhappy."}

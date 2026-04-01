@@ -21,8 +21,6 @@ const DEFAULT_SETTINGS: Settings = {
   max_history: 500,
   launch_at_login: false,
   llm_cleanup_enabled: false,
-  llm_markdown_mode: false,
-  llm_model_size: '2b',
 };
 
 class SettingsStore {
