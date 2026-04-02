@@ -54,6 +54,8 @@ pub struct Settings {
     pub launch_at_login: bool,
     #[serde(default)]
     pub llm_cleanup_enabled: bool,
+    #[serde(default = "default_true")]
+    pub auto_check_updates: bool,
 }
 
 impl Settings {
@@ -102,6 +104,7 @@ impl Default for Settings {
             max_history: 500,
             launch_at_login: false,
             llm_cleanup_enabled: false,
+            auto_check_updates: true,
         }
     }
 }

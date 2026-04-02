@@ -9,6 +9,7 @@ mod llm;
 mod paste;
 mod hotkeys;
 mod tray;
+mod updater;
 
 use state::AppState;
 use tauri::Manager;
@@ -35,6 +36,7 @@ pub fn run() {
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_nspanel::init())
         .manage(AppState::new())
+        .manage(updater::UpdateState::new())
         .invoke_handler(tauri::generate_handler![
             // Recording
             commands::recording::start_recording,
@@ -80,8 +82,16 @@ pub fn run() {
             commands::llm::delete_llm_model,
             commands::llm::load_llm_model,
             commands::llm::unload_llm_model,
+            // App updater
+            updater::check_app_update,
+            updater::perform_app_update,
+            updater::get_update_status,
         ])
         .setup(|app| {
+            // Register the updater plugin (must use Builder pattern inside setup)
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
             let handle = app.handle().clone();
 
             // Hide from Dock — menu bar only app.
@@ -153,8 +163,9 @@ pub fn run() {
             } else {
                 log::info!("Models available — ready to use");
                 // Initialize ASR in background
+                let asr_handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, AppState> = handle.state();
+                    let state: tauri::State<'_, AppState> = asr_handle.state();
                     let mut engine = state.asr_engine.lock().await;
                     if let Err(e) = engine.init() {
                         log::error!("Background ASR init failed: {}", e);
@@ -164,6 +175,9 @@ pub fn run() {
                     }
                 });
             }
+
+            // Start the auto-update checker (15s delay, then every 4 hours)
+            updater::start_update_checker(&handle);
 
             log::info!("SottoASR initialized (ASR backend: {})", asr::model::backend_name());
             Ok(())

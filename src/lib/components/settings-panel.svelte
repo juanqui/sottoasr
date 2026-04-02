@@ -347,6 +347,16 @@
           <span class="slider"></span>
         </label>
       </div>
+      <div class="toggle-field">
+        <div class="toggle-info">
+          <span class="toggle-label">Auto-check for updates</span>
+          <span class="toggle-hint">Check for new versions periodically</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" bind:checked={settingsStore.current.auto_check_updates} />
+          <span class="slider"></span>
+        </label>
+      </div>
     </section>
 
     <!-- AI Transcript Cleanup -->

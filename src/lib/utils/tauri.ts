@@ -31,6 +31,7 @@ export interface Settings {
   max_history: number;
   launch_at_login: boolean;
   llm_cleanup_enabled: boolean;
+  auto_check_updates: boolean;
 }
 
 export interface ModelStatus {
@@ -210,4 +211,26 @@ export function loadLlmModel(): Promise<void> {
 
 export function unloadLlmModel(): Promise<void> {
   return invoke('unload_llm_model');
+}
+
+// ---- App update commands ----
+
+export interface UpdateStatus {
+  update_available: boolean;
+  version: string | null;
+  release_notes: string | null;
+  downloading: boolean;
+  restart_pending: boolean;
+}
+
+export function checkAppUpdate(): Promise<string | null> {
+  return invoke('check_app_update');
+}
+
+export function performAppUpdate(): Promise<string> {
+  return invoke('perform_app_update');
+}
+
+export function getUpdateStatus(): Promise<UpdateStatus> {
+  return invoke('get_update_status');
 }

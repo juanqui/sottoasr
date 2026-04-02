@@ -29,6 +29,7 @@
     "positioner:default",
     "os:default",
     "process:default",
-    "log:default"
+    "log:default",
+    "updater:default"
   ]
 }

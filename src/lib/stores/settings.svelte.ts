@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: Settings = {
   max_history: 500,
   launch_at_login: false,
   llm_cleanup_enabled: false,
+  auto_check_updates: true,
 };
 
 class SettingsStore {
