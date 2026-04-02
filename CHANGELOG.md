@@ -2,6 +2,24 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.5.2] — 2026-04-02
+
+Auto-update support so users are notified of new versions without checking GitHub.
+
+### Added
+
+- **Auto-update mechanism** — The app now checks for updates on launch and every 4 hours. When a new version is available, a badge dot appears on the tray icon and an "Update Available" item appears at the top of the tray menu. One click to download, install, and restart.
+- **"Check for Updates" menu item** — Always available in the tray menu for manual checks.
+- **Update status in About window** — Shows current version status with a "Download & Install" button when an update is available.
+- **"Auto-check for updates" setting** — Toggle in Settings > Behavior to disable automatic checks.
+- **Ed25519 signature verification** — All update artifacts are cryptographically signed. The app verifies signatures before installing, preventing tampered updates.
+- **App Translocation detection** — Warns users running from a quarantined path to move the app to /Applications.
+
+### Infrastructure
+
+- **Updater signing keys** — CI pipeline now signs update artifacts with a Tauri Ed25519 keypair.
+- **`latest.json` manifest** — Automatically generated and uploaded to GitHub Releases by the CI workflow.
+
 ## [0.5.1] — 2026-04-01
 
 Fix model update detection and add HuggingFace model link in settings.
