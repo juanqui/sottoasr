@@ -174,6 +174,43 @@ pub fn run() {
                         log::info!("ASR engine ready");
                     }
                 });
+
+                // Pre-load LLM sidecar in background (if enabled and model is downloaded)
+                if llm::engine::is_feature_compiled() {
+                    let llm_handle = handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state: tauri::State<'_, AppState> = llm_handle.state();
+                        let enabled = state.settings.lock().await.llm_cleanup_enabled;
+
+                        if !enabled
+                            || !llm::engine::is_venv_ready()
+                            || !llm::engine::is_model_downloaded()
+                        {
+                            return;
+                        }
+
+                        log::info!("Pre-loading LLM sidecar in background...");
+                        match tokio::task::spawn_blocking(|| {
+                            let mut e = llm::engine::LlmEngine::spawn()?;
+                            e.load_model()?;
+                            Ok::<_, String>(e)
+                        })
+                        .await
+                        {
+                            Ok(Ok(engine)) => {
+                                let mut guard = state.llm_engine.lock().await;
+                                *guard = Some(engine);
+                                log::info!("LLM sidecar pre-loaded and ready");
+                            }
+                            Ok(Err(e)) => {
+                                log::warn!("LLM pre-load failed: {}", e);
+                            }
+                            Err(e) => {
+                                log::error!("LLM pre-load panicked: {}", e);
+                            }
+                        }
+                    });
+                }
             }
 
             // Start the auto-update checker (15s delay, then every 4 hours)

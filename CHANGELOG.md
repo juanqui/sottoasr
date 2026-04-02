@@ -2,6 +2,14 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.5.3] — 2026-04-02
+
+Eliminate cold-start latency for LLM transcript cleanup.
+
+### Changed
+
+- **LLM sidecar pre-loads at startup** — When transcript cleanup is enabled and the model is downloaded, the LLM sidecar now spawns and loads the model in the background at app launch. The first cleanup no longer pays the cold-start penalty.
+
 ## [0.5.2] — 2026-04-02
 
 Auto-update support so users are notified of new versions without checking GitHub.

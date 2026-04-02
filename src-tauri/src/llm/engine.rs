@@ -220,6 +220,16 @@ pub fn is_venv_ready() -> bool {
         .unwrap_or(false)
 }
 
+/// Check if the model weights are available in the HuggingFace cache.
+pub fn is_model_downloaded() -> bool {
+    let cache_dir = match dirs::home_dir() {
+        Some(h) => h.join(".cache/huggingface/hub"),
+        None => return false,
+    };
+    let cache_name = format!("models--{}", SOTTO_MODEL.id.replace('/', "--"));
+    cache_dir.join(cache_name).join("snapshots").is_dir()
+}
+
 /// Create the venv and install mlx-lm. This is a blocking operation (~30-60s).
 pub fn setup_venv() -> Result<(), String> {
     let venv = venv_dir()?;
