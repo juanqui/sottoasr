@@ -223,6 +223,13 @@ export interface UpdateStatus {
   restart_pending: boolean;
 }
 
+export interface UpdateDownloadProgress {
+  downloaded_bytes: number;
+  total_bytes: number | null;
+  /** 0.0 – 1.0 (or 0.0 if total is unknown). */
+  progress: number;
+}
+
 export function checkAppUpdate(): Promise<string | null> {
   return invoke('check_app_update');
 }

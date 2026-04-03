@@ -84,14 +84,48 @@ sotto/
 
 | Artifact | Repo | Visibility |
 |----------|------|------------|
-| **Training dataset** | [`juanquivilla/sotto-transcript-cleanup`](https://huggingface.co/datasets/juanquivilla/sotto-transcript-cleanup) | Private |
-| **Fine-tuned model** | [`juanquivilla/sotto-cleanup-lfm25-350m`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m) | Private |
+| **Training dataset** | [`juanquivilla/sotto-transcript-cleanup`](https://huggingface.co/datasets/juanquivilla/sotto-transcript-cleanup) | Public |
+| **Fine-tuned model (bf16)** | [`juanquivilla/sotto-cleanup-lfm25-350m`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m) | Public |
+| **MLX 5-bit (recommended)** | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) | Public |
+| **MLX 4-bit** | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit) | Public |
 
-- **HF token** is stored in `.env` (gitignored) as `HF_TOKEN`
+- **HF token** is stored in `.env` (gitignored) as `HF_TOKEN`. The remote training machine at `juanqui@192.168.1.128` has a **read-only** cached token; use the write token from `.env` for uploads.
 - **Naming convention:** `juanquivilla/sotto-{purpose}-{base_model}-{size}` for models; `juanquivilla/sotto-{purpose}` for datasets
-- **Upload process:** After each training run, upload the merged model and updated dataset to HF. Always update the model card with latest benchmark numbers.
-- **Base model:** `LiquidAI/LFM2.5-350M-Base` — full fine-tuned + stage-2 concentrated training, merged for inference
+- **Base model:** `LiquidAI/LFM2.5-350M-Base` — full fine-tuned (no LoRA), all 354M params trainable
+- **Current best:** v18 — ROUGE-L 0.968, 72% Exact Match, LR 2.5e-5, AdamW beta2=0.95, on 148K (v11 + preserve 2x + tail 3x)
 - **MLX quantized models** for on-device deployment:
-  - [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) — **recommended** (233MB, ROUGE-L 0.926, 99% filler-free)
-  - [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit) — smaller (190MB, ROUGE-L 0.897)
+  - 5-bit affine, group_size=64 — **recommended** (~237MB, minimal quality loss)
+  - 4-bit affine, group_size=64 — smaller (~195MB, slightly lower quality)
 - **Quantization recipe:** `mlx_lm.convert --hf-path <model> --mlx-path <out> -q --q-bits 5 --q-group-size 64 --trust-remote-code`
+
+### HuggingFace Upload Protocol (CRITICAL)
+
+**Every model upload MUST include a detailed model card (README.md).** Use the templates in `docs/templates/` as the starting point:
+- `docs/templates/hf-model-card-bf16.md` — Full precision model card template
+- `docs/templates/hf-model-card-mlx-5bit.md` — MLX 5-bit model card template
+- `docs/templates/hf-model-card-mlx-4bit.md` — MLX 4-bit model card template
+
+Model cards MUST include:
+1. Navigation links at top: sottoasr.app, all variant repos, training dataset
+2. Overview describing the model and linking to [SottoASR](https://sottoasr.app)
+3. Key specs table with sizes, ROUGE-L, Exact Match, Filler-Free, Latency
+4. **"What It Does" examples table** showing input/output pairs (at least 4-6 examples)
+5. Full per-category benchmark results table
+6. Comparison with prompted 2B baseline (bf16 card only)
+7. Usage code snippet (transformers for bf16, mlx_lm for MLX variants)
+8. Training details (bf16 card) or quantization recipe (MLX cards)
+9. "All Variants" table linking to all three repos
+10. Links section with sottoasr.app, GitHub, dataset
+
+**The website URL is `sottoasr.app` (NOT sotto.app).**
+
+**Upload checklist (run in order):**
+1. Copy template from `docs/templates/`, fill in benchmark numbers
+2. Upload bf16 model + model card to `sotto-cleanup-lfm25-350m`
+3. Generate MLX 5-bit quant locally (macOS only): `mlx_lm.convert ...`
+4. Generate MLX 4-bit quant locally
+5. Upload both MLX variants with variant-specific model cards
+6. Verify all three repos have correct README.md with cross-links and examples
+7. Update this section with latest benchmark numbers
+
+**NEVER delete or overwrite a model card without replacing it.** If uploading a new model version, the commit message MUST include the version identifier and key metric (e.g., "v15: ROUGE-L 0.960").

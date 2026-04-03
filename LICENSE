@@ -38,10 +38,11 @@ NVIDIA Parakeet TDT v3 (0.6B) - Speech Recognition Model
   Copyright (c) NVIDIA Corporation
   https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-Qwen3.5-0.8B - Language Model
-  License: Apache-2.0
-  Copyright (c) Alibaba Cloud (Qwen team)
-  https://huggingface.co/Qwen/Qwen3.5-0.8B
+SottoASR Cleanup (LFM2.5-350M) - Transcript Cleanup Model
+  License: LFM-1.0 (Liquid Foundation Model License)
+  Base model copyright (c) LiquidAI
+  https://huggingface.co/LiquidAI/LFM2.5-350M-Base
+  Fine-tuned model: https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m
 
 
 SPEECH RECOGNITION

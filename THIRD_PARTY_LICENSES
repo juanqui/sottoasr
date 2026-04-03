@@ -3244,7 +3244,8 @@ NVIDIA Parakeet TDT v3 (0.6B)
   Copyright: NVIDIA Corporation
   URL: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-Qwen3.5-0.8B (via mlx-community/Qwen3.5-0.8B-OptiQ-4bit)
-  License: Apache-2.0
-  Copyright: Alibaba Cloud (Qwen team)
-  URL: https://huggingface.co/Qwen/Qwen3.5-0.8B
+SottoASR Cleanup (fine-tuned LFM2.5-350M, via juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit)
+  License: LFM-1.0 (Liquid Foundation Model License)
+  Base model copyright: LiquidAI
+  URL: https://huggingface.co/LiquidAI/LFM2.5-350M-Base
+  Fine-tuned: https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m

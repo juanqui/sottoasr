@@ -46,6 +46,15 @@ pub struct UpdateStatus {
     pub restart_pending: bool,
 }
 
+/// Download progress payload emitted to the frontend via `"update-download-progress"`.
+#[derive(serde::Serialize, Clone)]
+struct UpdateDownloadProgress {
+    downloaded_bytes: usize,
+    total_bytes: Option<u64>,
+    /// 0.0 – 1.0 (or 0.0 if total is unknown).
+    progress: f64,
+}
+
 // ---------------------------------------------------------------------------
 // App Translocation detection
 // ---------------------------------------------------------------------------
@@ -140,10 +149,12 @@ pub async fn check_for_update(
         }
         Ok(None) => {
             log::info!("App is up to date");
+            let _ = app.emit("update-up-to-date", ());
             Ok(())
         }
         Err(e) => {
             log::warn!("Update check error: {}", e);
+            let _ = app.emit("update-check-error", e.to_string());
             Err(e.into())
         }
     }
@@ -232,16 +243,24 @@ async fn do_download_and_install(app: &AppHandle) -> Result<String, String> {
     let version = update.version.clone();
 
     let mut downloaded: usize = 0;
+    let emit_handle = app.clone();
     update
         .download_and_install(
-            |chunk_length, content_length| {
+            move |chunk_length, content_length| {
                 downloaded += chunk_length;
-                if downloaded % (512 * 1024) < chunk_length {
-                    // Log roughly every 512 KB.
-                    log::debug!(
-                        "Update download: {} bytes / {:?} total",
-                        downloaded,
-                        content_length
+                // Emit progress roughly every 512 KB.
+                if downloaded % (512 * 1024) < chunk_length || downloaded == chunk_length {
+                    let progress = match content_length {
+                        Some(total) if total > 0 => downloaded as f64 / total as f64,
+                        _ => 0.0,
+                    };
+                    let _ = emit_handle.emit(
+                        "update-download-progress",
+                        UpdateDownloadProgress {
+                            downloaded_bytes: downloaded,
+                            total_bytes: content_length,
+                            progress,
+                        },
                     );
                 }
             },

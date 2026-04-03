@@ -54,42 +54,7 @@ enum TrayState {
 // ---------------------------------------------------------------------------
 
 fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
-    let mut items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = Vec::new();
-
-    // -- Update items (if applicable) --
-    match &state {
-        TrayState::UpdateAvailable(version) => {
-            let update_item = MenuItem::with_id(
-                app,
-                "update_download",
-                format!("Update Available \u{2014} v{}", version),
-                true,
-                None::<&str>,
-            )
-            .map_err(|e| e.to_string())?;
-            items.push(Box::new(update_item));
-            items.push(Box::new(
-                PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
-            ));
-        }
-        TrayState::RestartPending => {
-            let restart_item = MenuItem::with_id(
-                app,
-                "update_restart",
-                "Restart to Update",
-                true,
-                None::<&str>,
-            )
-            .map_err(|e| e.to_string())?;
-            items.push(Box::new(restart_item));
-            items.push(Box::new(
-                PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
-            ));
-        }
-        TrayState::Normal => {}
-    }
-
-    // -- Standard items --
+    // -- Build menu items --
     let copy_last =
         MenuItem::with_id(app, "copy_last", "Copy Last Transcription", true, None::<&str>)
             .map_err(|e| e.to_string())?;
@@ -99,14 +64,24 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
     let settings =
         MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)
             .map_err(|e| e.to_string())?;
+
+    // Single update item — label varies by state, always opens the update window.
+    let update_label = match &state {
+        TrayState::Normal => "Check for Updates...".to_string(),
+        TrayState::UpdateAvailable(version) => {
+            format!("Update Available \u{2014} v{}", version)
+        }
+        TrayState::RestartPending => "Restart to Update".to_string(),
+    };
+    let check_updates =
+        MenuItem::with_id(app, "check_updates", &update_label, true, None::<&str>)
+            .map_err(|e| e.to_string())?;
+
     let copy_diagnostics =
         MenuItem::with_id(app, "copy_diagnostics", "Copy Diagnostics", true, None::<&str>)
             .map_err(|e| e.to_string())?;
     let about =
         MenuItem::with_id(app, "about", "About SottoASR", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
-    let check_updates =
-        MenuItem::with_id(app, "check_updates", "Check for Updates", true, None::<&str>)
             .map_err(|e| e.to_string())?;
     let quit =
         MenuItem::with_id(app, "quit", "Quit SottoASR", true, None::<&str>)
@@ -116,16 +91,18 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
     let sep2 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
     let sep3 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
 
-    items.push(Box::new(copy_last));
-    items.push(Box::new(view_history));
-    items.push(Box::new(sep1));
-    items.push(Box::new(settings));
-    items.push(Box::new(sep2));
-    items.push(Box::new(copy_diagnostics));
-    items.push(Box::new(about));
-    items.push(Box::new(check_updates));
-    items.push(Box::new(sep3));
-    items.push(Box::new(quit));
+    let items: Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> = vec![
+        Box::new(copy_last),
+        Box::new(view_history),
+        Box::new(sep1),
+        Box::new(settings),
+        Box::new(check_updates),
+        Box::new(copy_diagnostics),
+        Box::new(sep2),
+        Box::new(about),
+        Box::new(sep3),
+        Box::new(quit),
+    ];
 
     // Build the Menu from the item refs.
     let item_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
@@ -133,17 +110,18 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
     let menu = Menu::with_items(app, &item_refs).map_err(|e| e.to_string())?;
 
     // Get or create the tray icon.
+    // The tray is NOT defined in tauri.conf.json — it is created here so that
+    // creation happens after the event loop is initialized (RunEvent::Ready),
+    // avoiding the ghost/duplicate icon timing bug on macOS (tauri#9480).
     let tray = match app.tray_by_id("main-tray") {
         Some(tray) => tray,
         None => {
             log::info!("Creating tray icon programmatically");
+            let icon = Image::from_bytes(TRAY_ICON_NORMAL)
+                .map_err(|e| format!("Failed to load tray icon: {}", e))?;
             TrayIconBuilder::with_id("main-tray")
                 .tooltip("SottoASR \u{2014} Speech to Text")
-                .icon(
-                    app.default_window_icon()
-                        .cloned()
-                        .unwrap_or_else(|| Image::new(&[], 1, 1)),
-                )
+                .icon(icon)
                 .icon_as_template(true)
                 .show_menu_on_left_click(true)
                 .build(app)
@@ -151,11 +129,9 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
         }
     };
 
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
-    tray.set_show_menu_on_left_click(true)
-        .map_err(|e| e.to_string())?;
-
-    // Register event handler (replaces the previous one).
+    // Register event handler BEFORE setting the menu to avoid a race where
+    // the first click arrives before the handler is wired up (fixes
+    // first-right-click-ignored bug on macOS).
     tray.on_menu_event(move |app, event| {
         match event.id().as_ref() {
             "copy_last" => {
@@ -191,6 +167,17 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
                     app, "settings", "settings.html", "SottoASR \u{2014} Settings", 520.0, 600.0,
                 );
             }
+            "check_updates" => {
+                log::info!("Tray: Opening update window");
+                open_or_focus_window(
+                    app,
+                    "update",
+                    "update.html",
+                    "SottoASR \u{2014} Software Update",
+                    420.0,
+                    340.0,
+                );
+            }
             "copy_diagnostics" => {
                 log::info!("Tray: Copy diagnostics");
                 let diagnostics = collect_diagnostics(app);
@@ -208,45 +195,6 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
                     app, "about", "about.html", "About SottoASR", 480.0, 960.0,
                 );
             }
-            "check_updates" => {
-                log::info!("Tray: Manual update check");
-                tauri::async_runtime::spawn({
-                    let app = app.clone();
-                    async move {
-                        match crate::updater::check_for_update(&app).await {
-                            Ok(()) => {
-                                let state = app.state::<crate::updater::UpdateState>();
-                                if !state
-                                    .update_available
-                                    .load(std::sync::atomic::Ordering::SeqCst)
-                                {
-                                    log::info!("Manual check: app is up to date");
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!("Manual update check failed: {}", e);
-                            }
-                        }
-                    }
-                });
-            }
-            "update_download" => {
-                log::info!("Tray: User requested update download");
-                tauri::async_runtime::spawn({
-                    let app = app.clone();
-                    async move {
-                        match crate::updater::perform_app_update(app.clone()).await {
-                            Ok(v) => log::info!("Update v{} installed, restart pending", v),
-                            Err(e) => log::error!("Update download failed: {}", e),
-                        }
-                    }
-                });
-            }
-            "update_restart" => {
-                log::info!("Tray: User requested restart for update");
-                // Use request_restart() for clean shutdown (fires RunEvent::Exit).
-                app.restart();
-            }
             "quit" => {
                 log::info!("Quitting SottoASR");
                 app.exit(0);
@@ -254,6 +202,8 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
             _ => {}
         }
     });
+
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
 
     log::info!("Tray menu configured");
     Ok(())
@@ -360,7 +310,7 @@ fn read_log_tail(app: &AppHandle, n: usize) -> String {
 /// Open a window by label, or focus it if already open.
 /// Switches to Regular activation policy so macOS shows the window.
 /// Reverts to Accessory when the window is closed (handled in lib.rs on_window_event).
-fn open_or_focus_window(
+pub fn open_or_focus_window(
     app: &AppHandle,
     label: &str,
     url: &str,

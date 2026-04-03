@@ -2,6 +2,30 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.6.0] — 2026-04-02
+
+Tray icon reliability improvements, dedicated update window, and upgraded cleanup model.
+
+### Added
+
+- **Global hotkey to open Settings** — Press `⌘⇧,` (Cmd+Shift+Comma) to open the Settings window from anywhere, even if the tray icon is hidden. Configurable in settings via `open_settings_shortcut`.
+- **Tray icon occlusion detection** — The app monitors whether its menu bar icon is hidden behind the MacBook notch or pushed out by other icons. When detected, a macOS notification warns the user and mentions the Settings hotkey as a fallback.
+- **Dedicated update window** — "Check for Updates" in the tray menu now opens a dedicated update window with download progress, replacing the inline update UI in the About window.
+
+### Changed
+
+- **Tray icon created in RunEvent::Ready** — The system tray icon is now created after the event loop is fully initialized, fixing the ghost/duplicate icon timing bug on macOS ([tauri#9480](https://github.com/tauri-apps/tauri/issues/9480)). Removed the `trayIcon` config from `tauri.conf.json` to ensure a single creation path.
+- **Tray icon uses proper template image** — The programmatic tray builder now uses the dedicated template PNG instead of the default window icon, ensuring correct appearance in light/dark mode.
+- **Simplified tray menu** — Consolidated update-related menu items into a single "Check for Updates" / "Update Available" / "Restart to Update" item that adapts its label to the current state. Menu event handler is now wired before setting the menu, fixing a first-click race condition.
+- **LLM sidecar pre-loads at startup** — When transcript cleanup is enabled and the model is downloaded, the LLM sidecar spawns and loads the model in the background at launch.
+- **LLM sidecar warmup inference** — The Python sidecar runs a short warmup inference after loading the model to trigger MLX lazy graph compilation, eliminating first-request latency.
+- **Upgraded cleanup model attribution** — Licenses, About window, and website updated from Qwen 3.5 to SottoASR's fine-tuned LFM2.5-350M model.
+- **Refactored shortcut registration** — `register_shortcuts` now accepts a `&Settings` struct instead of 7+ individual parameters.
+
+### Fixed
+
+- **First tray menu click ignored on macOS** — The menu event handler is now registered before the menu is attached to the tray icon, preventing a race where the first click was lost.
+
 ## [0.5.3] — 2026-04-02
 
 Eliminate cold-start latency for LLM transcript cleanup.

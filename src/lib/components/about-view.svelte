@@ -1,55 +1,9 @@
 <script lang="ts">
   import { getVersion } from '@tauri-apps/api/app';
-  import { listen } from '@tauri-apps/api/event';
-  import { onMount } from 'svelte';
-  import { getUpdateStatus, checkAppUpdate, performAppUpdate } from '../utils/tauri';
-  import type { UpdateStatus } from '../utils/tauri';
   import appIcon from '../../assets/app-icon.png';
 
   let version = $state('');
   getVersion().then(v => version = v);
-
-  let updateStatus: UpdateStatus | null = $state(null);
-  let checking = $state(false);
-  let downloading = $state(false);
-  let updateError = $state('');
-
-  onMount(() => {
-    const cleanups: Array<() => void> = [];
-    // Load update status
-    getUpdateStatus().then(s => updateStatus = s).catch(() => {});
-    // Listen for update-available events
-    listen<string>('update-available', () => {
-      getUpdateStatus().then(s => updateStatus = s).catch(() => {});
-    }).then(u => cleanups.push(u));
-    return () => cleanups.forEach(fn => fn());
-  });
-
-  async function handleCheckUpdate() {
-    checking = true;
-    updateError = '';
-    try {
-      await checkAppUpdate();
-      updateStatus = await getUpdateStatus();
-    } catch (err: any) {
-      updateError = err?.toString() || 'Check failed';
-    } finally {
-      checking = false;
-    }
-  }
-
-  async function handleDownloadUpdate() {
-    downloading = true;
-    updateError = '';
-    try {
-      await performAppUpdate();
-      updateStatus = await getUpdateStatus();
-    } catch (err: any) {
-      updateError = err?.toString() || 'Update failed';
-    } finally {
-      downloading = false;
-    }
-  }
 
   const sections = [
     {
@@ -66,7 +20,7 @@
     {
       title: 'AI Transcript Cleanup',
       items: [
-        { name: 'Qwen3.5-0.8B', desc: 'LLM by Alibaba Cloud (Qwen team)', license: 'Apache-2.0' },
+        { name: 'SottoASR Cleanup (LFM2.5-350M)', desc: 'Fine-tuned transcript cleanup model based on LiquidAI LFM2.5', license: 'LFM-1.0' },
         { name: 'Apple MLX', desc: 'Metal-native ML framework', license: 'MIT' },
         { name: 'mlx-lm', desc: 'MLX language model inference', license: 'MIT' },
         { name: 'huggingface_hub', desc: 'Model download and caching', license: 'Apache-2.0' },
@@ -92,30 +46,6 @@
     <img class="icon" src={appIcon} alt="SottoASR" />
     <h1>SottoASR</h1>
     <p class="version">Version {version}</p>
-
-    <!-- Update status -->
-    <div class="update-section">
-      {#if updateStatus?.restart_pending}
-        <span class="update-badge restart">Update installed — restart to apply</span>
-      {:else if downloading || updateStatus?.downloading}
-        <div class="update-downloading">
-          <div class="spinner-small"></div>
-          <span>Downloading update...</span>
-        </div>
-      {:else if updateStatus?.update_available && updateStatus?.version}
-        <span class="update-badge available">v{updateStatus.version} available</span>
-        <button class="update-action-btn" onclick={handleDownloadUpdate} type="button">
-          Download & Install
-        </button>
-      {:else}
-        <button class="check-update-btn" onclick={handleCheckUpdate} disabled={checking} type="button">
-          {checking ? 'Checking...' : 'Check for Updates'}
-        </button>
-      {/if}
-      {#if updateError}
-        <p class="update-error">{updateError}</p>
-      {/if}
-    </div>
 
     <p class="tagline">Local, privacy-first speech-to-text for macOS</p>
     <p class="detail">
@@ -210,95 +140,6 @@
     font-size: 11px;
     color: var(--text-dim);
     line-height: 1.6;
-    margin: 0;
-  }
-
-  /* ---- Update section ---- */
-  .update-section {
-    margin: 8px 0 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .update-badge {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: 8px;
-  }
-
-  .update-badge.available {
-    background: rgba(59, 130, 246, 0.12);
-    color: rgba(59, 130, 246, 0.9);
-  }
-
-  .update-badge.restart {
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
-  }
-
-  .update-action-btn {
-    padding: 4px 12px;
-    border-radius: 6px;
-    border: 1px solid rgba(59, 130, 246, 0.5);
-    background: rgba(59, 130, 246, 0.1);
-    color: rgba(59, 130, 246, 0.9);
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-
-  .update-action-btn:hover {
-    background: rgba(59, 130, 246, 0.2);
-  }
-
-  .check-update-btn {
-    padding: 4px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: none;
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-
-  .check-update-btn:hover:not(:disabled) {
-    border-color: var(--border-hover);
-    color: var(--text);
-  }
-
-  .check-update-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .update-downloading {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-
-  .update-downloading .spinner-small {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .update-error {
-    font-size: 10px;
-    color: #ef4444;
     margin: 0;
   }
 

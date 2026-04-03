@@ -38,12 +38,22 @@ def load_model():
         return True
 
     try:
-        from mlx_lm import load
+        from mlx_lm import load, generate
         from mlx_lm.sample_utils import make_sampler
         log(f"Loading {MODEL_ID}...")
         _model, _tokenizer = load(MODEL_ID)
         _sampler = make_sampler(temp=0.0)  # Greedy — deterministic output
-        log("Model loaded successfully")
+        log("Model loaded, running warmup inference...")
+        # Warmup: trigger MLX lazy graph compilation so first real request is fast
+        _warmup_output = generate(
+            _model,
+            _tokenizer,
+            prompt="### Input:\nhello\n\n### Output:\n",
+            max_tokens=8,
+            sampler=_sampler,
+            verbose=False,
+        )
+        log("Model loaded and warmed up successfully")
         return True
     except Exception as e:
         log(f"Failed to load model: {e}")
@@ -52,7 +62,7 @@ def load_model():
 
 def cleanup_chunk(text):
     """Clean a single chunk of transcript text (up to ~200 words)."""
-    from mlx_lm import generate
+    from mlx_lm import generate  # Already imported/cached by load_model()
 
     prompt = f"### Input:\n{text}\n\n### Output:\n"
     input_words = len(text.split())
@@ -198,11 +208,8 @@ def handle_request(req):
             respond({"ok": True, "text": text, "elapsed_ms": 0, "tokens": 0})
             return
 
-        # Check if model is downloaded before attempting load
+        # Lazy-load model if not already loaded (Rust already verified download)
         if _model is None:
-            if not check_model_downloaded():
-                respond({"ok": False, "error": "model_not_downloaded"})
-                return
             if not load_model():
                 respond({"ok": False, "error": "Failed to load model"})
                 return

@@ -5,6 +5,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_open_settings_shortcut() -> String {
+    "CommandOrControl+Shift+Comma".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
@@ -43,6 +47,8 @@ pub struct Settings {
     pub cancel_shortcut: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cancel_shortcut_alt: Option<String>,
+    #[serde(default = "default_open_settings_shortcut")]
+    pub open_settings_shortcut: String,
     pub show_overlay: bool,
     pub auto_paste: bool,
     pub restore_clipboard: bool,
@@ -95,6 +101,7 @@ impl Default for Settings {
             toggle_shortcut_alt: None,
             cancel_shortcut: "Escape".into(),
             cancel_shortcut_alt: None,
+            open_settings_shortcut: default_open_settings_shortcut(),
             show_overlay: true,
             auto_paste: true,
             restore_clipboard: true,

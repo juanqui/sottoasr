@@ -131,9 +131,9 @@ pub fn run() {
             // Must start after accessibility check — needs the permission to create taps
             commands::keycapture::init_key_capture_thread(&handle);
 
-            // Setup tray menu
-            tray::menu::setup_tray_menu(&handle)
-                .map_err(|e| Box::new(std::io::Error::other(e)))?;
+            // NOTE: Tray icon creation is deferred to RunEvent::Ready (below)
+            // so that the NSStatusItem is created after the event loop is fully
+            // initialized, avoiding the ghost/duplicate icon timing bug (tauri#9480).
 
             // Setup hotkeys
             hotkeys::manager::setup_hotkeys(&handle)
@@ -250,13 +250,30 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building SottoASR")
-        .run(|_app, event| {
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                // Only prevent exit when triggered by last window closing (code == None).
-                // Allow explicit exit via app.exit() (code == Some(0)).
-                if code.is_none() {
-                    api.prevent_exit();
+        .run(|app, event| {
+            match event {
+                tauri::RunEvent::Ready => {
+                    // Create the tray icon NOW — after the event loop is fully
+                    // initialized. Creating it earlier (in setup() or via
+                    // tauri.conf.json) can cause ghost/duplicate icons on macOS
+                    // when other apps are fullscreen (tauri#9480).
+                    if let Err(e) = tray::menu::setup_tray_menu(app) {
+                        log::error!("Failed to setup tray menu: {}", e);
+                    }
+
+                    // Start tray icon occlusion monitor (detects when icon is
+                    // hidden behind the notch or by menu bar overflow).
+                    #[cfg(target_os = "macos")]
+                    tray::occlusion::start_occlusion_monitor(app);
                 }
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    // Only prevent exit when triggered by last window closing (code == None).
+                    // Allow explicit exit via app.exit() (code == Some(0)).
+                    if code.is_none() {
+                        api.prevent_exit();
+                    }
+                }
+                _ => {}
             }
         });
 }

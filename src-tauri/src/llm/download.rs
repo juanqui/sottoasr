@@ -1,7 +1,9 @@
 use tauri::AppHandle;
 use tauri::Emitter;
+use tauri::Manager;
 
 use crate::llm::engine;
+use crate::state::AppState;
 
 /// Download the SottoASR cleanup model via the sidecar process.
 pub async fn download_model(app: &AppHandle) -> Result<(), String> {
@@ -25,6 +27,31 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
         Ok(()) => {
             log::info!("Model download complete");
             let _ = app.emit("llm-download-complete", ());
+
+            // Pre-load the model so it's warm for the first cleanup request
+            let preload_app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                log::info!("Pre-loading LLM sidecar after download...");
+                match tokio::task::spawn_blocking(|| {
+                    let mut e = engine::LlmEngine::spawn()?;
+                    e.load_model()?;
+                    Ok::<_, String>(e)
+                }).await {
+                    Ok(Ok(engine)) => {
+                        let state = preload_app.state::<AppState>();
+                        let mut guard = state.llm_engine.lock().await;
+                        *guard = Some(engine);
+                        log::info!("LLM sidecar pre-loaded after download");
+                    }
+                    Ok(Err(e)) => {
+                        log::warn!("LLM pre-load after download failed: {}", e);
+                    }
+                    Err(e) => {
+                        log::error!("LLM pre-load after download panicked: {}", e);
+                    }
+                }
+            });
+
             Ok(())
         }
         Err(e) => {

@@ -28,17 +28,8 @@ const MAX_EXPECTED_SAMPLE_RATE_HZ: usize = 96_000;
 const MAX_AUDIO_BUFFER_SAMPLES: usize = MAX_EXPECTED_SAMPLE_RATE_HZ * MAX_RECORDING_SECS as usize;
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
-    // Load persisted settings to use saved shortcuts (not hardcoded defaults)
     let settings = crate::commands::settings::load_persisted_settings();
-    register_shortcuts(
-        app,
-        &settings.push_to_talk_shortcut,
-        settings.push_to_talk_shortcut_alt.as_deref(),
-        &settings.toggle_shortcut,
-        settings.toggle_shortcut_alt.as_deref(),
-        &settings.cancel_shortcut,
-        settings.cancel_shortcut_alt.as_deref(),
-    )
+    register_shortcuts(app, &settings)
 }
 
 /// Re-register all shortcuts. Called at startup and when settings change.
@@ -46,13 +37,15 @@ pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
 /// registered while recording is active (see register_cancel_shortcut).
 pub fn register_shortcuts(
     app: &AppHandle,
-    ptt_shortcut: &str,
-    ptt_shortcut_alt: Option<&str>,
-    toggle_shortcut: &str,
-    toggle_shortcut_alt: Option<&str>,
-    cancel_shortcut: &str,
-    cancel_shortcut_alt: Option<&str>,
+    settings: &crate::models::Settings,
 ) -> Result<(), String> {
+    let ptt_shortcut: &str = &settings.push_to_talk_shortcut;
+    let ptt_shortcut_alt = settings.push_to_talk_shortcut_alt.as_deref();
+    let toggle_shortcut: &str = &settings.toggle_shortcut;
+    let toggle_shortcut_alt = settings.toggle_shortcut_alt.as_deref();
+    let cancel_shortcut: &str = &settings.cancel_shortcut;
+    let cancel_shortcut_alt = settings.cancel_shortcut_alt.as_deref();
+    let open_settings_shortcut: &str = &settings.open_settings_shortcut;
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     // Unregister all existing shortcuts first
@@ -167,9 +160,28 @@ pub fn register_shortcuts(
         }
     }
 
+    // Register open-settings shortcut
+    if !open_settings_shortcut.is_empty() {
+        let app_handle = app.clone();
+        app.global_shortcut().on_shortcut(open_settings_shortcut, move |_app, _shortcut, event| {
+            use tauri_plugin_global_shortcut::ShortcutState;
+            if event.state == ShortcutState::Pressed {
+                log::info!("Open-settings hotkey pressed");
+                crate::tray::menu::open_or_focus_window(
+                    &app_handle,
+                    "settings",
+                    "settings.html",
+                    "SottoASR \u{2014} Settings",
+                    520.0,
+                    600.0,
+                );
+            }
+        }).map_err(|e| format!("Failed to register open-settings shortcut '{}': {}", open_settings_shortcut, e))?;
+    }
+
     log::info!(
-        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle) | cancel '{}' (registered only while recording)",
-        ptt_shortcut, toggle_shortcut, cancel_shortcut
+        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle), '{}' (open-settings) | cancel '{}' (registered only while recording)",
+        ptt_shortcut, toggle_shortcut, open_settings_shortcut, cancel_shortcut
     );
     Ok(())
 }
@@ -505,11 +517,13 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     {
                         let mut llm_guard = state.llm_engine.lock().await;
 
-                        // Spawn sidecar if not running
+                        // Spawn sidecar and load model if not running
                         if llm_guard.is_none() {
-                            log::info!("Spawning LLM sidecar...");
+                            log::info!("Spawning LLM sidecar (on-demand)...");
                             match tokio::task::spawn_blocking(move || {
-                                crate::llm::engine::LlmEngine::spawn()
+                                let mut engine = crate::llm::engine::LlmEngine::spawn()?;
+                                engine.load_model()?;
+                                Ok::<_, String>(engine)
                             }).await {
                                 Ok(Ok(engine)) => {
                                     *llm_guard = Some(engine);

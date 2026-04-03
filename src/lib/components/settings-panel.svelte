@@ -380,14 +380,17 @@
             onchange={(e) => {
               const enabled = (e.target as HTMLInputElement).checked;
               if (enabled && !llmStatus?.downloaded) {
-                // Need to download model first
+                // Need to download model first (download_model now auto-preloads)
                 (e.target as HTMLInputElement).checked = false;
                 handleLlmDownload().then(() => {
                   settingsStore.update('llm_cleanup_enabled', true);
                 });
               } else {
                 settingsStore.update('llm_cleanup_enabled', enabled);
-                if (!enabled) {
+                if (enabled) {
+                  // Pre-load model so it's warm for first cleanup
+                  import('../utils/tauri').then(({ loadLlmModel }) => loadLlmModel().catch(() => {}));
+                } else {
                   // Unload model on disable (async, non-blocking)
                   import('../utils/tauri').then(({ unloadLlmModel }) => unloadLlmModel().catch(() => {}));
                 }
