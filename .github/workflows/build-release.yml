@@ -90,9 +90,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # fluidaudio-rs Swift deps need the toolchain compat libs in the search path
-          # fluidaudio-rs Swift deps need the toolchain compat libs in the search path (Xcode 26+)
-          RUSTFLAGS: -L /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx
+          # Do NOT set RUSTFLAGS here — it overrides .cargo/config.toml rustflags
+          # which contain critical -rpath entries for Swift runtime resolution.
+          # The Swift compat library -L search path lives in .cargo/config.toml.
         with:
           tagName: v__VERSION__
           releaseName: 'SottoASR v__VERSION__'

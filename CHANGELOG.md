@@ -2,6 +2,18 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.6.2] — 2026-04-03
+
+Fix app crash on launch caused by missing Swift runtime library path.
+
+### Fixed
+
+- **App fails to launch after update** — The v0.6.1 CI build was missing LC_RPATH entries for the Swift runtime, causing `Library not loaded: @rpath/libswift_Concurrency.dylib` on launch. Root cause: `RUSTFLAGS` environment variable in CI overrode the rpath flags in `.cargo/config.toml`. Fix: moved the Swift compatibility library search path into `.cargo/config.toml` and removed the `RUSTFLAGS` override.
+
+### Infrastructure
+
+- **Swift compat library path in `.cargo/config.toml`** — Added `-L` linker search path for Swift compatibility stubs (Xcode 26+), co-located with the existing `-rpath` flags so they can't be accidentally overridden.
+
 ## [0.6.1] — 2026-04-02
 
 Fix critical memory issue where the LLM cleanup sidecar could exhaust system RAM and hang the machine.
