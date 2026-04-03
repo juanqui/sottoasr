@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "SottoASR application capabilities",
-  "windows": ["main", "overlay", "onboarding", "history", "settings", "about"],
+  "windows": ["main", "overlay", "onboarding", "history", "settings", "about", "update"],
   "permissions": [
     "core:default",
     "core:window:default",
