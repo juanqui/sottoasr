@@ -1,6 +1,6 @@
 [package]
 name = "sottoasr"
-version = "0.6.0"
+version = "0.6.1"
 description = "SottoASR — Local, privacy-first speech-to-text for macOS"
 authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"
@@ -28,6 +28,7 @@ tauri-plugin-os = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 
 # Audio capture

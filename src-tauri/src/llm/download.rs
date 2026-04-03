@@ -40,6 +40,12 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
                     Ok(Ok(engine)) => {
                         let state = preload_app.state::<AppState>();
                         let mut guard = state.llm_engine.lock().await;
+                        // Shut down existing sidecar before replacing to avoid
+                        // two MLX processes competing for unified memory.
+                        if let Some(mut old) = guard.take() {
+                            log::info!("Shutting down old LLM sidecar before replacing");
+                            old.quit();
+                        }
                         *guard = Some(engine);
                         log::info!("LLM sidecar pre-loaded after download");
                     }

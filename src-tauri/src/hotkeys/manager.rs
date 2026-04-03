@@ -564,7 +564,7 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                                     log::error!("LLM cleanup task panicked: {}, sidecar lost", e);
                                 }
                                 Err(_) => {
-                                    log::warn!("LLM cleanup timed out after 30s, sidecar will be respawned on next use");
+                                    log::warn!("LLM cleanup timed out after 120s, sidecar will be respawned on next use");
                                     // The sidecar is still held by the timed-out spawn_blocking task.
                                     // It will be dropped when that task eventually completes.
                                     // llm_guard is already None, so next cleanup will spawn a new one.

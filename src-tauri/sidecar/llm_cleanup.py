@@ -38,8 +38,19 @@ def load_model():
         return True
 
     try:
+        import gc
+        import mlx.core as mx
         from mlx_lm import load, generate
         from mlx_lm.sample_utils import make_sampler
+
+        # Cap Metal memory to prevent system hang on machines with limited RAM.
+        # Without limits, MLX reserves up to 75% of system RAM as wired
+        # (non-swappable) memory, which can exhaust unified memory and hang
+        # the machine. See: ml-explore/mlx-lm#883, ml-explore/mlx-lm#1015
+        mx.set_memory_limit(1024 * 1024 * 1024)   # 1GB soft limit
+        mx.set_cache_limit(128 * 1024 * 1024)      # 128MB Metal buffer cache
+        log("MLX memory limits set: 1GB memory, 128MB cache")
+
         log(f"Loading {MODEL_ID}...")
         _model, _tokenizer = load(MODEL_ID)
         _sampler = make_sampler(temp=0.0)  # Greedy — deterministic output
@@ -53,6 +64,9 @@ def load_model():
             sampler=_sampler,
             verbose=False,
         )
+        # Release warmup temporaries from the Metal buffer cache
+        mx.clear_cache()
+        gc.collect()
         log("Model loaded and warmed up successfully")
         return True
     except Exception as e:
@@ -62,7 +76,12 @@ def load_model():
 
 def cleanup_chunk(text):
     """Clean a single chunk of transcript text (up to ~200 words)."""
+    import mlx.core as mx
     from mlx_lm import generate  # Already imported/cached by load_model()
+
+    # Clear stale Metal buffers before inference to prevent cache cascade OOM.
+    # See: ml-explore/mlx-lm#1015
+    mx.clear_cache()
 
     prompt = f"### Input:\n{text}\n\n### Output:\n"
     input_words = len(text.split())
@@ -76,6 +95,9 @@ def cleanup_chunk(text):
         sampler=_sampler,
         verbose=False,
     )
+
+    # Release inference temporaries
+    mx.clear_cache()
 
     output = output.strip()
     if "###" in output:

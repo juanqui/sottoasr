@@ -30,6 +30,7 @@
     "os:default",
     "process:default",
     "log:default",
-    "updater:default"
+    "updater:default",
+    "autostart:default"
   ]
 }

@@ -34,6 +34,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_nspanel::init())
         .manage(AppState::new())
         .manage(updater::UpdateState::new())
@@ -215,6 +216,22 @@ pub fn run() {
 
             // Start the auto-update checker (15s delay, then every 4 hours)
             updater::start_update_checker(&handle);
+
+            // Sync launch-at-login state from persisted settings
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let launch_at_login = handle.state::<AppState>().settings.blocking_lock().launch_at_login;
+                let manager = handle.autolaunch();
+                let result = if launch_at_login {
+                    manager.enable()
+                } else {
+                    manager.disable()
+                };
+                match result {
+                    Ok(_) => log::info!("Autostart synced (enabled={})", launch_at_login),
+                    Err(e) => log::error!("Failed to sync autostart state: {}", e),
+                }
+            }
 
             log::info!("SottoASR initialized (ASR backend: {})", asr::model::backend_name());
             Ok(())

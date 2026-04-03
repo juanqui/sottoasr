@@ -2,6 +2,22 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.6.1] — 2026-04-02
+
+Fix critical memory issue where the LLM cleanup sidecar could exhaust system RAM and hang the machine.
+
+### Fixed
+
+- **LLM sidecar memory limits** — Set MLX Metal memory limit to 1 GB and cache limit to 128 MB, preventing the default behavior of wiring up to 75% of system RAM as non-swappable memory (see [ml-explore/mlx-lm#883](https://github.com/ml-explore/mlx-lm/issues/883)).
+- **Metal buffer cache cleanup** — Call `mx.clear_cache()` after warmup inference and before/after each cleanup inference to prevent stale Metal buffer accumulation (see [ml-explore/mlx-lm#1015](https://github.com/ml-explore/mlx-lm/issues/1015)).
+- **Duplicate sidecar processes** — Update check now reuses the existing LLM sidecar instead of spawning a separate Python process that competes for unified memory.
+- **Sidecar replacement race** — Post-download preload now explicitly shuts down the old sidecar before replacing it.
+- **Cleanup timeout log message** — Corrected misleading "30s" to the actual 120s timeout value.
+
+### Added
+
+- **Launch at login** — The app can now start automatically when you log in. Toggle in Settings; synced with macOS login items via `tauri-plugin-autostart`.
+
 ## [0.6.0] — 2026-04-02
 
 Tray icon reliability improvements, dedicated update window, and upgraded cleanup model.

@@ -57,8 +57,38 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
 }
 
 /// Check if a model update is available on HuggingFace.
+/// Reuses the existing sidecar if one is running to avoid spawning a new process.
 #[tauri::command]
-pub async fn check_llm_update() -> Result<bool, String> {
+pub async fn check_llm_update(state: State<'_, AppState>) -> Result<bool, String> {
+    // Reuse existing sidecar if one is running (avoids spawning a new process)
+    {
+        let mut guard = state.llm_engine.lock().await;
+        if let Some(llm) = guard.take() {
+            match tokio::task::spawn_blocking(move || {
+                let mut llm = llm;
+                let resp = llm.request_raw(&serde_json::json!({"action": "check_update"}));
+                (llm, resp)
+            }).await {
+                Ok((llm_back, Ok(v))) => {
+                    *guard = Some(llm_back);
+                    return Ok(v.get("update_available")
+                        .and_then(|u| u.as_bool())
+                        .unwrap_or(false));
+                }
+                Ok((llm_back, Err(e))) => {
+                    *guard = Some(llm_back);
+                    log::warn!("Update check via existing sidecar failed: {}", e);
+                    return Ok(false);
+                }
+                Err(e) => {
+                    log::error!("Update check task panicked, sidecar lost: {}", e);
+                    // Fall through to spawn a temporary sidecar
+                }
+            }
+        }
+    }
+
+    // No existing sidecar — spawn a temporary one (does not load MLX/model)
     tokio::task::spawn_blocking(move || {
         match engine::LlmEngine::spawn() {
             Ok(mut e) => {

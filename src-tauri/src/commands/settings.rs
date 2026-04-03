@@ -61,6 +61,7 @@ pub async fn get_settings(
 
 #[tauri::command]
 pub async fn update_settings(
+    app: AppHandle,
     new_settings: Settings,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -68,6 +69,20 @@ pub async fn update_settings(
 
     // Persist to disk first — if this fails, don't update in-memory state
     persist_settings(&new_settings)?;
+
+    // Sync launch-at-login with macOS login items
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let manager = app.autolaunch();
+        let result = if new_settings.launch_at_login {
+            manager.enable()
+        } else {
+            manager.disable()
+        };
+        if let Err(e) = result {
+            log::warn!("Failed to sync autostart state: {}", e);
+        }
+    }
 
     let mut settings = state.settings.lock().await;
     *settings = new_settings;
