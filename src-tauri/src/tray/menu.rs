@@ -175,7 +175,7 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
                     "update.html",
                     "SottoASR \u{2014} Software Update",
                     420.0,
-                    340.0,
+                    480.0,
                 );
             }
             "copy_diagnostics" => {

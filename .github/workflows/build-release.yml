@@ -80,6 +80,16 @@ jobs:
           CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          # Extract lines between this version's header and the next ## header.
+          CHANGELOG=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md)
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Build and release
         # v0 is the latest major for Tauri v2 — auto-updates within 0.x
         uses: tauri-apps/tauri-action@v0
@@ -97,9 +107,11 @@ jobs:
           tagName: v__VERSION__
           releaseName: 'SottoASR v__VERSION__'
           releaseBody: |
-            ## SottoASR v__VERSION__
+            ## What's New
 
-            Local, privacy-first speech-to-text for macOS.
+            ${{ steps.changelog.outputs.content }}
+
+            ---
 
             ### Installation
 
@@ -116,8 +128,6 @@ jobs:
             - Python 3.10+ (only required for optional AI Transcript Cleanup feature)
 
             This build is signed and notarized by Apple.
-
-            See [CHANGELOG.md](https://github.com/juanqui/sottoasr/blob/main/CHANGELOG.md) for details.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
