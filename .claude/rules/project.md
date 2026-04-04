@@ -92,7 +92,7 @@ sotto/
 - **HF token** is stored in `.env` (gitignored) as `HF_TOKEN`. The remote training machine at `juanqui@192.168.1.128` has a **read-only** cached token; use the write token from `.env` for uploads.
 - **Naming convention:** `juanquivilla/sotto-{purpose}-{base_model}-{size}` for models; `juanquivilla/sotto-{purpose}` for datasets
 - **Base model:** `LiquidAI/LFM2.5-350M-Base` — full fine-tuned (no LoRA), all 354M params trainable
-- **Current best:** v18 — ROUGE-L 0.968, 72% Exact Match, LR 2.5e-5, AdamW beta2=0.95, on 148K (v11 + preserve 2x + tail 3x)
+- **Current best:** v22+GRPO — ROUGE-L 0.954 (val set), 66% Exact Match, 91% Filler-Free. Pipeline: cleaned data (text fixes + 6K new) → SFT LR 3e-5, β2=0.95 → GRPO LoRA r=32, LR 3e-6
 - **MLX quantized models** for on-device deployment:
   - 5-bit affine, group_size=64 — **recommended** (~237MB, minimal quality loss)
   - 4-bit affine, group_size=64 — smaller (~195MB, slightly lower quality)

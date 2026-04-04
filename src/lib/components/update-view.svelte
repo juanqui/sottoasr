@@ -18,6 +18,9 @@
   let errorMessage = $state('');
   let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   let autoCloseSeconds = $state(4);
+  let checkTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let downloadStallTimer: ReturnType<typeof setInterval> | null = null;
+  let lastProgressTime = 0;
 
   let unlisteners: Array<() => void> = [];
 
@@ -39,6 +42,7 @@
 
     unlisteners.push(await listen<UpdateDownloadProgress>('update-download-progress', (event) => {
       const p = event.payload;
+      lastProgressTime = Date.now();
       downloadProgress = Math.round(p.progress * 100);
       downloadedMB = (p.downloaded_bytes / 1_048_576).toFixed(1);
       if (p.total_bytes) {
@@ -74,18 +78,38 @@
 
   onDestroy(() => {
     clearAutoClose();
+    clearCheckTimeout();
+    clearDownloadStallTimer();
     unlisteners.forEach(fn => fn());
   });
 
   async function doCheck() {
     step = 'checking';
     errorMessage = '';
+
+    // Safety-net: if the Rust side hangs beyond its own 30 s timeout,
+    // the frontend still recovers after 35 s.  Tracked at component scope
+    // so onDestroy can clean it up if the window closes mid-check.
+    clearCheckTimeout();
+    checkTimeoutId = setTimeout(() => {
+      if (step === 'checking') {
+        errorMessage = 'Update check timed out. Please try again.';
+        step = 'error';
+      }
+    }, 35_000);
+
     try {
       const version = await checkAppUpdate();
       if (version) {
-        // Event listener will handle transition to 'available'.
+        // Transition directly — don't rely solely on the event listener.
+        // Guard: skip if the event listener already transitioned us.
+        if (step === 'checking') {
+          const status = await getUpdateStatus();
+          availableVersion = status.version ?? version;
+          releaseNotes = status.release_notes ?? '';
+          step = 'available';
+        }
       } else {
-        // Event listener should fire 'update-up-to-date', but handle fallback.
         if (step === 'checking') {
           step = 'up_to_date';
           startAutoClose();
@@ -94,6 +118,8 @@
     } catch (err: any) {
       errorMessage = err?.toString() || 'Check failed';
       step = 'error';
+    } finally {
+      clearCheckTimeout();
     }
   }
 
@@ -103,12 +129,40 @@
     downloadedMB = '0';
     totalMB = '';
     errorMessage = '';
+    lastProgressTime = Date.now();
+
+    // Detect stalled downloads — if no progress events for 60 s, abort.
+    clearDownloadStallTimer();
+    downloadStallTimer = setInterval(() => {
+      if (step === 'downloading' && Date.now() - lastProgressTime > 60_000) {
+        clearDownloadStallTimer();
+        errorMessage = 'Download appears to have stalled. Please try again.';
+        step = 'error';
+      }
+    }, 10_000);
+
     try {
       await performAppUpdate();
       step = 'ready';
     } catch (err: any) {
       errorMessage = err?.toString() || 'Update failed';
       step = 'error';
+    } finally {
+      clearDownloadStallTimer();
+    }
+  }
+
+  function clearCheckTimeout() {
+    if (checkTimeoutId) {
+      clearTimeout(checkTimeoutId);
+      checkTimeoutId = null;
+    }
+  }
+
+  function clearDownloadStallTimer() {
+    if (downloadStallTimer) {
+      clearInterval(downloadStallTimer);
+      downloadStallTimer = null;
     }
   }
 
@@ -126,6 +180,7 @@
   }
 
   function startAutoClose() {
+    if (autoCloseTimer) return; // Prevent duplicate intervals.
     autoCloseSeconds = 4;
     autoCloseTimer = setInterval(() => {
       autoCloseSeconds -= 1;

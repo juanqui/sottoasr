@@ -1,7 +1,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
+
+/// Timeout for the HTTP request to the update endpoint.
+const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ---------------------------------------------------------------------------
 // State
@@ -125,7 +129,15 @@ pub async fn check_for_update(
     log::info!("Checking for updates...");
 
     let updater = app.updater()?;
-    match updater.check().await {
+    let check_result = tokio::time::timeout(UPDATE_CHECK_TIMEOUT, updater.check())
+        .await
+        .map_err(|_| {
+            let msg = "Update check timed out — please check your internet connection";
+            log::warn!("{}", msg);
+            let _ = app.emit("update-check-error", msg);
+            msg
+        })?;
+    match check_result {
         Ok(Some(update)) => {
             let version = update.version.clone();
             let body = update.body.clone();
@@ -149,6 +161,15 @@ pub async fn check_for_update(
         }
         Ok(None) => {
             log::info!("App is up to date");
+
+            // Clear any stale state from a previous check (e.g. user already
+            // updated to the version we had cached).
+            let state = app.state::<UpdateState>();
+            *state.available_version.lock().await = None;
+            *state.release_notes.lock().await = None;
+            state.update_available.store(false, Ordering::SeqCst);
+            crate::tray::menu::refresh_tray_for_update(app, None);
+
             let _ = app.emit("update-up-to-date", ());
             Ok(())
         }
@@ -234,9 +255,10 @@ async fn do_download_and_install(app: &AppHandle) -> Result<String, String> {
     // First, we need to get a fresh update object by calling check().
     // This ensures we always have a valid download URL (not stale).
     let updater = app.updater().map_err(|e| e.to_string())?;
-    let update = updater
-        .check()
+    let check_result = tokio::time::timeout(UPDATE_CHECK_TIMEOUT, updater.check())
         .await
+        .map_err(|_| "Update check timed out — please check your internet connection".to_string())?;
+    let update = check_result
         .map_err(|e| format!("Update check failed: {}", e))?
         .ok_or_else(|| "No update available".to_string())?;
 

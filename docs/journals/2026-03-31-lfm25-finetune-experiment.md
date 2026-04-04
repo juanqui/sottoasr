@@ -724,7 +724,110 @@ LiquidAI/LFM2.5-350M-Base
 
 GRPO consistently trades ROUGE-L for filler removal on LFM2.5, regardless of LoRA or full-param. The reward function's filler penalty conflicts with preserving content phrases.
 
-### DEFINITIVE LFM2.5-350M CEILING: ROUGE-L 0.9675
+### BENCHMARK CORRECTION: Switched to Val Set
+
+**Critical discovery:** The 135-sample hand-crafted benchmark was inflated — v18 scored 0.968 on it but only **0.940 on the 6,895-sample val set**. All previous experiments were over-tuned to 135 cherry-picked samples.
+
+New proper benchmark: cleaned val set (6,895 samples, same fixes as training data).
+
+| Model | Old Benchmark | **Val Set (proper)** | Finding |
+|-------|--------------|---------------------|---------|
+| v18 (old best) | 0.968 | 0.940 | Inflated by +0.028 |
+| v22 (text fixes + 6K new) | 0.954 | 0.942 | Actually close to v18! |
+| **v22 LR 3e-5** | — | **0.948** | **New true best** |
+| v22 4 epochs | — | 0.946 | Also beats v18 |
+| v22 LR 3.5e-5 | — | 0.947 | Slight overshoot |
+
+**Key finding:** Cleaned data enables higher optimal LR (3e-5 vs 2.5e-5) because cleaner signal tolerates more aggressive learning.
+
+### GRPO ACTUALLY WORKS (on proper benchmark)
+
+Previous conclusion that "GRPO hurts LFM2.5" was WRONG — it only appeared to hurt on the cherry-picked 135-sample benchmark. On the proper 1000-sample val set, GRPO adds +0.005 ROUGE-L:
+
+| Stage | ROUGE-L (val) | Exact | Filler-Free |
+|-------|--------------|-------|-------------|
+| v22 SFT (LR 3e-5) | 0.948 | 62.3% | 83.7% |
+| **v22 + GRPO** | **0.953** | **65.4%** | **90.9%** |
+
+GRPO config: LoRA r=16, LR 3e-6, 5K samples, 4 generations per prompt, ROUGE-L reward (5x) + filler penalty (3x) + format bonus.
+
+**This is the new production model: ROUGE-L 0.954 on the proper val benchmark.**
+
+GRPO configuration sweep (all on v22 SFT LR 3e-5 base):
+
+| Config | ROUGE-L | Finding |
+|--------|---------|---------|
+| GRPO r=16 | 0.953 | Good baseline |
+| **GRPO r=32** | **0.954** | **Optimal rank** |
+| GRPO r=64 | 0.953 | Diminishing returns |
+| Full-param GRPO | 0.950 | Too much drift |
+| Enhanced reward (exact match bonus) | 0.951 | Over-constrained |
+| GRPO R2 (iterative) | 0.954 | Plateaued |
+| GRPO R3 | 0.953 | No further gain |
+| 4ep SFT + GRPO r=32 | 0.953 | 3ep SFT base is better |
+
+**350M production pipeline:**
+```
+LiquidAI/LFM2.5-350M-Base
+  → SFT: cleaned data (text fixes + 6K new), LR 3e-5, β2=0.95, 3 epochs → 0.948
+  → GRPO: LoRA r=32, LR 3e-6, 5K samples, ROUGE-L(5x) + filler(3x) + format → 0.954
+```
+
+### LFM2.5-1.2B-Base — Larger Model Experiments
+
+Scaling up to the 1.2B model from the same LiquidAI family. Same architecture (hybrid conv+attention), 3.4x more parameters. Fits on 4090 with batch_accum=4 + gradient checkpointing at 4096 context.
+
+| LR | ROUGE-L (val) | Exact | Finding |
+|----|--------------|-------|---------|
+| 5e-6 | 0.940 | 61% | Too conservative |
+| 1e-5 | 0.949 | 64% | Good baseline |
+| **2e-5** | **0.955** | **68%** | **Beats 350M+GRPO (0.954)!** |
+| 2.5e-5 | (running) | — | |
+| 3e-5 | (running) | — | |
+
+The 1.2B model at LR 2e-5 already surpasses the fully optimized 350M pipeline (SFT+GRPO) — with just SFT and no RL.
+
+**Complete 1.2B results (10 experiments on cleaned val set):**
+
+| # | Experiment | ROUGE-L | Exact | Filler-Free |
+|---|-----------|---------|-------|-------------|
+| 1 | SFT LR 5e-6 | 0.940 | 61% | 85% |
+| 2 | SFT LR 1e-5 | 0.949 | 64% | 84% |
+| 3 | **SFT LR 2e-5** | **0.955** | **68%** | 84% |
+| 4 | SFT LR 2.5e-5 | 0.952 | 67% | 84% |
+| 5 | SFT LR 3e-5 | 0.951 | 67% | 84% |
+| 6 | **LR 2e-5 + GRPO r=32** | **0.958** | **68%** | **91%** |
+| 7 | LR 2e-5 + GRPO (LR 5e-6) | 0.958 | 68% | 91% |
+| 8 | LR 2.5e-5 + GRPO | 0.956 | 68% | 90% |
+| 9 | SFT beta2=0.999 | 0.955 | 67% | 84% |
+| 10 | LR 3e-5 + GRPO | 0.956 | 68% | 90% |
+
+**Key findings:**
+- LR 2e-5 is optimal for SFT (same as 350M was 2.5-3e-5 — larger model prefers lower LR)
+- GRPO adds +0.003 consistently (smaller boost than 350M's +0.006 — less headroom)
+- beta2=0.95 vs 0.999 makes no difference for 1.2B (unlike 350M where it mattered)
+- Best 1.2B: ROUGE-L 0.958 vs best 350M: 0.954 — a solid +0.004 from scaling up
+
+Extended 1.2B experiments (14 total):
+
+| # | Experiment | ROUGE-L | Key |
+|---|-----------|---------|-----|
+| 11 | 4 epochs SFT | 0.954 | Early-stopped same as 3ep |
+| **12** | **GRPO R2 (iterative)** | **0.959** | **+0.001 over R1** |
+| 13 | v21 augmented data | 0.936 | Data dilution still hurts |
+| 14 | 4ep + GRPO | 0.956 | Same base = same result |
+
+**1.2B production pipeline:**
+```
+LiquidAI/LFM2.5-1.2B-Base
+  → SFT: cleaned v22 data, LR 2e-5, β2=0.95, 3 epochs, batch_accum=4 → 0.955
+  → GRPO R1: LoRA r=32, LR 3e-6, 5K samples → 0.958
+  → GRPO R2: LoRA r=32, LR 1e-6, 5K samples → 0.959
+```
+
+Uploaded to HuggingFace: `juanquivilla/sotto-cleanup-lfm25-1.2b`
+
+### DEFINITIVE LFM2.5-350M CEILING: ROUGE-L 0.9675 (old benchmark)
 
 **100+ experiments across 15 technique dimensions confirm v18 is the fully optimized production model.**
 
