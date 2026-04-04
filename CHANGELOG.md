@@ -2,6 +2,18 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.6.3] — 2026-04-04
+
+Fix auto-update modal getting permanently stuck on "Checking for Updates."
+
+### Fixed
+
+- **Update check hangs indefinitely** — The Tauri updater HTTP request had no timeout, causing the modal to freeze if the network was slow or unreachable. Added a 30-second server-side timeout and a 35-second frontend safety net.
+- **"Update available" relies solely on event** — If the backend event was delayed, the modal stayed on "checking" even though the check succeeded. The modal now transitions directly from the command response.
+- **Stale update state after upgrading** — After updating to the latest version, the modal could still show "Update Available" because the previous check's cached state was never cleared.
+- **Double auto-close timer** — Opening the "up to date" screen could create two overlapping countdown timers, closing the window faster than expected.
+- **No download stall detection** — If a download stalled mid-progress, the modal had no way to recover. Added a 60-second stall timeout.
+
 ## [0.6.2] — 2026-04-03
 
 Fix app crash on launch caused by missing Swift runtime library path.
