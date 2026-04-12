@@ -2,8 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::{tauri_panel, ManagerExt, WebviewWindowExt as _};
-use crate::models::AppStateEnum;
-use crate::state::AppState;
+use crate::llm::cleanup::run_cleanup;
+use crate::models::{AppStateEnum, LlmCleanupStatus};
+use crate::state::{AppState, OverlaySession};
 
 // Define a non-activating NSPanel class for the overlay.
 // can_become_key_window: false ensures it never steals focus from the user's app.
@@ -16,15 +17,18 @@ tauri_panel! {
     })
 }
 
-/// Maximum recording duration before auto-stop (12 minutes).
-const MAX_RECORDING_SECS: u64 = 12 * 60;
+/// Maximum recording duration before auto-stop (20 minutes).
+/// Raised from 12 min in the 2026-04-11 reliability spec to support long
+/// dictations. At 1.24 tok/word and 150 WPM, 20 min ≈ 3000 words ≈ 3720
+/// output tokens — still well inside the sidecar's 16384-token ceiling.
+const MAX_RECORDING_SECS: u64 = 20 * 60;
 /// Seconds before max duration to show a warning (1 minute before).
 const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
 /// Maximum sample rate we expect to handle (96kHz for high-quality audio).
 const MAX_EXPECTED_SAMPLE_RATE_HZ: usize = 96_000;
 /// Maximum audio buffer size (MAX_RECORDING_SECS at max expected sample rate).
 /// Prevents memory exhaustion from unbounded recordings.
-/// At 96kHz: 12 minutes * 60 seconds * 96,000 samples = 69.1M samples ≈ 277MB
+/// At 96kHz: 20 minutes * 60 seconds * 96,000 samples = 115.2M samples ≈ 460MB
 const MAX_AUDIO_BUFFER_SAMPLES: usize = MAX_EXPECTED_SAMPLE_RATE_HZ * MAX_RECORDING_SECS as usize;
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
@@ -291,7 +295,7 @@ fn handle_start_recording(app: &AppHandle) {
         Ok(()) => {
             // Capture the frontmost app PID before showing the overlay.
             // This is the app that should receive the paste when transcription completes.
-            let target_pid = crate::paste::get_frontmost_pid();
+            let target_pid = state.paste_backend.get_frontmost_pid();
             state.target_pid.store(target_pid, Ordering::SeqCst);
             log::info!("Captured frontmost app PID: {}", target_pid);
 
@@ -422,13 +426,8 @@ pub async fn handle_stop_recording(app: &AppHandle) {
     // We captured at the device's native rate (likely 48kHz mono after downmix).
     // FluidAudio handles resampling internally, so just write at the capture rate.
     let sample_rate = {
-        // Get the actual sample rate from cpal
-        use cpal::traits::{HostTrait, DeviceTrait};
-        let host = cpal::default_host();
-        host.default_input_device()
-            .and_then(|d| d.default_input_config().ok())
-            .map(|c| c.sample_rate().0)
-            .unwrap_or(48000)
+        let capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+        capture.sample_rate()
     };
 
     let wav_spec = hound::WavSpec {
@@ -500,8 +499,9 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 let raw_asr_text = asr_result.text.clone();
                 let mut final_text = asr_result.text.clone();
                 let mut llm_was_applied = false;
+                let cleanup_status: LlmCleanupStatus;
 
-                // LLM cleanup (if enabled and input is long enough)
+                // LLM cleanup (if enabled).
                 let settings = state.settings.lock().await;
                 let llm_enabled = settings.llm_cleanup_enabled;
                 let auto_paste = settings.auto_paste;
@@ -509,70 +509,54 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 let restore_focus_before_paste = settings.restore_focus_before_paste;
                 drop(settings);
 
-                if llm_enabled && final_text.split_whitespace().count() >= 5 {
-                    // Transition overlay to "Cleaning up..." state
+                let show_overlay_setting = {
+                    let s = state.settings.lock().await;
+                    s.show_overlay
+                };
+
+                if llm_enabled {
+                    // Transition overlay to "Cleaning up..." state so the
+                    // user sees the pipeline moved on from transcription.
                     state.set_state(AppStateEnum::CleaningUp);
                     let _ = app_clone.emit("state-changed", &AppStateEnum::CleaningUp);
 
-                    {
-                        let mut llm_guard = state.llm_engine.lock().await;
-
-                        // Spawn sidecar and load model if not running
-                        if llm_guard.is_none() {
-                            log::info!("Spawning LLM sidecar (on-demand)...");
-                            match tokio::task::spawn_blocking(move || {
-                                let mut engine = crate::llm::engine::LlmEngine::spawn()?;
-                                engine.load_model()?;
-                                Ok::<_, String>(engine)
-                            }).await {
-                                Ok(Ok(engine)) => {
-                                    *llm_guard = Some(engine);
-                                }
-                                Ok(Err(e)) => {
-                                    log::warn!("Failed to spawn LLM sidecar: {}", e);
-                                }
-                                Err(e) => {
-                                    log::error!("LLM sidecar spawn panicked: {}", e);
-                                }
-                            }
-                        }
-
-                        // Run cleanup via sidecar (take/put pattern for spawn_blocking Send requirement)
-                        if let Some(mut llm) = llm_guard.take() {
-                            let text_for_cleanup = final_text.clone();
-
-                            let cleanup_result = tokio::time::timeout(
-                                std::time::Duration::from_secs(120), // 2 min — long transcriptions need time
-                                tokio::task::spawn_blocking(move || {
-                                    let result = llm.cleanup(&text_for_cleanup);
-                                    (llm, result)
-                                }),
-                            ).await;
-
-                            match cleanup_result {
-                                Ok(Ok((llm_back, Ok(cleaned)))) => {
-                                    *llm_guard = Some(llm_back);
-                                    log::info!("LLM cleanup: {} → {} chars", final_text.len(), cleaned.len());
-                                    final_text = cleaned;
-                                    llm_was_applied = true;
-                                }
-                                Ok(Ok((llm_back, Err(e)))) => {
-                                    *llm_guard = Some(llm_back);
-                                    log::warn!("LLM cleanup failed: {}, using raw text", e);
-                                }
-                                Ok(Err(e)) => {
-                                    log::error!("LLM cleanup task panicked: {}, sidecar lost", e);
-                                }
-                                Err(_) => {
-                                    log::warn!("LLM cleanup timed out after 120s, sidecar will be respawned on next use");
-                                    // The sidecar is still held by the timed-out spawn_blocking task.
-                                    // It will be dropped when that task eventually completes.
-                                    // llm_guard is already None, so next cleanup will spawn a new one.
-                                }
-                            }
-                        }
+                    let (cleaned, status) = run_cleanup(&state, &final_text).await;
+                    cleanup_status = status;
+                    if matches!(cleanup_status, LlmCleanupStatus::Applied { .. }) {
+                        final_text = cleaned;
+                        llm_was_applied = true;
                     }
+                } else {
+                    cleanup_status = LlmCleanupStatus::Disabled;
                 }
+
+                // Update cached last-status and emit to the UI so the overlay
+                // can show a brief badge before hiding. Both places read the
+                // same enum, so the overlay and the history view stay in sync.
+                {
+                    let mut last = state.llm_last_status.lock().await;
+                    *last = cleanup_status.clone();
+                }
+                let _ = app_clone.emit("llm-cleanup-status", &cleanup_status);
+
+                // Decide how long to keep the overlay open after cleanup so
+                // the badge is visible to the user. Failure modes get a longer
+                // dwell since the user needs time to read the message.
+                // SkippedTooShort and Disabled get 0 because there's nothing
+                // worth interrupting the flow for.
+                let badge_dwell_ms: u64 = if !show_overlay_setting {
+                    0
+                } else {
+                    match cleanup_status {
+                        LlmCleanupStatus::Applied { .. } => 800,
+                        LlmCleanupStatus::SkippedTooShort
+                        | LlmCleanupStatus::Disabled
+                        | LlmCleanupStatus::Idle => 0,
+                        LlmCleanupStatus::Unavailable { .. }
+                        | LlmCleanupStatus::Failed { .. }
+                        | LlmCleanupStatus::TimedOut { .. } => 2000,
+                    }
+                };
 
                 // Check again if this job is still current
                 if !state.is_current_job(job_id) {
@@ -592,6 +576,7 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     cancelled: false,
                     raw_text: if llm_was_applied { Some(raw_asr_text.clone()) } else { None },
                     llm_applied: llm_was_applied,
+                    llm_cleanup_status: cleanup_status.clone(),
                 };
 
                 // Save
@@ -608,7 +593,7 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     if auto_paste {
                         let target_pid = if restore_focus_before_paste {
                             let start_pid = state.target_pid.load(Ordering::SeqCst);
-                            let current_pid = crate::paste::get_frontmost_pid();
+                            let current_pid = state.paste_backend.get_frontmost_pid();
                             let our_pid = std::process::id() as i32;
 
                             if current_pid == start_pid || current_pid == our_pid || current_pid == 0 {
@@ -623,9 +608,9 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                             0
                         };
                         let paste_result = if restore_clipboard {
-                            crate::paste::paste_text_and_restore(&final_text, target_pid)
+                            state.paste_backend.paste_text_and_restore(&final_text, target_pid)
                         } else {
-                            crate::paste::paste_text(&final_text, target_pid)
+                            state.paste_backend.paste_text(&final_text, target_pid)
                         };
 
                         match paste_result {
@@ -641,12 +626,12 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                                     "needs_restart": e.contains("restart"),
                                     "needs_permission": e.contains("permission not granted"),
                                 }));
-                                let _ = crate::paste::copy_to_clipboard(&final_text);
+                                let _ = state.paste_backend.copy_to_clipboard(&final_text);
                                 log::info!("Text copied to clipboard as fallback");
                             }
                         }
                     } else {
-                        match crate::paste::copy_to_clipboard(&final_text) {
+                        match state.paste_backend.copy_to_clipboard(&final_text) {
                             Ok(()) => {
                                 log::info!("Text copied to clipboard (auto_paste disabled)");
                                 let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id, "clipboard_only": true }));
@@ -657,6 +642,13 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                             }
                         }
                     }
+                }
+                // Linger briefly so the cleanup-status badge is visible to the
+                // user before the overlay hides. The paste already happened,
+                // so this only delays the hide animation, not the user-visible
+                // text appearing at the cursor.
+                if badge_dwell_ms > 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(badge_dwell_ms)).await;
                 }
                 // Hide overlay after paste/copy completes
                 hide_overlay(&app_clone);
@@ -721,12 +713,8 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
         let temp_path = std::env::temp_dir().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
 
         let sample_rate = {
-            use cpal::traits::{HostTrait, DeviceTrait};
-            let host = cpal::default_host();
-            host.default_input_device()
-                .and_then(|d| d.default_input_config().ok())
-                .map(|c| c.sample_rate().0)
-                .unwrap_or(48000)
+            let capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+            capture.sample_rate()
         };
 
         let wav_spec = hound::WavSpec {
@@ -759,6 +747,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
                         cancelled: true,
                         raw_text: None,
                         llm_applied: false,
+                        llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
                     };
                     crate::commands::transcription::add_transcription(transcription.clone()).await;
                     let _ = app_clone.emit("transcription-complete", &transcription);
@@ -781,6 +770,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
             cancelled: true,
             raw_text: None,
             llm_applied: false,
+            llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
         };
         crate::commands::transcription::add_transcription(transcription).await;
         state.set_state(AppStateEnum::Idle);
@@ -792,6 +782,12 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
 /// Logical dimensions of the overlay pill window.
 const OVERLAY_WIDTH: f64 = 300.0;
 const OVERLAY_HEIGHT: f64 = 110.0;
+
+/// Sub-point tolerance for "did the user drag the overlay?" detection.
+/// Hide-time frame positions are compared against the value we set at
+/// show-time; anything above this epsilon counts as a user drag and gets
+/// persisted. See docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md §5.7.
+const DRAG_EPSILON: f64 = 0.5;
 
 /// Pre-create the overlay panel at startup so that the first recording
 /// doesn't steal focus. WebviewWindowBuilder::build() activates the app
@@ -841,6 +837,19 @@ pub fn precreate_overlay(app: &AppHandle) {
                     | tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
                 );
                 clear_all_backgrounds(panel.as_panel());
+
+                // Park the hidden panel at a safe default (bottom-center
+                // of the primary display). The first real show_overlay
+                // will overwrite this, but parking the panel now
+                // guarantees that if something skips positioning it
+                // still appears on a sane screen. AppState.overlay_session
+                // is intentionally left as None — precreation does not
+                // open a user-visible session.
+                let screens = get_native_screens();
+                if let Some(primary) = screens.first() {
+                    let _ = position_overlay_native(panel.as_panel(), primary);
+                }
+
                 // Do NOT show — leave hidden until first recording
                 log::info!("Overlay panel pre-created (hidden)");
             }
@@ -856,6 +865,14 @@ pub fn precreate_overlay(app: &AppHandle) {
 ///
 /// Positioning uses native macOS APIs (NSScreen, CGWindowList, setFrameOrigin:)
 /// to bypass Tauri's buggy multi-monitor coordinate handling.
+///
+/// Ordering matters: we position the panel *while it is hidden* and only
+/// then call `panel.show()`. Calling `setFrameOrigin:` on a visible
+/// NSPanel whose frame lives on a different NSScreen is a known-flaky
+/// pattern — see
+/// docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md §3
+/// Defect C. If the panel is already visible (second and later
+/// recordings) we `orderOut:` it first, so the transport is invisible.
 fn show_overlay(app: &AppHandle) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
@@ -867,17 +884,48 @@ fn show_overlay(app: &AppHandle) {
 
         // Try to show an existing panel first
         if let Ok(panel) = app.get_webview_panel("overlay") {
+            // 1. Hide first if currently visible so that setFrameOrigin
+            //    does not have to perform a cross-display transport on a
+            //    visible window.
+            if panel_is_visible(panel.as_panel()) {
+                unsafe {
+                    let nil: Option<&tauri_nspanel::objc2_foundation::NSObject> = None;
+                    let _: () = tauri_nspanel::objc2::msg_send![
+                        panel.as_panel(), orderOut: nil
+                    ];
+                }
+            }
+
+            // 2. Position while hidden. Record the session state so that
+            //    hide_overlay can tell user drags from auto-defaults.
+            if let Some(ref screen) = target_screen {
+                let session = position_overlay_native(panel.as_panel(), screen);
+                *state.overlay_session.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(session);
+            }
+
+            // 3. Show.
             panel.show();
-            // Re-apply floating level after show — this is required to fix
-            // Tauri issue #13530 where the setting is lost after hide/show.
+
+            // 4. Re-apply floating level — required to fix Tauri issue
+            //    #13530 where the setting is lost after hide/show.
             use tauri_nspanel::PanelLevel;
             panel.set_level(PanelLevel::Floating.into());
             panel.set_floating_panel(true);
             panel.order_front_regardless();
-            // Position natively (bypassing Tauri set_position)
+
+            // 5. Verify the panel actually landed on the target screen;
+            //    re-apply once if the window server moved it.
             if let Some(ref screen) = target_screen {
-                position_overlay_native(panel.as_panel(), screen);
+                if let Some(session) = *state
+                    .overlay_session
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                {
+                    verify_and_fix_overlay_frame(panel.as_panel(), screen, session);
+                }
             }
+
             log::info!("Overlay shown (existing panel, floating level reapplied)");
             return;
         }
@@ -931,12 +979,26 @@ fn show_overlay(app: &AppHandle) {
                 // Synchronously clear backgrounds on ALL views in the hierarchy.
                 clear_all_backgrounds(panel.as_panel());
 
-                // Position natively before showing
+                // Position BEFORE showing; record session state.
                 if let Some(ref screen) = target_screen {
-                    position_overlay_native(panel.as_panel(), screen);
+                    let session = position_overlay_native(panel.as_panel(), screen);
+                    *state.overlay_session.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some(session);
                 }
 
                 panel.show();
+
+                // Verify post-show placement.
+                if let Some(ref screen) = target_screen {
+                    if let Some(session) = *state
+                        .overlay_session
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                    {
+                        verify_and_fix_overlay_frame(panel.as_panel(), screen, session);
+                    }
+                }
+
                 log::info!("Overlay panel created and shown");
             }
             Err(e) => {
@@ -948,6 +1010,14 @@ fn show_overlay(app: &AppHandle) {
 }
 
 /// Hide the overlay panel and reset its state for the next recording.
+///
+/// Persistence policy: we save the overlay's frame *only* if the user
+/// actually dragged it away from the position we placed it at in
+/// `show_overlay`. An auto-computed default that was never touched must
+/// not be persisted, because the display arrangement might change before
+/// the next show and the stored absolute coordinate would then correspond
+/// to the wrong visual spot on the display it was keyed against.
+/// See docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md §5.7.
 fn hide_overlay(app: &AppHandle) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
@@ -958,18 +1028,52 @@ fn hide_overlay(app: &AppHandle) {
         }
 
         if let Ok(panel) = app.get_webview_panel("overlay") {
-            // Save the user's position before hiding.
-            // Find which screen the overlay center is on and persist for that display.
             let panel_ref = panel.as_panel();
             let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
                 tauri_nspanel::objc2::msg_send![panel_ref, frame]
             };
-            let center_x = frame.origin.x + frame.size.width / 2.0;
-            let center_y = frame.origin.y + frame.size.height / 2.0;
-            let screens = get_native_screens();
-            if let Some(idx) = screen_containing_point(&screens, center_x, center_y) {
-                save_panel_position(panel_ref, screens[idx].display_id);
+
+            let state = app.state::<AppState>();
+            let session = state
+                .overlay_session
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+
+            if let Some(sess) = session {
+                let dx = (frame.origin.x - sess.applied_origin.0).abs();
+                let dy = (frame.origin.y - sess.applied_origin.1).abs();
+                let moved = dx > DRAG_EPSILON || dy > DRAG_EPSILON;
+
+                if moved {
+                    // User dragged. Persist against whichever display
+                    // now contains the overlay's center — matches the
+                    // macOS "majority geometry" rule for spanning windows.
+                    let center_x = frame.origin.x + frame.size.width / 2.0;
+                    let center_y = frame.origin.y + frame.size.height / 2.0;
+                    let screens = get_native_screens();
+                    if let Some(idx) =
+                        screen_containing_point(&screens, center_x, center_y)
+                    {
+                        save_panel_position(panel_ref, screens[idx].display_id);
+                    } else {
+                        log::info!(
+                            "Overlay was dragged off all screens; cannot persist \
+                             ({:.0},{:.0})",
+                            frame.origin.x, frame.origin.y
+                        );
+                    }
+                } else {
+                    log::info!(
+                        "Overlay was not moved during session — not persisting \
+                         (default {:.0},{:.0} for display {})",
+                        sess.default_origin.0, sess.default_origin.1, sess.display_id
+                    );
+                }
+            } else {
+                log::info!("No overlay session — skipping persistence on hide");
             }
+
             panel.hide();
             log::info!("Overlay hidden");
         } else if let Some(window) = app.get_webview_window("overlay") {
@@ -1049,12 +1153,25 @@ fn clear_all_backgrounds(panel: &tauri_nspanel::NSPanel) {
 // (keyed by CGDirectDisplayID) and restored on subsequent recordings.
 // ---------------------------------------------------------------------------
 
-/// Saved overlay position for a specific monitor.
-/// Stored as absolute Cocoa coordinates — validated against current visibleFrame on restore.
+/// Current persistence schema version. Bumped to 2 so that the loader can
+/// reject any entry written by a pre-fix build — those entries were
+/// auto-computed defaults that `hide_overlay` should never have persisted.
+/// See docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md §5.1.
+const OVERLAY_POSITION_SCHEMA: u32 = 2;
+
+/// Schema value inferred for entries that predate the schema field. Old
+/// entries deserialize with this value and are rejected at load.
+fn legacy_schema_version() -> u32 { 1 }
+
+/// Saved overlay position for a specific monitor. Only user-dragged
+/// positions are persisted; auto-computed defaults are not.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct SavedOverlayPosition {
     x: f64,
     y: f64,
+    /// Schema version. Writers always set this to `OVERLAY_POSITION_SCHEMA`.
+    #[serde(default = "legacy_schema_version")]
+    schema: u32,
 }
 
 /// Map from display_id (as string) to saved position.
@@ -1072,10 +1189,20 @@ fn load_overlay_positions() -> OverlayPositions {
         Some(p) if p.exists() => p,
         _ => return OverlayPositions::new(),
     };
-    match std::fs::read_to_string(&path) {
+    let mut positions: OverlayPositions = match std::fs::read_to_string(&path) {
         Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
         Err(_) => OverlayPositions::new(),
+    };
+    let before = positions.len();
+    positions.retain(|_, v| v.schema >= OVERLAY_POSITION_SCHEMA);
+    let dropped = before - positions.len();
+    if dropped > 0 {
+        log::info!(
+            "Dropped {} legacy overlay-position entries (schema < {})",
+            dropped, OVERLAY_POSITION_SCHEMA
+        );
     }
+    positions
 }
 
 fn save_overlay_positions(positions: &OverlayPositions) {
@@ -1086,8 +1213,15 @@ fn save_overlay_positions(positions: &OverlayPositions) {
     }
 }
 
-/// Save the current panel position for a specific display.
+/// Save the current panel position for a specific display. This is the
+/// *only* write site; every entry it creates carries
+/// `OVERLAY_POSITION_SCHEMA` so that the loader accepts it.
 fn save_panel_position(panel: &tauri_nspanel::objc2_app_kit::NSPanel, display_id: u32) {
+    // Build-time guard: bumping the schema should force a loader update.
+    debug_assert_eq!(
+        OVERLAY_POSITION_SCHEMA, 2,
+        "bump OVERLAY_POSITION_SCHEMA and extend the load filter together"
+    );
     let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
         tauri_nspanel::objc2::msg_send![panel, frame]
     };
@@ -1095,30 +1229,47 @@ fn save_panel_position(panel: &tauri_nspanel::objc2_app_kit::NSPanel, display_id
     positions.insert(display_id.to_string(), SavedOverlayPosition {
         x: frame.origin.x,
         y: frame.origin.y,
+        schema: OVERLAY_POSITION_SCHEMA,
     });
     save_overlay_positions(&positions);
     log::info!(
-        "Saved overlay position ({:.0}, {:.0}) for display {}",
-        frame.origin.x, frame.origin.y, display_id
+        "Saved overlay position ({:.0}, {:.0}) for display {} (schema {})",
+        frame.origin.x, frame.origin.y, display_id, OVERLAY_POSITION_SCHEMA
     );
 }
 
-/// Look up a saved position for this display and verify it's within the visible frame.
-fn get_saved_position(display_id: u32, visible: &tauri_nspanel::objc2_foundation::NSRect) -> Option<(f64, f64)> {
+/// Look up a saved position for this display. Returns `None` if the saved
+/// point does not lie fully inside the current `visibleFrame` — i.e. the
+/// display arrangement has changed since the position was persisted. A
+/// saved entry that would need clamping is, by definition, stale; we
+/// discard it rather than pin it to a visible edge.
+fn get_saved_position(
+    display_id: u32,
+    visible: &tauri_nspanel::objc2_foundation::NSRect,
+) -> Option<(f64, f64)> {
     let positions = load_overlay_positions();
     let saved = positions.get(&display_id.to_string())?;
-    // Clamp to ensure the overlay stays fully within the visible frame
-    let clamped_x = saved.x
-        .max(visible.origin.x)
-        .min(visible.origin.x + visible.size.width - OVERLAY_WIDTH);
-    let clamped_y = saved.y
-        .max(visible.origin.y)
-        .min(visible.origin.y + visible.size.height - OVERLAY_HEIGHT);
+
+    let fits_x = saved.x >= visible.origin.x
+        && saved.x + OVERLAY_WIDTH <= visible.origin.x + visible.size.width;
+    let fits_y = saved.y >= visible.origin.y
+        && saved.y + OVERLAY_HEIGHT <= visible.origin.y + visible.size.height;
+
+    if !fits_x || !fits_y {
+        log::info!(
+            "Discarding stale saved position ({:.0},{:.0}) for display {} — \
+             does not fit current visibleFrame ({:.0},{:.0} {:.0}x{:.0})",
+            saved.x, saved.y, display_id,
+            visible.origin.x, visible.origin.y, visible.size.width, visible.size.height
+        );
+        return None;
+    }
+
     log::info!(
-        "Restored overlay position ({:.0}, {:.0}) for display {} (clamped from {:.0}, {:.0})",
-        clamped_x, clamped_y, display_id, saved.x, saved.y
+        "Restored overlay position ({:.0},{:.0}) for display {}",
+        saved.x, saved.y, display_id
     );
-    Some((clamped_x, clamped_y))
+    Some((saved.x, saved.y))
 }
 
 /// Native screen info in Cocoa coordinates (logical points, origin bottom-left).
@@ -1312,23 +1463,27 @@ fn select_target_screen(target_pid: i32) -> Option<NativeScreen> {
 
 /// Position the overlay on the target screen using native Cocoa APIs.
 ///
-/// If the user previously dragged the overlay on this monitor, restores that
-/// position (clamped to current visibleFrame). Otherwise defaults to
-/// bottom-center, just above the Dock.
+/// Always computes the default bottom-center position; if the user has a
+/// valid saved position for this display, uses that instead. Returns an
+/// `OverlaySession` describing both origins so the caller can record it
+/// on `AppState.overlay_session` and later detect whether the user
+/// dragged the panel.
 fn position_overlay_native(
     panel: &tauri_nspanel::objc2_app_kit::NSPanel,
     target: &NativeScreen,
-) {
+) -> OverlaySession {
     let vis = &target.visible_frame;
+    let margin_bottom: f64 = 8.0;
 
-    let (x, y) = if let Some(saved) = get_saved_position(target.display_id, vis) {
-        saved
-    } else {
-        // Default: centered horizontally, just above the Dock (8pt padding)
-        let margin_bottom: f64 = 8.0;
-        let x = vis.origin.x + (vis.size.width - OVERLAY_WIDTH) / 2.0;
-        let y = vis.origin.y + margin_bottom;
-        (x, y)
+    // Default: centered horizontally, just above the Dock.
+    let default_origin = (
+        vis.origin.x + (vis.size.width - OVERLAY_WIDTH) / 2.0,
+        vis.origin.y + margin_bottom,
+    );
+
+    let (x, y) = match get_saved_position(target.display_id, vis) {
+        Some(saved) => saved,
+        None        => default_origin,
     };
 
     unsafe {
@@ -1337,10 +1492,73 @@ fn position_overlay_native(
     }
 
     log::info!(
-        "Overlay positioned at ({:.0}, {:.0}) on display {} — visible=({:.0},{:.0} {:.0}x{:.0})",
+        "Overlay positioned at ({:.0},{:.0}) on display {} — default=({:.0},{:.0}) visible=({:.0},{:.0} {:.0}x{:.0})",
         x, y, target.display_id,
+        default_origin.0, default_origin.1,
         vis.origin.x, vis.origin.y, vis.size.width, vis.size.height,
     );
+
+    OverlaySession {
+        display_id: target.display_id,
+        default_origin,
+        applied_origin: (x, y),
+    }
+}
+
+/// True if the NSPanel's `isVisible` flag is set.
+fn panel_is_visible(panel: &tauri_nspanel::objc2_app_kit::NSPanel) -> bool {
+    unsafe {
+        let visible: tauri_nspanel::objc2::runtime::Bool =
+            tauri_nspanel::objc2::msg_send![panel, isVisible];
+        visible.as_bool()
+    }
+}
+
+/// Read the panel's actual frame after show and check it lies on the
+/// target screen. If not (can happen when the window server decides to
+/// re-assign the window to the "majority" display), re-apply once.
+///
+/// Checked against `target.frame` (not `visible_frame`) on purpose: the
+/// goal is "did the panel land on the correct *screen*", not "is every
+/// pixel inside the Dock-excluded area". A user who later drags the
+/// panel into the Dock zone should still have their position honored.
+fn verify_and_fix_overlay_frame(
+    panel: &tauri_nspanel::objc2_app_kit::NSPanel,
+    target: &NativeScreen,
+    session: OverlaySession,
+) {
+    let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
+        tauri_nspanel::objc2::msg_send![panel, frame]
+    };
+    let center_x = frame.origin.x + frame.size.width / 2.0;
+    let center_y = frame.origin.y + frame.size.height / 2.0;
+
+    let tf = &target.frame;
+    let inside = center_x >= tf.origin.x
+        && center_x <  tf.origin.x + tf.size.width
+        && center_y >= tf.origin.y
+        && center_y <  tf.origin.y + tf.size.height;
+
+    if inside {
+        return;
+    }
+
+    log::warn!(
+        "Overlay frame landed off-target after show (center {:.0},{:.0}, \
+         target display {} frame {:.0},{:.0} {:.0}x{:.0}) — re-applying",
+        center_x, center_y, target.display_id,
+        tf.origin.x, tf.origin.y, tf.size.width, tf.size.height,
+    );
+
+    // Re-apply using the session's applied_origin rather than recomputing
+    // so that we do not "demote" a valid user position to the default.
+    unsafe {
+        let origin = tauri_nspanel::objc2_foundation::NSPoint {
+            x: session.applied_origin.0,
+            y: session.applied_origin.1,
+        };
+        let _: () = tauri_nspanel::objc2::msg_send![panel, setFrameOrigin: origin];
+    }
 }
 
 /// Log the current screen configuration for diagnostics.

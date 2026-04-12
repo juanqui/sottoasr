@@ -3,6 +3,7 @@ use tauri::Emitter;
 use tauri::Manager;
 
 use crate::llm::engine;
+use crate::llm::engine::LlmBackend;
 use crate::state::AppState;
 
 /// Download the SottoASR cleanup model via the sidecar process.
@@ -44,9 +45,9 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
                         // two MLX processes competing for unified memory.
                         if let Some(mut old) = guard.take() {
                             log::info!("Shutting down old LLM sidecar before replacing");
-                            old.quit();
+                            old.shutdown();
                         }
-                        *guard = Some(engine);
+                        *guard = Some(Box::new(engine) as Box<dyn LlmBackend>);
                         log::info!("LLM sidecar pre-loaded after download");
                     }
                     Ok(Err(e)) => {

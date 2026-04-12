@@ -5,3 +5,4 @@ pub mod permissions;
 pub mod setup;
 pub mod keycapture;
 pub mod llm;
+pub mod overlay;

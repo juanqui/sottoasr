@@ -243,6 +243,7 @@ CATEGORIES = [
     {"name": "mixed", "weight": 0.08, "description": "Multiple disfluency types combined in one passage."},
     {"name": "long_transcript", "weight": 0.08, "description": "Long continuous dictation (300-1000 words) with scattered disfluencies. Must preserve ALL content."},
     {"name": "adversarial", "weight": 0.04, "description": "Words that look like fillers but are used meaningfully. Must NOT be removed."},
+    {"name": "paragraph_formatting", "weight": 0.01, "description": "Long continuous dictation (100-500 words) that must be cleaned AND restructured into 2-5 paragraphs at natural topic boundaries. Only generated when --category paragraph_formatting is passed."},
 ]
 
 DIFFICULTIES = [
@@ -433,6 +434,38 @@ Output format: ONE JSON object (not an array):
 {"raw": "very long lowercase no punctuation text...", "clean": "Very long properly formatted text..."}
 
 IMPORTANT: The clean version must be nearly as long as the raw version. If raw is 500 words, clean should be 400-475 words. Never produce a clean version that is less than 75% of the raw length.""",
+
+        "paragraph_formatting": """PARAGRAPH FORMATTING (100-500 words, MUST contain paragraph breaks):
+Generate ONE long realistic dictation pair where the user speaks continuously about a topic that naturally divides into 2-5 paragraphs.
+
+CRITICAL REQUIREMENTS:
+- RAW: 100-500 words of CONTINUOUS lowercase speech. NO punctuation, NO newlines, NO capital letters. Include scattered natural disfluencies (uh, um, you know, I mean, like, so, basically, a stutter, a small self-correction). Density should feel normal — roughly 1 filler per 15-30 words, not every sentence.
+- CLEAN: the same content properly punctuated AND split into 2-5 paragraphs using \\n\\n between paragraphs. EVERY output MUST contain at least one \\n\\n.
+- Paragraph splits MUST occur at NATURAL DISCOURSE BOUNDARIES:
+   * Topic shifts ("So that's the first thing...", "On another note...", "The other piece is...")
+   * Time-reference changes ("Then yesterday...", "After that...", "Later in the day...", "This morning...", "Last week...")
+   * Enumeration steps ("So first we need...", "Second...", "And the third thing...")
+   * Subject changes (person to person, project to project, problem to solution)
+   * Question-to-answer or problem-to-solution transitions
+- Preserve ALL content. NEVER summarize, condense, paraphrase, or drop sentences.
+- Clean length should be 100-120% of raw length (the increase comes purely from punctuation + capitalization + the \\n\\n markers).
+- DO NOT use bullet points, numbered lists, or headers. Use plain paragraphs only.
+- The text should sound like real unrehearsed dictation — a meeting update, a bug report, a voice memo, a project status, a journal entry — not a written article.
+
+OUTPUT FORMAT: a single JSON object (NOT an array):
+{"raw": "long lowercase run-on...", "clean": "First paragraph with punctuation.\\n\\nSecond paragraph here.\\n\\nThird paragraph."}
+
+EXAMPLE 1 (meeting status update, 3 paragraphs):
+{"raw": "okay so i wanted to give you a quick update on the auth service migration we finished deploying the new identity provider to staging yesterday and uh so far the smoke tests are all passing we ran about 200 login flows through it and we saw exactly zero errors which is a huge improvement over the old system the latency is also down about forty percent which is uh which is great news for the mobile team now on the database side we still have one outstanding issue the read replica is lagging by about eight seconds during peak hours i think this is because we havent finished tuning the replication settings yet im going to pair with priya tomorrow morning to dig into it and hopefully we can land a fix before the release cutoff one more thing i wanted to mention the documentation for the new api endpoints is still pretty rough marcus is going to do a pass on it this week and clean up the examples so we should have something solid for the customer team by friday", "clean": "Okay, so I wanted to give you a quick update on the auth service migration. We finished deploying the new identity provider to staging yesterday, and so far the smoke tests are all passing. We ran about 200 login flows through it and we saw exactly zero errors, which is a huge improvement over the old system. The latency is also down about forty percent, which is great news for the mobile team.\\n\\nNow on the database side, we still have one outstanding issue. The read replica is lagging by about eight seconds during peak hours. I think this is because we haven't finished tuning the replication settings yet. I'm going to pair with Priya tomorrow morning to dig into it, and hopefully we can land a fix before the release cutoff.\\n\\nOne more thing I wanted to mention: the documentation for the new API endpoints is still pretty rough. Marcus is going to do a pass on it this week and clean up the examples, so we should have something solid for the customer team by Friday."}
+
+EXAMPLE 2 (personal journal, 2 paragraphs):
+{"raw": "so today was a long one i got into the office around eight and spent basically the entire morning dealing with the incident from last night the root cause ended up being a bad config push that snuck through because our ci didnt catch it we reverted by about eleven and things have been stable since then in the afternoon i finally had a chance to work on the roadmap doc for q three i want to get this in front of leadership by next tuesday so im trying to nail down the top four priorities i think performance and observability are locks but im still going back and forth on whether to include the data platform rewrite or push it to q four", "clean": "So today was a long one. I got into the office around eight and spent basically the entire morning dealing with the incident from last night. The root cause ended up being a bad config push that snuck through because our CI didn't catch it. We reverted by about eleven and things have been stable since then.\\n\\nIn the afternoon I finally had a chance to work on the roadmap doc for Q3. I want to get this in front of leadership by next Tuesday, so I'm trying to nail down the top four priorities. I think performance and observability are locks, but I'm still going back and forth on whether to include the data platform rewrite or push it to Q4."}
+
+EXAMPLE 3 (bug report with enumerated steps, 4 paragraphs):
+{"raw": "alright i want to file a repro for the checkout bug we saw in production yesterday so to reproduce it first you need to log in as a customer with at least one saved payment method and at least two items in their cart then you go to the checkout page and you select the saved card and you click place order the first time it works normally and the order goes through now the second time you try to check out within the same session thats when the issue happens the page hangs for about fifteen seconds and then you get a generic server error back instead of the real error message i checked the backend logs and im seeing a null pointer exception in the payment validator its choking on a cached cart object that should have been cleared after the first order i think the fix is pretty simple we just need to invalidate that cache entry when the order is placed i can have a patch up by end of day if we agree on the approach", "clean": "Alright, I want to file a repro for the checkout bug we saw in production yesterday.\\n\\nTo reproduce it, first you need to log in as a customer with at least one saved payment method and at least two items in their cart. Then you go to the checkout page, you select the saved card, and you click Place Order. The first time it works normally and the order goes through. The second time you try to check out within the same session, that's when the issue happens. The page hangs for about fifteen seconds and then you get a generic server error back instead of the real error message.\\n\\nI checked the backend logs and I'm seeing a null pointer exception in the payment validator. It's choking on a cached cart object that should have been cleared after the first order.\\n\\nI think the fix is pretty simple: we just need to invalidate that cache entry when the order is placed. I can have a patch up by end of day if we agree on the approach."}
+
+IMPORTANT: The clean field MUST contain \\n\\n at paragraph boundaries. Samples without \\n\\n will be rejected.
+IMPORTANT: Output ONE JSON object, not an array. Do not wrap in markdown.""",
     }
     return instructions.get(category_name, "Generate realistic examples for this category.")
 
@@ -506,7 +539,13 @@ def validate_sample(sample: Sample) -> Sample:
     if ratio < MIN_LENGTH_RATIO and sample.category != "self_correction":
         sample.valid, sample.rejection_reason = False, f"ratio_low ({ratio:.2f})"
         return sample
-    if ratio > MAX_LENGTH_RATIO and sample.category not in ("preserve_wording", "adversarial", "dictation_commands", "grammar"):
+    # paragraph_formatting gets a higher ceiling (1.60) because \n\n markers and
+    # added punctuation make the clean target noticeably longer than the raw.
+    if sample.category == "paragraph_formatting":
+        if ratio > 1.60:
+            sample.valid, sample.rejection_reason = False, f"ratio_high ({ratio:.2f})"
+            return sample
+    elif ratio > MAX_LENGTH_RATIO and sample.category not in ("preserve_wording", "adversarial", "dictation_commands", "grammar"):
         sample.valid, sample.rejection_reason = False, f"ratio_high ({ratio:.2f})"
         return sample
 
@@ -527,10 +566,24 @@ def validate_sample(sample: Sample) -> Sample:
         sample.valid, sample.rejection_reason = False, "clean_no_cap"
         return sample
 
-    # Clean should end with punctuation (except lists)
-    if clean[-1] not in '.!?\n' and sample.category != "list_formatting":
+    # Clean should end with punctuation (except lists and paragraph_formatting)
+    if clean[-1] not in '.!?\n' and sample.category not in ("list_formatting", "paragraph_formatting"):
         sample.valid, sample.rejection_reason = False, "clean_no_punct"
         return sample
+
+    # paragraph_formatting MUST contain \n\n markers and have 2-6 paragraphs.
+    if sample.category == "paragraph_formatting":
+        if "\n\n" not in clean:
+            sample.valid, sample.rejection_reason = False, "no_paragraph_breaks"
+            return sample
+        paragraph_count = clean.count("\n\n") + 1
+        if paragraph_count < 2 or paragraph_count > 6:
+            sample.valid, sample.rejection_reason = False, f"bad_paragraph_count ({paragraph_count})"
+            return sample
+        # Raw must NOT contain newlines (it simulates continuous speech)
+        if "\n" in raw:
+            sample.valid, sample.rejection_reason = False, "raw_has_newline"
+            return sample
 
     # No fillers in clean (except adversarial/preserve categories)
     if sample.category not in ("adversarial", "preserve_wording"):
@@ -779,16 +832,17 @@ async def generate_batch(
     persona = random.choice(PERSONAS)
     difficulty = weighted_choice(DIFFICULTIES)
 
-    # Long transcripts get 1 sample per batch (they're big); others get 10
-    batch_size = 1 if cat["name"] == "long_transcript" else BATCH_SIZE
+    # Long transcripts and paragraph_formatting get 1 sample per batch (they're big); others get 10
+    single_object_cats = ("long_transcript", "paragraph_formatting")
+    batch_size = 1 if cat["name"] in single_object_cats else BATCH_SIZE
     prompt = build_generation_prompt(cat, domain, persona, difficulty, batch_size)
     response = await call_llm(session, base_url, model, api_key, SYSTEM_PROMPT, prompt)
 
     if not response:
         return []
 
-    # Long transcripts return a single JSON object, not an array
-    if cat["name"] == "long_transcript":
+    # Long transcripts and paragraph_formatting return a single JSON object, not an array
+    if cat["name"] in single_object_cats:
         try:
             item = json.loads(response.strip().strip('`').removeprefix('json').strip())
             if isinstance(item, dict):

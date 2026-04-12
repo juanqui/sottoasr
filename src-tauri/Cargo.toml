@@ -1,6 +1,6 @@
 [package]
 name = "sottoasr"
-version = "0.6.3"
+version = "0.7.0"
 description = "SottoASR — Local, privacy-first speech-to-text for macOS"
 authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"
@@ -52,11 +52,18 @@ uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 dirs = "6"
+# libc is transitively available via core-foundation, but we depend on it
+# explicitly for kill_orphan()'s SIGKILL path (src/llm/engine.rs).
+libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
 core-foundation = "0.10"
 arboard = "3"
+
+[dev-dependencies]
+serial_test = "3"
+tempfile = "3"
 
 [features]
 default = ["custom-protocol", "asr-fluidaudio", "llm-cleanup"]

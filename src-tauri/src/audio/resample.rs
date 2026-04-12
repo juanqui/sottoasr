@@ -58,3 +58,53 @@ pub fn resample_to_16khz(samples: &[f32], source_rate: u32) -> Result<Vec<f32>, 
 
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passthrough_at_16khz() {
+        let samples: Vec<f32> = (0..4096).map(|i| (i as f32) / 4096.0).collect();
+        let result = resample_to_16khz(&samples, 16000).unwrap();
+        assert_eq!(result.len(), samples.len());
+        assert_eq!(result, samples);
+    }
+
+    #[test]
+    fn ratio_at_48khz() {
+        // 48kHz -> 16kHz is a 3:1 ratio, so output should be ~1/3 of input
+        let samples = vec![0.0f32; 48000]; // 1 second at 48kHz
+        let result = resample_to_16khz(&samples, 48000).unwrap();
+        // Allow tolerance for resampler edge effects (chunk boundaries, padding)
+        let expected = 16000;
+        let tolerance = 500;
+        assert!(
+            (result.len() as i64 - expected as i64).unsigned_abs() < tolerance,
+            "Expected ~{} samples, got {}",
+            expected,
+            result.len()
+        );
+    }
+
+    #[test]
+    fn ratio_at_44100() {
+        // 44.1kHz -> 16kHz, output should be ~16000/44100 of input
+        let samples = vec![0.0f32; 44100]; // 1 second at 44.1kHz
+        let result = resample_to_16khz(&samples, 44100).unwrap();
+        let expected = 16000;
+        let tolerance = 500;
+        assert!(
+            (result.len() as i64 - expected as i64).unsigned_abs() < tolerance,
+            "Expected ~{} samples, got {}",
+            expected,
+            result.len()
+        );
+    }
+
+    #[test]
+    fn empty_input_returns_empty() {
+        let result = resample_to_16khz(&[], 48000).unwrap();
+        assert!(result.is_empty());
+    }
+}

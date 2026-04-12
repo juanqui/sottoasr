@@ -1,31 +1,21 @@
+pub mod backend;
+
+pub use backend::PasteBackend;
+#[cfg(target_os = "macos")]
+pub use backend::MacOsPasteBackend;
+#[cfg(not(target_os = "macos"))]
+pub use backend::StubPasteBackend;
+
 #[cfg(target_os = "macos")]
 mod macos;
 
 #[cfg(target_os = "macos")]
 pub use macos::{
-    paste_text,
-    paste_text_and_restore,
     copy_to_clipboard,
     is_accessibility_trusted,
     test_accessibility_functional,
     warmup_cgevent_pipeline,
-    get_frontmost_pid,
 };
-
-#[cfg(not(target_os = "macos"))]
-pub fn paste_text(_text: &str, _target_pid: i32) -> Result<(), String> {
-    Err("Paste not supported on this platform yet".into())
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn paste_text_and_restore(_text: &str, _target_pid: i32) -> Result<(), String> {
-    Err("Paste not supported on this platform yet".into())
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn get_frontmost_pid() -> i32 {
-    0
-}
 
 #[cfg(not(target_os = "macos"))]
 pub fn copy_to_clipboard(_text: &str) -> Result<(), String> {

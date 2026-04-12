@@ -2,6 +2,38 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.0] — 2026-04-12
+
+Recording duration extended to 20 minutes, LLM cleanup reliability overhaul with status badges, multi-monitor overlay positioning fix, and a comprehensive automated test suite.
+
+### Added
+
+- **20-minute recordings** — Maximum recording duration raised from 12 to 20 minutes for longer dictations. The countdown warning now appears at 19 min instead of 11 min, and the audio buffer cap was raised accordingly.
+- **LLM cleanup status badges** — The overlay shows a brief outcome badge after cleanup completes (e.g. "Cleaned", "Cleanup timed out", "Cleanup unavailable"). History entries that fell back to the raw transcript now show a warning badge with a tooltip explaining why.
+- **Native overlay drag on NSPanel** — The recording pill is now draggable on macOS via a native NSPanel drag. The previous CSS-based `-webkit-app-region: drag` heuristic did not fire on the overlay's panel configuration; a mousedown on the pill background now invokes a native `overlay_start_drag` command.
+
+### Changed
+
+- **LLM cleanup outer timeout 120s → 300s** — The outer timeout for the cleanup sidecar was raised to handle 15+ min recordings comfortably. The sidecar respawns automatically on hangs and orphaned subprocesses are SIGKILL'd to prevent accumulation.
+- **Cleanup output token budget rewritten** — Max output tokens changed from `max(256, 1.5×input_words)` to `min(16384, max(4096, 2.5×input_words))`, fixing truncated output on long transcripts and allowing proper paragraph formatting.
+- **Detailed LLM cleanup outcome tracking** — Each transcription now carries an `LlmCleanupStatus` (Applied / SkippedTooShort / Disabled / Unavailable / Failed / TimedOut / Idle) instead of just a boolean flag, surfacing exactly why cleanup didn't apply when the user sees the raw transcript in history.
+
+### Fixed
+
+- **Overlay straddling display boundaries on multi-monitor setups** — Saved overlay positions are now discarded when the display arrangement changes, and a valid position is recomputed on each show. Spec: `docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md`.
+- **LLM sidecar zombie processes** — The cleanup engine now detects zombie/orphan sidecar states and SIGKILLs them rather than leaving them running, preventing unified-memory pressure from old processes.
+
+### Infrastructure
+
+- **Full automated test suite** — 78 Rust unit tests, 90 frontend tests via Vitest, plus a pipeline integration harness with mock audio / ASR / LLM / paste backends so the recording flow can be exercised end-to-end without real hardware, models, or accessibility permissions.
+- **Trait-based backend architecture** — Audio capture, ASR, LLM cleanup, and paste operations were refactored to trait objects (`src-tauri/src/test_support.rs`, new `pipeline.rs`, `paste/backend.rs`, `commands/overlay.rs`, `llm/cleanup.rs`), enabling integration tests and a clean split between production and test code paths.
+- **CI assertions script** — `scripts/ci-checks.sh` runs in the release workflow before the build to verify version consistency across all five files, capability completeness, CHANGELOG coverage, hardcoded version strings, and command registration.
+- **Pre-release smoke test script** — `scripts/pre-release-check.sh` runs 10 automated checks plus 5 guided manual checks for developer QA before tagging a release.
+- **Updated build workflow** — `.github/workflows/build-release.yml` now runs Rust tests and frontend type checks before the build step.
+- **Training data augmentation for paragraph formatting** — 4,012 new multi-paragraph samples generated to address a 0.14% gap in the original training set; the benchmark dataset was expanded with 12 hand-crafted multi-paragraph examples plus 25 recovered rows (147 total / 13 categories).
+- **Specs:** `docs/specs/2026-04-04-{ci-assertions,frontend-tests,integration-tests,rust-unit-tests,smoke-tests}.md`, `docs/specs/2026-04-11-{llm-cleanup-reliability,overlay-positioning-multi-monitor-fix}.md`.
+- **Journals:** `docs/journals/2026-04-12-{llm-reliability-fix,retrain-with-paragraphs}.md`.
+
 ## [0.6.3] — 2026-04-04
 
 Fix auto-update modal getting permanently stuck on "Checking for Updates."

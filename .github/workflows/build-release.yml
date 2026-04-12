@@ -46,6 +46,18 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Run CI assertions
+        run: |
+          chmod +x scripts/ci-checks.sh
+          CI_SKIP_CARGO_TEST=1 CI_SKIP_NPM_CHECK=1 scripts/ci-checks.sh
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test --no-default-features --features custom-protocol,llm-cleanup
+
+      - name: Frontend type check
+        run: npm run check
+
       - name: Audit Rust dependencies
         working-directory: src-tauri
         run: |

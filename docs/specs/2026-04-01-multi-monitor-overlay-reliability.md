@@ -2,7 +2,17 @@
 
 - **Version:** 3.0
 - **Date:** 2026-04-01
-- **Status:** Implemented
+- **Status:** Superseded (for persistence)
+
+> **Persistence semantics are superseded by
+> [2026-04-11-overlay-positioning-multi-monitor-fix.md](./2026-04-11-overlay-positioning-multi-monitor-fix.md).**
+> The native-positioning design (NSScreen, CGWindowList,
+> `setFrameOrigin:`) in this spec is still current; the
+> position-memory / `save_panel_position` behavior described here was
+> buggy (persisted auto-computed defaults that became cross-session
+> landmines whenever the display arrangement changed) and has been
+> replaced. See the 2026-04-11 spec for the authoritative design of the
+> save / restore / verify pipeline.
 
 ## Table of Contents
 

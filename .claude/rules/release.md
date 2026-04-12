@@ -8,7 +8,7 @@ SottoASR uses a tag-driven release workflow. Pushing a `v*` tag to `main` trigge
 
 ### 1. Version Bump
 
-Update the version string in all four files:
+Update the version string in all five files:
 
 | File | Field |
 |------|-------|
@@ -52,6 +52,22 @@ Update the version badge in `website/index.html`:
 ```html
 <span class="version-badge">vX.Y.Z</span>
 ```
+
+### 3.5. Run Pre-Release Smoke Tests
+
+Run the automated smoke test suite and fix any failures before committing:
+
+```bash
+./scripts/pre-release-check.sh
+```
+
+For automated checks only (e.g., in a CI-like local run):
+
+```bash
+./scripts/pre-release-check.sh --auto-only
+```
+
+All automated checks must pass before proceeding. Interactive check failures should be investigated but may be deferred if they are environment-specific (e.g., no external microphone available).
 
 ### 4. Commit and Push
 

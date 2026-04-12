@@ -2,6 +2,19 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ---- Types matching Rust models ----
 
+/**
+ * Outcome of the LLM cleanup step for a single transcription.
+ * Matches the Rust `LlmCleanupStatus` enum with `#[serde(tag="kind", content="detail")]`.
+ */
+export type LlmCleanupStatus =
+  | { kind: 'applied'; detail: { elapsed_ms: number } }
+  | { kind: 'skipped_too_short' }
+  | { kind: 'disabled' }
+  | { kind: 'unavailable'; detail: { reason: string } }
+  | { kind: 'failed'; detail: { reason: string } }
+  | { kind: 'timed_out'; detail: { elapsed_ms: number } }
+  | { kind: 'idle' };
+
 export interface Transcription {
   id: string;
   text: string;
@@ -11,6 +24,7 @@ export interface Transcription {
   cancelled?: boolean;
   raw_text?: string;
   llm_applied?: boolean;
+  llm_cleanup_status?: LlmCleanupStatus;
 }
 
 export type AppStateEnum = 'Idle' | 'Recording' | 'Transcribing' | 'CleaningUp' | 'Pasting';
@@ -179,6 +193,7 @@ export interface LlmStatus {
   model_name: string;
   model_path: string | null;
   update_available: boolean;
+  last_cleanup_status: LlmCleanupStatus;
 }
 
 export function getLlmStatus(): Promise<LlmStatus> {

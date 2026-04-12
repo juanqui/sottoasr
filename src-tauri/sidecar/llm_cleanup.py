@@ -85,7 +85,17 @@ def cleanup_chunk(text):
 
     prompt = f"### Input:\n{text}\n\n### Output:\n"
     input_words = len(text.split())
-    max_output_tokens = max(256, int(input_words * 1.5))
+    # Budget formula rationale (see docs/specs/2026-04-11-llm-cleanup-reliability.md §4.2):
+    #   - LFM2.5 tokenizer averages ~1.24 tokens/word on SottoASR cleanup text
+    #   - Cleaned output is typically the same word count as input, so output
+    #     tokens ≈ 1.24 × input_words
+    #   - The 2.5× multiplier gives 100% safety margin for expansions
+    #     (corrections, dictation→punctuation, spelled-out acronyms, etc.)
+    #   - Floor 4096 ensures short inputs never run out of budget
+    #   - Ceiling 16384 prevents runaway generation on broken outputs while
+    #     staying well inside the 32K trained seq_len. At 1.24 tok/word that
+    #     allows up to ~13,200 clean words ≈ 15 min of speech at 150 WPM.
+    max_output_tokens = min(16384, max(4096, int(input_words * 2.5)))
 
     output = generate(
         _model,

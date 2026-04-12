@@ -2,6 +2,7 @@ use tauri::State;
 use crate::state::AppState;
 use crate::models::LlmStatus;
 use crate::llm::{engine, download};
+use crate::llm::engine::LlmBackend;
 
 /// Get the current LLM model status.
 #[tauri::command]
@@ -44,6 +45,8 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
         false
     };
 
+    let last_cleanup_status = state.llm_last_status.lock().await.clone();
+
     Ok(LlmStatus {
         available,
         unavailable_reason,
@@ -53,6 +56,7 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
         model_name: config.display_name.to_string(),
         model_path: None,
         update_available: false, // Use check_llm_update for async update check
+        last_cleanup_status,
     })
 }
 
@@ -93,7 +97,7 @@ pub async fn check_llm_update(state: State<'_, AppState>) -> Result<bool, String
         match engine::LlmEngine::spawn() {
             Ok(mut e) => {
                 let resp = e.request_raw(&serde_json::json!({"action": "check_update"}));
-                e.quit();
+                e.quit(); // Local sidecar — use quit() directly
                 match resp {
                     Ok(v) => Ok(v.get("update_available")
                         .and_then(|u| u.as_bool())
@@ -131,7 +135,7 @@ pub async fn update_llm_model(
     {
         let mut engine_guard = state.llm_engine.lock().await;
         if let Some(mut e) = engine_guard.take() {
-            e.quit();
+            e.shutdown();
         }
     }
 
@@ -152,7 +156,7 @@ pub async fn delete_llm_model(state: State<'_, AppState>) -> Result<(), String> 
     {
         let mut engine_guard = state.llm_engine.lock().await;
         if let Some(mut e) = engine_guard.take() {
-            e.quit();
+            e.shutdown();
         }
     }
 
@@ -169,7 +173,7 @@ pub async fn load_llm_model(state: State<'_, AppState>) -> Result<(), String> {
     }).await.map_err(|e| format!("Load task panicked: {}", e))??;
 
     let mut guard = state.llm_engine.lock().await;
-    *guard = Some(sidecar);
+    *guard = Some(Box::new(sidecar) as Box<dyn LlmBackend>);
     log::info!("LLM sidecar running and model loaded");
     Ok(())
 }
@@ -179,7 +183,7 @@ pub async fn load_llm_model(state: State<'_, AppState>) -> Result<(), String> {
 pub async fn unload_llm_model(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.llm_engine.lock().await;
     if let Some(mut e) = guard.take() {
-        e.quit();
+        e.shutdown();
     }
     log::info!("LLM sidecar shut down");
     Ok(())

@@ -3,8 +3,33 @@ use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Trait for audio capture backends.
+/// Production: wraps cpal. Tests: sends pre-recorded samples.
+pub trait AudioCaptureBackend: Send {
+    /// Start capturing audio.
+    ///
+    /// - `sender`: channel to send PCM chunks (mono f32) to the consumer.
+    /// - `is_recording`: shared flag; the backend should stop sending when false.
+    /// - `level_callback`: called with RMS level (~30 Hz) for waveform UI.
+    fn start(
+        &mut self,
+        sender: Sender<Vec<f32>>,
+        is_recording: Arc<AtomicBool>,
+        level_callback: Box<dyn Fn(f32) + Send + 'static>,
+    ) -> Result<(), String>;
+
+    /// Stop capturing. Must be idempotent (calling stop when not started is a no-op).
+    fn stop(&mut self);
+
+    /// The sample rate of the captured audio. Valid after start() succeeds.
+    /// Returns the rate used by the cpal stream (production) or a fixed value (tests).
+    fn sample_rate(&self) -> u32;
+}
+
 pub struct AudioCapture {
     stream: Option<cpal::Stream>,
+    /// Sample rate discovered during start(). Defaults to 48000.
+    captured_sample_rate: u32,
 }
 
 // SAFETY: AudioCapture is only accessed through Mutex<AudioCapture> in AppState.
@@ -14,10 +39,15 @@ unsafe impl Send for AudioCapture {}
 
 impl AudioCapture {
     pub fn new() -> Self {
-        Self { stream: None }
+        Self {
+            stream: None,
+            captured_sample_rate: 48000,
+        }
     }
+}
 
-    pub fn start(
+impl AudioCaptureBackend for AudioCapture {
+    fn start(
         &mut self,
         sender: Sender<Vec<f32>>,
         is_recording: Arc<AtomicBool>,
@@ -41,6 +71,7 @@ impl AudioCapture {
 
         let channels = config.channels() as usize;
         let sample_rate = config.sample_rate().0;
+        self.captured_sample_rate = sample_rate;
         let sender_clone = sender.clone();
         let is_recording_clone = is_recording.clone();
 
@@ -110,18 +141,61 @@ impl AudioCapture {
         Ok(())
     }
 
-    pub fn stop(&mut self) {
+    fn stop(&mut self) {
         if let Some(stream) = self.stream.take() {
             drop(stream);
             log::info!("Audio capture stopped");
         }
     }
+
+    fn sample_rate(&self) -> u32 {
+        self.captured_sample_rate
+    }
 }
 
-fn calculate_rms(samples: &[f32]) -> f32 {
+pub(crate) fn calculate_rms(samples: &[f32]) -> f32 {
     if samples.is_empty() {
         return 0.0;
     }
     let sum: f32 = samples.iter().map(|s| s * s).sum();
     (sum / samples.len() as f32).sqrt().min(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rms_empty_returns_zero() {
+        assert_eq!(calculate_rms(&[]), 0.0);
+    }
+
+    #[test]
+    fn rms_all_zeros_returns_zero() {
+        assert_eq!(calculate_rms(&[0.0, 0.0, 0.0, 0.0]), 0.0);
+    }
+
+    #[test]
+    fn rms_known_value() {
+        let rms = calculate_rms(&[1.0, -1.0, 1.0, -1.0]);
+        assert!((rms - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rms_known_value_half() {
+        let rms = calculate_rms(&[0.5, -0.5]);
+        assert!((rms - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rms_single_sample() {
+        let rms = calculate_rms(&[0.3]);
+        assert!((rms - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rms_clamps_to_one() {
+        let rms = calculate_rms(&[5.0, 5.0, 5.0]);
+        assert_eq!(rms, 1.0);
+    }
 }

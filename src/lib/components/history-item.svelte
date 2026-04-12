@@ -16,7 +16,7 @@
 
   let expanded: boolean = $state(false);
   let copyFeedback: boolean = $state(false);
-  let viewMode: ViewMode = $state('cleaned');
+  let viewMode = $state<ViewMode>('cleaned');
 
   let relativeTime = $derived(formatRelativeTime(item.created_at));
   let durationText = $derived(formatDuration(item.duration_ms));
@@ -33,6 +33,30 @@
   });
 
   let hasLlm = $derived(item.llm_applied && !!item.raw_text);
+
+  // Cleanup-status hint for non-Applied outcomes. We only show a small icon
+  // for failure modes (Failed/Unavailable/TimedOut) — not for Applied (the
+  // existing "AI Cleaned" badge already conveys success), not for Disabled
+  // or Idle (no cleanup was attempted), and not for SkippedTooShort (the
+  // skip is intentional and not interesting in retrospect).
+  type StatusHint = { tooltip: string; emoji: string };
+  let cleanupHint = $derived.by<StatusHint | null>(() => {
+    const status = item.llm_cleanup_status;
+    if (!status) return null;
+    switch (status.kind) {
+      case 'unavailable':
+        return { tooltip: `Cleanup unavailable: ${status.detail.reason}`, emoji: '⚠' };
+      case 'failed':
+        return { tooltip: `Cleanup failed: ${status.detail.reason}`, emoji: '⚠' };
+      case 'timed_out':
+        return {
+          tooltip: `Cleanup timed out after ${(status.detail.elapsed_ms / 1000).toFixed(1)}s`,
+          emoji: '⏱',
+        };
+      default:
+        return null;
+    }
+  });
 
   let copyTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -79,6 +103,11 @@
       <span class="cancelled-badge">Cancelled</span>
     {:else if hasLlm}
       <span class="llm-badge">AI Cleaned</span>
+    {:else if cleanupHint}
+      <span class="cleanup-fail-badge" title={cleanupHint.tooltip}>
+        <span class="cleanup-fail-icon">{cleanupHint.emoji}</span>
+        Raw transcript
+      </span>
     {/if}
 
     {#if !item.text && item.cancelled}
@@ -204,6 +233,26 @@
     letter-spacing: 0.4px;
     text-transform: uppercase;
     margin-bottom: 6px;
+  }
+
+  .cleanup-fail-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(251, 191, 36, 0.13);
+    color: rgb(252, 211, 77);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    cursor: help;
+  }
+
+  .cleanup-fail-icon {
+    font-size: 11px;
   }
 
   .text-preview {

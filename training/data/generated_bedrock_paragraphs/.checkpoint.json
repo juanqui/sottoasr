@@ -1,0 +1,23 @@
+{
+  "total_valid": 4012,
+  "total_generated": 5920,
+  "total_rejected": 1908,
+  "total_duplicate": 0,
+  "batch_counter": 6023,
+  "category_counts": {
+    "paragraph_formatting": 4012
+  },
+  "domain_counts": {
+    "casual_conversational": 529,
+    "software_engineering": 1012,
+    "academic_research": 209,
+    "medical_health": 426,
+    "general_business": 823,
+    "finance": 272,
+    "legal_compliance": 339,
+    "technical_other": 193,
+    "creative_content": 209
+  },
+  "target": 4000,
+  "timestamp": 1775971532.5519848
+}

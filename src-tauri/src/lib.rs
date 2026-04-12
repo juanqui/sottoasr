@@ -10,6 +10,9 @@ mod paste;
 mod hotkeys;
 mod tray;
 mod updater;
+pub mod pipeline;
+#[cfg(test)]
+mod test_support;
 
 use state::AppState;
 use tauri::Manager;
@@ -87,6 +90,8 @@ pub fn run() {
             updater::check_app_update,
             updater::perform_app_update,
             updater::get_update_status,
+            // Overlay drag
+            commands::overlay::overlay_start_drag,
         ])
         .setup(|app| {
             // Register the updater plugin (must use Builder pattern inside setup)
@@ -200,7 +205,7 @@ pub fn run() {
                         {
                             Ok(Ok(engine)) => {
                                 let mut guard = state.llm_engine.lock().await;
-                                *guard = Some(engine);
+                                *guard = Some(Box::new(engine) as Box<dyn llm::engine::LlmBackend>);
                                 log::info!("LLM sidecar pre-loaded and ready");
                             }
                             Ok(Err(e)) => {
