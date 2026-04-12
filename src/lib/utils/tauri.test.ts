@@ -338,10 +338,10 @@ describe('LLM commands', () => {
 // ---------------------------------------------------------------------------
 describe('Updater commands', () => {
   it('checkAppUpdate invokes check_app_update', async () => {
-    mockInvoke.mockResolvedValueOnce('0.7.0');
+    mockInvoke.mockResolvedValueOnce('99.99.99');
     const result = await checkAppUpdate();
     expect(mockInvoke).toHaveBeenCalledWith('check_app_update');
-    expect(result).toBe('0.7.0');
+    expect(result).toBe('99.99.99');
   });
 
   it('checkAppUpdate returns null when no update available', async () => {
@@ -352,10 +352,10 @@ describe('Updater commands', () => {
   });
 
   it('performAppUpdate invokes perform_app_update', async () => {
-    mockInvoke.mockResolvedValueOnce('Updated to 0.7.0');
+    mockInvoke.mockResolvedValueOnce('Updated to 99.99.99');
     const result = await performAppUpdate();
     expect(mockInvoke).toHaveBeenCalledWith('perform_app_update');
-    expect(result).toBe('Updated to 0.7.0');
+    expect(result).toBe('Updated to 99.99.99');
   });
 
   it('getUpdateStatus invokes get_update_status', async () => {
