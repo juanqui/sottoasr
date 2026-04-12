@@ -51,6 +51,11 @@ jobs:
           chmod +x scripts/ci-checks.sh
           CI_SKIP_CARGO_TEST=1 CI_SKIP_NPM_CHECK=1 scripts/ci-checks.sh
 
+      - name: Build frontend
+        # Required before cargo test: tauri::generate_context!() validates that
+        # frontendDist (../dist) exists at compile time, even for the lib build.
+        run: npm run build
+
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test --no-default-features --features custom-protocol,llm-cleanup
