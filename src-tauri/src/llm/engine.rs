@@ -310,8 +310,27 @@ pub fn is_venv_ready() -> bool {
         return false;
     }
 
+    // Version check script: fails (exit 1) if mlx_lm is missing, unimportable,
+    // or its version is below MIN_MLX_LM (which matches the constant in
+    // `sidecar/llm_cleanup.py` — kept in sync manually). Pre-0.28.1 releases
+    // silently drop the `model_config=` kwarg in `load()`, which disables the
+    // rope_theta compatibility shim and makes LFM2 loading fail on any venv
+    // where `config.json` uses the transformers>=5.0 `rope_parameters` style.
+    const MIN_MLX_LM: &str = "0.28.1";
+    let check_script = format!(
+        "import mlx_lm, huggingface_hub, sys\n\
+         got = getattr(mlx_lm, '__version__', '0.0.0')\n\
+         got_t = tuple(int(x) for x in got.split('.')[:3] if x.isdigit())\n\
+         while len(got_t) < 3: got_t = got_t + (0,)\n\
+         need = tuple(int(x) for x in '{}'.split('.'))\n\
+         if got_t < need:\n\
+             sys.stderr.write(f'mlx-lm {{got}} < {}\\n')\n\
+             sys.exit(2)\n",
+        MIN_MLX_LM, MIN_MLX_LM
+    );
+
     let ok = Command::new(&python)
-        .args(["-c", "import mlx_lm; import huggingface_hub"])
+        .args(["-c", &check_script])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .output()
@@ -319,7 +338,7 @@ pub fn is_venv_ready() -> bool {
             if !out.status.success() {
                 let stderr = String::from_utf8_lossy(&out.stderr);
                 log::warn!(
-                    "Venv check: `import mlx_lm` failed ({}): {}",
+                    "Venv check: failed ({}): {}",
                     out.status,
                     stderr.trim()
                 );
@@ -368,17 +387,106 @@ pub fn is_model_downloaded() -> bool {
     false
 }
 
+/// Locate a Python 3.11+ interpreter on the host, preferring newer versions.
+///
+/// On macOS the default `python3` often resolves to Python 3.9 (shipped with
+/// Xcode Command Line Tools), which cannot install `transformers>=5.0` and
+/// therefore forces pip to pick an mlx-lm version with a broken LFM2
+/// loader. Scanning for an explicit 3.11+ interpreter avoids this trap.
+/// Falls back to `python3` on PATH if nothing newer is found.
+fn find_compatible_python() -> std::path::PathBuf {
+    const SEARCH_DIRS: &[&str] = &[
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/local/bin",
+        "/usr/bin",
+    ];
+    // Newest → oldest so we prefer the freshest interpreter available.
+    const VERSIONS: &[&str] = &["3.14", "3.13", "3.12", "3.11"];
+
+    for version in VERSIONS {
+        let bin_name = format!("python{}", version);
+        for dir in SEARCH_DIRS {
+            let candidate = std::path::PathBuf::from(dir).join(&bin_name);
+            if candidate.exists() && is_python_311_or_newer(&candidate) {
+                log::info!("Using {} for LLM venv", candidate.display());
+                return candidate;
+            }
+        }
+        // Also try PATH-relative lookup.
+        if let Ok(out) = Command::new("which").arg(&bin_name).output() {
+            if out.status.success() {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !path.is_empty() {
+                    let candidate = std::path::PathBuf::from(&path);
+                    if is_python_311_or_newer(&candidate) {
+                        log::info!("Using {} for LLM venv", candidate.display());
+                        return candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    log::warn!(
+        "No python3.11+ found on the system — falling back to `python3`. \
+         If it resolves to Python 3.9 (macOS default), pip will install an \
+         older mlx-lm and the sidecar will still work via the rope_theta \
+         compatibility shim in llm_cleanup.py."
+    );
+    std::path::PathBuf::from("python3")
+}
+
+/// Returns true iff the given interpreter reports a version >= 3.11.
+fn is_python_311_or_newer(python: &std::path::Path) -> bool {
+    let Ok(out) = Command::new(python)
+        .args([
+            "-c",
+            "import sys; print(1 if sys.version_info >= (3, 11) else 0)",
+        ])
+        .output()
+    else {
+        return false;
+    };
+    out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == "1"
+}
+
 /// Create the venv and install mlx-lm. This is a blocking operation (~30-60s).
+///
+/// Always wipes any existing venv directory first so the interpreter and
+/// installed packages are deterministically what this function produces.
+/// Without this, calling `setup_venv()` on a pre-existing venv (e.g., after
+/// an update) would leave the old Python interpreter in place even if we now
+/// have a newer one available.
 pub fn setup_venv() -> Result<(), String> {
     let venv = venv_dir()?;
-    log::info!("Creating LLM Python venv at {:?}...", venv);
 
-    let status = Command::new("python3")
+    if venv.exists() {
+        log::info!("Removing existing venv at {:?} for clean rebuild...", venv);
+        std::fs::remove_dir_all(&venv)
+            .map_err(|e| format!("Failed to remove existing venv: {}", e))?;
+    }
+    if let Some(parent) = venv.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create venv parent dir: {}", e))?;
+    }
+
+    let host_python = find_compatible_python();
+    log::info!(
+        "Creating LLM Python venv at {:?} using {}...",
+        venv,
+        host_python.display()
+    );
+
+    let status = Command::new(&host_python)
         .args(["-m", "venv", &venv.to_string_lossy()])
         .status()
         .map_err(|e| format!("Failed to create venv: {}", e))?;
     if !status.success() {
-        return Err("python3 -m venv failed".into());
+        return Err(format!(
+            "`{} -m venv` failed — is a working Python 3.11+ installed?",
+            host_python.display()
+        ));
     }
 
     let python = venv.join("bin").join("python3");
@@ -388,9 +496,21 @@ pub fn setup_venv() -> Result<(), String> {
         .args(["-m", "pip", "install", "--upgrade", "pip"])
         .output();
 
-    log::info!("Installing mlx-lm and huggingface_hub into venv...");
+    // Pin mlx-lm>=0.28.1: older releases (0.27.x, 0.28.0) silently drop the
+    // `model_config=` kwarg in `load()`, which disables the rope_theta shim
+    // in llm_cleanup.py. 0.28.1 was the first release that correctly forwards
+    // `model_config=` to `load_model()`. No upper bound so future bug fixes
+    // and models are picked up automatically.
+    log::info!("Installing mlx-lm>=0.28.1 and huggingface_hub into venv...");
     let output = Command::new(&python)
-        .args(["-m", "pip", "install", "--upgrade", "mlx-lm", "huggingface_hub"])
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "mlx-lm>=0.28.1",
+            "huggingface_hub",
+        ])
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
     if !output.status.success() {

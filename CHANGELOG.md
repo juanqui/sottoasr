@@ -2,6 +2,21 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.2] — 2026-04-12
+
+Fix LLM transcript cleanup crashing at model load with `TypeError: __init__() missing 1 required positional argument: 'rope_theta'` on machines whose Python venv was built against Python 3.9.
+
+### Fixed
+
+- **LFM2 `rope_theta` load crash on Python 3.9 venvs** — The model's `config.json` was produced by `transformers>=5.0`, which stores RoPE parameters as `rope_parameters: {rope_theta, rope_type}` instead of a top-level `rope_theta`. Older mlx-lm releases — the ones pip installs when the venv is built against Python 3.9 because `transformers>=5.0` requires Python 3.10+ — have an `lfm2.ModelArgs` dataclass where `rope_theta` is a *required* top-level field with no default, so `cls(**config)` crashes. The sidecar now reads `config.json` before calling `mlx_lm.load()` and, when the top-level `rope_theta` is missing, mirrors `rope_parameters.rope_theta` to the top level via `load(model_config=...)`. Validated end-to-end against mlx-lm 0.28.1, 0.28.4, 0.29.1, 0.30.0, 0.31.1, and 0.31.2 (35/35 cleanup cases passing).
+- **Broken-venv detection** — `is_venv_ready()` now also checks that `mlx_lm.__version__ >= 0.28.1`. Releases 0.27.x and 0.28.0 silently drop the `model_config=` kwarg in `load()` (fixed upstream in 0.28.1), so the rope_theta shim would be ignored. Venvs that fail this check are rebuilt on next spawn with the newest available Python. The sidecar also fail-fasts with an actionable error if it detects an unsupported mlx-lm.
+
+### Changed
+
+- **Prefer Python 3.11+ when creating the LLM venv** — `setup_venv()` now scans `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, `/usr/bin`, and PATH for `python3.14`/`3.13`/`3.12`/`3.11`, preferring the newest available interpreter over the `python3` default (which is 3.9 on stock macOS). Falls back to `python3` with a warning if no newer interpreter is found.
+- **Pin `mlx-lm>=0.28.1`** in venv setup, preventing pip from picking 0.27.x / 0.28.0 where the `model_config=` shim is silently dropped.
+- **Clean rebuild on `setup_venv()`** — Existing venv directories are now fully removed before recreation so the interpreter and installed packages are deterministically what `setup_venv()` produces, rather than silently reusing a stale Python interpreter.
+
 ## [0.7.1] — 2026-04-12
 
 Fix LLM transcript cleanup silently failing on machines where the Python venv or model cache is broken.

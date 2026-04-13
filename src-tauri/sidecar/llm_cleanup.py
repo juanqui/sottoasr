@@ -39,6 +39,71 @@ def _format_exception(e):
     return f"{type(e).__name__}: {e}\n{tb}"
 
 
+def _mlx_lm_version_tuple():
+    """Return installed mlx-lm version as a (major, minor, patch) tuple, or
+    (0, 0, 0) if the version cannot be determined."""
+    try:
+        import mlx_lm
+        raw = getattr(mlx_lm, "__version__", "0.0.0")
+        parts = [int(p) for p in raw.split(".")[:3] if p.isdigit()]
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts)
+    except Exception:
+        return (0, 0, 0)
+
+
+# Minimum mlx-lm version we support. Below this, two problems surface:
+#   - 0.27.x and 0.28.0 silently drop `model_config=` in `load()`, so our
+#     rope_theta override is ignored and the load still crashes.
+#   - Very old versions predate LFM2 model support entirely.
+# 0.28.1 is the first release that correctly forwards `model_config=` to
+# `load_model()`, verified empirically in the v0.7.2 validation matrix.
+MIN_MLX_LM = (0, 28, 1)
+
+
+def _build_model_config_override():
+    """Compute the mlx_lm.load(model_config=...) override dict for this model.
+
+    The model's config.json was produced with transformers>=5.0, which stores
+    RoPE params as:
+        "rope_parameters": {"rope_theta": 1000000.0, "rope_type": "default"}
+    Older mlx-lm releases (the ones pip picks when the venv is built against
+    Python 3.9, because transformers>=5.0 requires Python>=3.10) have an
+    `lfm2.ModelArgs` dataclass where `rope_theta` is a *required* top-level
+    field with no default. Loading then crashes with:
+        TypeError: __init__() missing 1 required positional argument: 'rope_theta'
+    The fix is to snapshot_download the repo, read config.json ourselves, and
+    mirror `rope_parameters.rope_theta` up to a top-level `rope_theta` key via
+    mlx-lm's `load(model_config=...)` override, which is applied *before*
+    dataclass construction. This is a no-op on newer mlx-lm versions that
+    already default `rope_theta` correctly. See `docs/journals/2026-04-12-llm-reliability-fix.md`
+    and the commit that introduced this helper."""
+    try:
+        from huggingface_hub import snapshot_download
+        import json
+        from pathlib import Path
+
+        path = Path(snapshot_download(MODEL_ID, allow_patterns=["config.json"]))
+        cfg_path = path / "config.json"
+        if not cfg_path.exists():
+            return {}
+        cfg = json.loads(cfg_path.read_text())
+
+        override = {}
+        if "rope_theta" not in cfg:
+            rp = cfg.get("rope_parameters")
+            if isinstance(rp, dict) and rp.get("rope_theta") is not None:
+                override["rope_theta"] = float(rp["rope_theta"])
+                log(f"Injecting rope_theta={override['rope_theta']} "
+                    f"extracted from rope_parameters (config.json top-level "
+                    f"has no rope_theta; older mlx-lm builds require it)")
+        return override
+    except Exception as e:
+        log(f"_build_model_config_override failed (continuing without override): {e}")
+        return {}
+
+
 def load_model():
     """Load and warm up the model. Returns (True, None) on success or
     (False, error_string) on failure. The error string includes the exception
@@ -50,8 +115,25 @@ def load_model():
     try:
         import gc
         import mlx.core as mx
+        import mlx_lm
         from mlx_lm import load, generate
         from mlx_lm.sample_utils import make_sampler
+
+        installed = _mlx_lm_version_tuple()
+        if installed < MIN_MLX_LM:
+            min_str = ".".join(str(x) for x in MIN_MLX_LM)
+            got_str = getattr(mlx_lm, "__version__", "unknown")
+            err = (
+                f"mlx-lm {got_str} is too old for SottoASR — need >={min_str}. "
+                f"This usually means the app's Python venv was built against "
+                f"Python 3.9 (macOS Command Line Tools default) and pip could "
+                f"not install a newer mlx-lm because transformers>=5.0 requires "
+                f"Python 3.10+. Fix: install Python 3.11+ (e.g., "
+                f"`brew install python@3.11`) and re-download the LLM from "
+                f"SottoASR settings to rebuild the venv."
+            )
+            log(err)
+            return False, err
 
         # Cap Metal memory to prevent system hang on machines with limited RAM.
         # Without limits, MLX reserves up to 75% of system RAM as wired
@@ -61,8 +143,15 @@ def load_model():
         mx.set_cache_limit(128 * 1024 * 1024)      # 128MB Metal buffer cache
         log("MLX memory limits set: 1GB memory, 128MB cache")
 
+        # Build the model_config override BEFORE calling load(). The override
+        # injects `rope_theta` for older mlx-lm builds (see helper docstring).
+        model_config_override = _build_model_config_override()
+
         log(f"Loading {MODEL_ID}...")
-        _model, _tokenizer = load(MODEL_ID)
+        if model_config_override:
+            _model, _tokenizer = load(MODEL_ID, model_config=model_config_override)
+        else:
+            _model, _tokenizer = load(MODEL_ID)
         _sampler = make_sampler(temp=0.0)  # Greedy — deterministic output
         log("Model loaded, running warmup inference...")
         # Warmup: trigger MLX lazy graph compilation so first real request is fast
