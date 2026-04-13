@@ -2,6 +2,17 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.1] — 2026-04-12
+
+Fix LLM transcript cleanup silently failing on machines where the Python venv or model cache is broken.
+
+### Fixed
+
+- **"Failed to load model" with no detail** — The Python sidecar's real exception (ImportError, missing weights, MLX crash, etc.) was being swallowed and replaced with a generic error string, and its stderr was routed to `/dev/null` for windowed app launches. The exception, type, and traceback now flow through the JSON protocol, and sidecar stderr is streamed line-by-line into `SottoASR.log` under the `[llm-sidecar]` tag.
+- **Stale or broken venv not detected** — `is_venv_ready()` used to only check that `bin/python3` existed as a file. It now actually exec's the venv Python with `import mlx_lm; import huggingface_hub` and caches the result, so a venv whose underlying system Python was upgraded or removed is correctly reported as broken.
+- **Incomplete model downloads treated as ready** — `is_model_downloaded()` used to accept the mere existence of the `snapshots/` directory, which is true even after an interrupted download with zero weight files. It now requires at least one `.safetensors` file under `snapshots/*/`.
+- **Model deletion pointed at the wrong cache path** — `delete_model()` was looking under `~/Library/Caches/huggingface/hub/` (what `dirs::cache_dir()` returns on macOS) while HuggingFace actually writes to `~/.cache/huggingface/hub/`, so uninstalling the model did nothing. Fixed to match.
+
 ## [0.7.0] — 2026-04-12
 
 Recording duration extended to 20 minutes, LLM cleanup reliability overhaul with status badges, multi-monitor overlay positioning fix, and a comprehensive automated test suite.

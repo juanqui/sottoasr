@@ -70,16 +70,26 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
 }
 
 /// Delete downloaded model files from the HuggingFace cache.
+///
+/// HuggingFace's default cache lives at `~/.cache/huggingface/hub/` — NOT at
+/// `~/Library/Caches/huggingface/hub/` which is what `dirs::cache_dir()`
+/// resolves to on macOS. The old implementation deleted the wrong path (or
+/// nothing at all), leaving orphaned weights on disk.
 pub fn delete_model() -> Result<(), String> {
     let model_id = engine::model_config().id;
-    if let Some(cache_dir) = dirs::cache_dir() {
-        let cache_name = model_id.replace('/', "--");
-        let hf_cache = cache_dir.join("huggingface").join("hub").join(format!("models--{}", cache_name));
-        if hf_cache.exists() {
-            std::fs::remove_dir_all(&hf_cache)
-                .map_err(|e| format!("Failed to delete model cache: {}", e))?;
-            log::info!("Deleted model cache at {:?}", hf_cache);
-        }
+    let Some(home) = dirs::home_dir() else {
+        return Err("Could not determine home directory".into());
+    };
+    let cache_name = model_id.replace('/', "--");
+    let hf_cache = home
+        .join(".cache")
+        .join("huggingface")
+        .join("hub")
+        .join(format!("models--{}", cache_name));
+    if hf_cache.exists() {
+        std::fs::remove_dir_all(&hf_cache)
+            .map_err(|e| format!("Failed to delete model cache: {}", e))?;
+        log::info!("Deleted model cache at {:?}", hf_cache);
     }
     Ok(())
 }

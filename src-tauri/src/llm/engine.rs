@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI8, AtomicU64, Ordering};
+use std::thread;
 use std::time::Duration;
 
 use crate::state::AppState;
@@ -62,7 +63,7 @@ impl LlmEngine {
             .arg(&sidecar_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit()) // sidecar logs go to app stderr
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Failed to spawn LLM sidecar: {}", e))?;
 
@@ -71,6 +72,28 @@ impl LlmEngine {
             .ok_or("Failed to open sidecar stdin")?;
         let stdout = child.stdout.take()
             .ok_or("Failed to open sidecar stdout")?;
+        let stderr = child.stderr.take()
+            .ok_or("Failed to open sidecar stderr")?;
+
+        // Forward sidecar stderr line-by-line into the Rust log so Python
+        // exceptions and `[llm_cleanup]` log lines land in SottoASR.log. The
+        // reader thread exits when the child closes stderr (which happens on
+        // process exit).
+        thread::Builder::new()
+            .name(format!("llm-sidecar-stderr-{}", pid))
+            .spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(l) if !l.is_empty() => {
+                            log::warn!("[llm-sidecar] {}", l);
+                        }
+                        Ok(_) => {}
+                        Err(_) => break,
+                    }
+                }
+            })
+            .map_err(|e| format!("Failed to spawn sidecar stderr reader: {}", e))?;
 
         Ok(Self {
             child,
@@ -249,21 +272,100 @@ pub fn venv_python() -> Result<std::path::PathBuf, String> {
     Ok(venv_dir()?.join("bin").join("python3"))
 }
 
-/// Check if the app's venv exists and has mlx-lm installed.
-pub fn is_venv_ready() -> bool {
-    venv_python()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+/// Cached result of `is_venv_ready()`:
+/// `0` = not yet checked, `1` = ready, `-1` = broken.
+/// Reset to `0` in `setup_venv()` and `reset_venv_cache()` so a repair can be detected.
+static VENV_READY_CACHE: AtomicI8 = AtomicI8::new(0);
+
+/// Invalidate the cached venv readiness result. Call after any operation that
+/// repairs or recreates the venv.
+pub fn reset_venv_cache() {
+    VENV_READY_CACHE.store(0, Ordering::SeqCst);
 }
 
-/// Check if the model weights are available in the HuggingFace cache.
+/// Check if the app's venv exists AND has a working `mlx_lm` install.
+///
+/// The cheap existence check (`bin/python3` file present) used to be the only
+/// probe, but that masked a common failure mode: the venv's `python3` is a
+/// symlink to a system Python that has since been upgraded or removed, which
+/// makes mlx_lm imports blow up at runtime. Here we actually exec the venv's
+/// Python with `import mlx_lm` and cache the result so we don't re-pay the
+/// ~500ms import cost on every call.
+pub fn is_venv_ready() -> bool {
+    match VENV_READY_CACHE.load(Ordering::SeqCst) {
+        1 => return true,
+        -1 => return false,
+        _ => {}
+    }
+
+    let python = match venv_python() {
+        Ok(p) => p,
+        Err(_) => {
+            VENV_READY_CACHE.store(-1, Ordering::SeqCst);
+            return false;
+        }
+    };
+    if !python.exists() {
+        VENV_READY_CACHE.store(-1, Ordering::SeqCst);
+        return false;
+    }
+
+    let ok = Command::new(&python)
+        .args(["-c", "import mlx_lm; import huggingface_hub"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map(|out| {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                log::warn!(
+                    "Venv check: `import mlx_lm` failed ({}): {}",
+                    out.status,
+                    stderr.trim()
+                );
+            }
+            out.status.success()
+        })
+        .unwrap_or_else(|e| {
+            log::warn!("Venv check: could not exec {}: {}", python.display(), e);
+            false
+        });
+
+    VENV_READY_CACHE.store(if ok { 1 } else { -1 }, Ordering::SeqCst);
+    ok
+}
+
+/// Check if the model weights are actually present in the HuggingFace cache.
+///
+/// The old check only asserted that `snapshots/` was a directory, which is
+/// true even after an interrupted `snapshot_download` that left zero weight
+/// files behind. We now require at least one `.safetensors` file somewhere
+/// under `snapshots/*` before declaring the model downloaded.
 pub fn is_model_downloaded() -> bool {
     let cache_dir = match dirs::home_dir() {
         Some(h) => h.join(".cache/huggingface/hub"),
         None => return false,
     };
     let cache_name = format!("models--{}", SOTTO_MODEL.id.replace('/', "--"));
-    cache_dir.join(cache_name).join("snapshots").is_dir()
+    let snapshots = cache_dir.join(cache_name).join("snapshots");
+    let Ok(entries) = std::fs::read_dir(&snapshots) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Ok(files) = std::fs::read_dir(&path) else {
+            continue;
+        };
+        for f in files.flatten() {
+            if f.path().extension().and_then(|e| e.to_str()) == Some("safetensors") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Create the venv and install mlx-lm. This is a blocking operation (~30-60s).
@@ -296,6 +398,7 @@ pub fn setup_venv() -> Result<(), String> {
         return Err(format!("pip install failed: {}", stderr));
     }
 
+    reset_venv_cache();
     log::info!("LLM venv setup complete");
     Ok(())
 }

@@ -19,6 +19,7 @@ Response format:
 import json
 import sys
 import time
+import traceback
 
 MODEL_ID = "juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit"
 
@@ -32,10 +33,19 @@ def log(msg):
     print(f"[llm_cleanup] {msg}", file=sys.stderr, flush=True)
 
 
+def _format_exception(e):
+    """Return exception type, message, and single-line traceback for protocol."""
+    tb = traceback.format_exc()
+    return f"{type(e).__name__}: {e}\n{tb}"
+
+
 def load_model():
+    """Load and warm up the model. Returns (True, None) on success or
+    (False, error_string) on failure. The error string includes the exception
+    type, message, and full traceback so callers see real diagnostics."""
     global _model, _tokenizer, _sampler
     if _model is not None:
-        return True
+        return True, None
 
     try:
         import gc
@@ -68,10 +78,11 @@ def load_model():
         mx.clear_cache()
         gc.collect()
         log("Model loaded and warmed up successfully")
-        return True
+        return True, None
     except Exception as e:
-        log(f"Failed to load model: {e}")
-        return False
+        err = _format_exception(e)
+        log(f"Failed to load model: {err}")
+        return False, err
 
 
 def cleanup_chunk(text):
@@ -222,11 +233,11 @@ def handle_request(req):
             respond({"ok": False, "error": error})
 
     elif action == "load":
-        success = load_model()
+        success, err = load_model()
         if success:
             respond({"ok": True})
         else:
-            respond({"ok": False, "error": "Failed to load model"})
+            respond({"ok": False, "error": err or "Failed to load model"})
 
     elif action == "cleanup":
         text = req.get("text", "")
@@ -242,11 +253,19 @@ def handle_request(req):
 
         # Lazy-load model if not already loaded (Rust already verified download)
         if _model is None:
-            if not load_model():
-                respond({"ok": False, "error": "Failed to load model"})
+            success, err = load_model()
+            if not success:
+                respond({"ok": False, "error": err or "Failed to load model"})
                 return
 
-        result = cleanup_text(text)
+        try:
+            result = cleanup_text(text)
+        except Exception as e:
+            err = _format_exception(e)
+            log(f"cleanup_text raised: {err}")
+            respond({"ok": False, "error": err})
+            return
+
         if result[1] is not None:  # error
             respond({"ok": False, "error": result[1]})
         else:
