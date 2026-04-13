@@ -2,6 +2,18 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.3] — 2026-04-12
+
+Fix a v0.7.2 regression where the venv readiness check always failed with `IndentationError` and caused every LLM interaction to wipe and rebuild the Python venv from scratch.
+
+### Fixed
+
+- **`IndentationError` in `is_venv_ready()`** — The v0.7.2 venv check script was built with a Rust `format!("...\n\ ...\n\ ...")` multi-line string using `\` line continuations. Rust's `\` continuation eats all leading whitespace on the next line, which collapsed the Python indentation inside an `if:` block and produced `IndentationError: expected an indented block after 'if' statement on line 6` on every invocation. Consequences: (1) `is_venv_ready()` always returned false, (2) every call to `spawn()` triggered `setup_venv()` which wiped and recreated the venv (~30-60s), (3) the user observed the model "being re-downloaded" after updating (actually just the venv being rebuilt — the HF cache was preserved), (4) LLM cleanup was stuck in a loop. The check script is now a single-line Python statement (semicolon-separated, no indented blocks) with both compile-time and runtime regression tests.
+
+### Infrastructure
+
+- **Regression tests for the venv check script** — Added `venv_check_script_is_single_line` (asserts no newlines in the generated script) and `venv_check_script_parses_in_python` (runs `python3 -c "…"` against the real script and fails on any `SyntaxError` or `IndentationError`). 80/80 Rust unit tests pass.
+
 ## [0.7.2] — 2026-04-12
 
 Fix LLM transcript cleanup crashing at model load with `TypeError: __init__() missing 1 required positional argument: 'rope_theta'` on machines whose Python venv was built against Python 3.9.

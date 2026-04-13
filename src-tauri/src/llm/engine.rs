@@ -277,6 +277,40 @@ pub fn venv_python() -> Result<std::path::PathBuf, String> {
 /// Reset to `0` in `setup_venv()` and `reset_venv_cache()` so a repair can be detected.
 static VENV_READY_CACHE: AtomicI8 = AtomicI8::new(0);
 
+/// Minimum mlx-lm version the sidecar supports. Below this, pre-0.28.1 releases
+/// silently drop the `model_config=` kwarg in `load()`, which disables the
+/// rope_theta compatibility shim in `sidecar/llm_cleanup.py`. Kept in sync with
+/// the `MIN_MLX_LM` constant in the Python sidecar.
+const MIN_MLX_LM: &str = "0.28.1";
+
+/// Build the Python one-liner used by `is_venv_ready()` to verify the venv has
+/// both `mlx_lm` and `huggingface_hub` importable and a new-enough mlx-lm.
+///
+/// **CRITICAL**: This MUST be a single Python statement (semicolon-separated).
+/// A previous version used a multi-line `format!` string with `\` line
+/// continuations. Rust's `\` continuation eats all leading whitespace on the
+/// next line, which collapsed the Python indentation inside `if ... :` blocks
+/// and produced an IndentationError. That made `is_venv_ready()` always return
+/// false and turned every spawn() call into a full venv wipe-and-rebuild.
+/// See commit message for v0.7.3.
+///
+/// Exit code: 0 iff mlx_lm is importable, huggingface_hub is importable, and
+/// `mlx_lm.__version__ >= MIN_MLX_LM`. Non-zero otherwise. Writes a short
+/// status line to stderr so the Rust log forwarder shows the detected version.
+fn build_venv_check_script() -> String {
+    format!(
+        "import mlx_lm, huggingface_hub, sys; \
+         v = getattr(mlx_lm, '__version__', '0.0.0'); \
+         parts = [int(x) for x in v.split('.')[:3] if x.isdigit()]; \
+         parts += [0] * (3 - len(parts)); \
+         need = [int(x) for x in '{min}'.split('.')]; \
+         ok = parts >= need; \
+         sys.stderr.write('mlx-lm ' + v + (' OK' if ok else ' < {min}')); \
+         sys.exit(0 if ok else 2)",
+        min = MIN_MLX_LM
+    )
+}
+
 /// Invalidate the cached venv readiness result. Call after any operation that
 /// repairs or recreates the venv.
 pub fn reset_venv_cache() {
@@ -310,24 +344,7 @@ pub fn is_venv_ready() -> bool {
         return false;
     }
 
-    // Version check script: fails (exit 1) if mlx_lm is missing, unimportable,
-    // or its version is below MIN_MLX_LM (which matches the constant in
-    // `sidecar/llm_cleanup.py` — kept in sync manually). Pre-0.28.1 releases
-    // silently drop the `model_config=` kwarg in `load()`, which disables the
-    // rope_theta compatibility shim and makes LFM2 loading fail on any venv
-    // where `config.json` uses the transformers>=5.0 `rope_parameters` style.
-    const MIN_MLX_LM: &str = "0.28.1";
-    let check_script = format!(
-        "import mlx_lm, huggingface_hub, sys\n\
-         got = getattr(mlx_lm, '__version__', '0.0.0')\n\
-         got_t = tuple(int(x) for x in got.split('.')[:3] if x.isdigit())\n\
-         while len(got_t) < 3: got_t = got_t + (0,)\n\
-         need = tuple(int(x) for x in '{}'.split('.'))\n\
-         if got_t < need:\n\
-             sys.stderr.write(f'mlx-lm {{got}} < {}\\n')\n\
-             sys.exit(2)\n",
-        MIN_MLX_LM, MIN_MLX_LM
-    );
+    let check_script = build_venv_check_script();
 
     let ok = Command::new(&python)
         .args(["-c", &check_script])
@@ -711,5 +728,70 @@ mod tests {
         assert!(!is_zombie_error("Model not loaded"));
         assert!(!is_zombie_error("Failed to load model: OOM"));
         assert!(!is_zombie_error("Invalid JSON response"));
+    }
+
+    /// Sanity-check that `build_venv_check_script()` is a single-line Python
+    /// statement with no indented blocks. Regression guard for a v0.7.2 bug
+    /// where a multi-line `format!` with `\` continuations collapsed the
+    /// Python indentation inside an `if:` block and produced an
+    /// IndentationError on every invocation.
+    #[test]
+    fn venv_check_script_is_single_line() {
+        let script = build_venv_check_script();
+        assert!(
+            !script.contains('\n'),
+            "venv check script must not contain newlines; got: {:?}",
+            script
+        );
+        assert!(
+            script.contains(MIN_MLX_LM),
+            "venv check script must reference MIN_MLX_LM ({}); got: {:?}",
+            MIN_MLX_LM,
+            script
+        );
+        // Basic shape: starts with import and ends with sys.exit.
+        assert!(script.starts_with("import mlx_lm"));
+        assert!(script.contains("sys.exit"));
+    }
+
+    /// Run `python3 -c "..."` against the real `build_venv_check_script()` to
+    /// prove the generated Python actually parses and executes. We don't care
+    /// whether mlx_lm is importable here — we care about SyntaxError /
+    /// IndentationError, which would surface as exit 1 with parse error on
+    /// stderr. Exit code 1 (ModuleNotFoundError) is an acceptable outcome in
+    /// a minimal Python; exit 2 (version check failed) is also acceptable;
+    /// exit 0 (ok) is acceptable. Any syntax/indent error fails the test.
+    #[test]
+    fn venv_check_script_parses_in_python() {
+        let script = build_venv_check_script();
+        let python = which_python3();
+        let Some(python) = python else {
+            // No system python3 available in the test env — skip silently.
+            eprintln!("(skipping: no python3 on PATH)");
+            return;
+        };
+        let out = Command::new(&python)
+            .args(["-c", &script])
+            .output()
+            .expect("exec python3");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("SyntaxError") && !stderr.contains("IndentationError"),
+            "generated venv check script failed to parse as Python: {}",
+            stderr
+        );
+    }
+
+    fn which_python3() -> Option<std::path::PathBuf> {
+        let out = Command::new("which").arg("python3").output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if path.is_empty() {
+            None
+        } else {
+            Some(std::path::PathBuf::from(path))
+        }
     }
 }
