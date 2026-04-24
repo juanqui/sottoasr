@@ -67,10 +67,15 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo install cargo-audit --quiet
-          # RUSTSEC-2026-0097: rand 0.9.x is unsound with custom loggers using rand::rng().
-          # We don't use custom loggers with rand, so this advisory is not applicable.
-          # The dependency is transitive via tokenizers -> parakeet-rs and out of our control.
-          cargo audit --ignore RUSTSEC-2026-0097
+          # RUSTSEC-2026-0097: rand 0.9.x unsound with custom loggers — not applicable,
+          #   transitive via tokenizers -> parakeet-rs
+          # RUSTSEC-2026-0098/0099/0104: rustls-webpki certificate validation issues —
+          #   transitive via Tauri/Wry, fixed in newer rustls but not yet pulled by Wry
+          cargo audit \
+            --ignore RUSTSEC-2026-0097 \
+            --ignore RUSTSEC-2026-0098 \
+            --ignore RUSTSEC-2026-0099 \
+            --ignore RUSTSEC-2026-0104
 
       - name: Audit npm dependencies
         run: npm audit --omit=dev || true
