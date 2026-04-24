@@ -67,7 +67,10 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo install cargo-audit --quiet
-          cargo audit
+          # RUSTSEC-2026-0097: rand 0.9.x is unsound with custom loggers using rand::rng().
+          # We don't use custom loggers with rand, so this advisory is not applicable.
+          # The dependency is transitive via tokenizers -> parakeet-rs and out of our control.
+          cargo audit --ignore RUSTSEC-2026-0097
 
       - name: Audit npm dependencies
         run: npm audit --omit=dev || true
