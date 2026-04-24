@@ -284,7 +284,8 @@ static VENV_READY_CACHE: AtomicI8 = AtomicI8::new(0);
 const MIN_MLX_LM: &str = "0.28.1";
 
 /// Build the Python one-liner used by `is_venv_ready()` to verify the venv has
-/// both `mlx_lm` and `huggingface_hub` importable and a new-enough mlx-lm.
+/// both `mlx_lm` and `huggingface_hub` importable, a new-enough mlx-lm, and
+/// a supported Python version (3.11+).
 ///
 /// **CRITICAL**: This MUST be a single Python statement (semicolon-separated).
 /// A previous version used a multi-line `format!` string with `\` line
@@ -294,18 +295,28 @@ const MIN_MLX_LM: &str = "0.28.1";
 /// false and turned every spawn() call into a full venv wipe-and-rebuild.
 /// See commit message for v0.7.3.
 ///
-/// Exit code: 0 iff mlx_lm is importable, huggingface_hub is importable, and
-/// `mlx_lm.__version__ >= MIN_MLX_LM`. Non-zero otherwise. Writes a short
-/// status line to stderr so the Rust log forwarder shows the detected version.
+/// Exit code: 0 iff Python >= 3.11, mlx_lm is importable, huggingface_hub is
+/// importable, and `mlx_lm.__version__ >= MIN_MLX_LM`. Exit 1 for old Python,
+/// exit 2 for old mlx-lm. Writes a short status line to stderr so the Rust
+/// log forwarder shows the detected versions.
 fn build_venv_check_script() -> String {
+    // Use conditional expressions (ternary) instead of compound `if:` statements,
+    // because Python doesn't allow compound statements after semicolons on a
+    // single line. `sys.exit(1) if cond else None` is valid: when cond is true,
+    // `sys.exit(1)` raises SystemExit and the process ends; when false, `None`
+    // is evaluated and execution continues.
     format!(
-        "import mlx_lm, huggingface_hub, sys; \
+        "import sys; \
+         pv = sys.version_info[:2]; \
+         sys.stderr.write('Python ' + '.'.join(str(x) for x in pv) + ' < 3.11\\n') if pv < (3, 11) else None; \
+         sys.exit(1) if pv < (3, 11) else None; \
+         import mlx_lm, huggingface_hub; \
          v = getattr(mlx_lm, '__version__', '0.0.0'); \
          parts = [int(x) for x in v.split('.')[:3] if x.isdigit()]; \
          parts += [0] * (3 - len(parts)); \
          need = [int(x) for x in '{min}'.split('.')]; \
          ok = parts >= need; \
-         sys.stderr.write('mlx-lm ' + v + (' OK' if ok else ' < {min}')); \
+         sys.stderr.write('Python ' + '.'.join(str(x) for x in pv) + ', mlx-lm ' + v + (' OK' if ok else ' < {min}')); \
          sys.exit(0 if ok else 2)",
         min = MIN_MLX_LM
     )
@@ -410,8 +421,10 @@ pub fn is_model_downloaded() -> bool {
 /// Xcode Command Line Tools), which cannot install `transformers>=5.0` and
 /// therefore forces pip to pick an mlx-lm version with a broken LFM2
 /// loader. Scanning for an explicit 3.11+ interpreter avoids this trap.
-/// Falls back to `python3` on PATH if nothing newer is found.
-fn find_compatible_python() -> std::path::PathBuf {
+/// Returns an error if no Python 3.11+ interpreter is found — we no longer
+/// fall back to Python 3.9 because transformers v5 models use
+/// `TokenizersBackend`, which doesn't exist in transformers v4.
+fn find_compatible_python() -> Result<std::path::PathBuf, String> {
     const SEARCH_DIRS: &[&str] = &[
         "/opt/homebrew/bin",
         "/usr/local/bin",
@@ -427,7 +440,7 @@ fn find_compatible_python() -> std::path::PathBuf {
             let candidate = std::path::PathBuf::from(dir).join(&bin_name);
             if candidate.exists() && is_python_311_or_newer(&candidate) {
                 log::info!("Using {} for LLM venv", candidate.display());
-                return candidate;
+                return Ok(candidate);
             }
         }
         // Also try PATH-relative lookup.
@@ -438,20 +451,15 @@ fn find_compatible_python() -> std::path::PathBuf {
                     let candidate = std::path::PathBuf::from(&path);
                     if is_python_311_or_newer(&candidate) {
                         log::info!("Using {} for LLM venv", candidate.display());
-                        return candidate;
+                        return Ok(candidate);
                     }
                 }
             }
         }
     }
 
-    log::warn!(
-        "No python3.11+ found on the system — falling back to `python3`. \
-         If it resolves to Python 3.9 (macOS default), pip will install an \
-         older mlx-lm and the sidecar will still work via the rope_theta \
-         compatibility shim in llm_cleanup.py."
-    );
-    std::path::PathBuf::from("python3")
+    Err("Python 3.11+ is required for the LLM feature but not found on this system. \
+         Install it with: brew install python".into())
 }
 
 /// Returns true iff the given interpreter reports a version >= 3.11.
@@ -488,7 +496,7 @@ pub fn setup_venv() -> Result<(), String> {
             .map_err(|e| format!("Failed to create venv parent dir: {}", e))?;
     }
 
-    let host_python = find_compatible_python();
+    let host_python = find_compatible_python()?;
     log::info!(
         "Creating LLM Python venv at {:?} using {}...",
         venv,
@@ -749,8 +757,9 @@ mod tests {
             MIN_MLX_LM,
             script
         );
-        // Basic shape: starts with import and ends with sys.exit.
-        assert!(script.starts_with("import mlx_lm"));
+        // Basic shape: starts with import sys (Python version check) and ends with sys.exit.
+        assert!(script.starts_with("import sys"));
+        assert!(script.contains("import mlx_lm"));
         assert!(script.contains("sys.exit"));
     }
 

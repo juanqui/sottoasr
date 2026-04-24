@@ -98,10 +98,52 @@ def _build_model_config_override():
                 log(f"Injecting rope_theta={override['rope_theta']} "
                     f"extracted from rope_parameters (config.json top-level "
                     f"has no rope_theta; older mlx-lm builds require it)")
+
+        # Note: tokenizer_config.json patching is done in load_model() before
+        # mlx_lm.load(), because snapshot_download with allow_patterns creates
+        # a separate partial snapshot that doesn't contain the full model's
+        # tokenizer_config.json. The patch in load_model() operates on the
+        # actual cached model directory that mlx-lm reads from.
+
         return override
     except Exception as e:
         log(f"_build_model_config_override failed (continuing without override): {e}")
         return {}
+
+
+def _patch_tokenizer_config():
+    """Patch tokenizer_config.json in the HuggingFace cache so transformers v4
+    can load models saved with transformers v5.
+
+    Models fine-tuned with transformers v5 write tokenizer_class='TokenizersBackend'
+    to tokenizer_config.json. The TokenizersBackend class doesn't exist in
+    transformers v4, so AutoTokenizer.from_pretrained() raises:
+        ValueError: Tokenizer class TokenizersBackend does not exist...
+
+    This function reads the current revision from refs/main and only patches
+    that snapshot directory. Patching stale snapshots would update their
+    last_modified timestamps and cause get_local_revision() to return the
+    wrong commit hash."""
+    try:
+        from pathlib import Path
+        home = Path.home()
+        cache_base = home / ".cache" / "huggingface" / "hub"
+        cache_name = "models--" + MODEL_ID.replace("/", "--")
+        cache_dir = cache_base / cache_name
+        refs_main = cache_dir / "refs" / "main"
+        if not refs_main.exists():
+            return
+        current_rev = refs_main.read_text().strip()
+        tc_path = cache_dir / "snapshots" / current_rev / "tokenizer_config.json"
+        if not tc_path.exists():
+            return
+        tc = json.loads(tc_path.read_text())
+        if tc.get("tokenizer_class") == "TokenizersBackend":
+            tc["tokenizer_class"] = "PreTrainedTokenizerFast"
+            tc_path.write_text(json.dumps(tc, indent=2))
+            log("Patched tokenizer_class from TokenizersBackend to PreTrainedTokenizerFast (transformers v4 compat)")
+    except Exception as e:
+        log(f"_patch_tokenizer_config failed (non-fatal): {e}")
 
 
 def load_model():
@@ -146,6 +188,10 @@ def load_model():
         # Build the model_config override BEFORE calling load(). The override
         # injects `rope_theta` for older mlx-lm builds (see helper docstring).
         model_config_override = _build_model_config_override()
+
+        # Patch tokenizer_config.json in the cached model directory so that
+        # transformers v4 can load models saved with transformers v5.
+        _patch_tokenizer_config()
 
         log(f"Loading {MODEL_ID}...")
         if model_config_override:
@@ -213,6 +259,15 @@ def cleanup_chunk(text):
     if "###" in output:
         output = output[:output.index("###")].strip()
 
+    # Small models (350M params) occasionally produce text without proper
+    # spacing after punctuation. Fix common cases: missing space after period
+    # at sentence boundaries (lowercase . Uppercase), and missing space after
+    # comma, semicolon, or colon. This is a safety net, not a replacement for
+    # proper model training.
+    import re
+    output = re.sub(r'([a-z])\.\s*([A-Z])', r'\1. \2', output)
+    output = re.sub(r'([,;:])\s*([A-Za-z])', r'\1 \2', output)
+
     return output
 
 
@@ -228,16 +283,21 @@ def cleanup_text(text):
 
 
 def get_local_revision():
-    """Get the locally cached model revision (commit hash), or None."""
+    """Get the locally cached model revision (commit hash), or None.
+
+    Reads from refs/main in the HuggingFace cache directory. This is more
+    reliable than scanning snapshot directories by last_modified, because
+    our tokenizer patch modifies files in snapshot dirs and can update
+    timestamps on stale revisions, causing the wrong commit hash to be
+    returned."""
     try:
-        from huggingface_hub import scan_cache_dir
-        cache = scan_cache_dir()
-        for repo in cache.repos:
-            if repo.repo_id == MODEL_ID:
-                # Sort by last_modified descending — frozenset has no guaranteed order
-                revisions = sorted(repo.revisions, key=lambda r: r.last_modified, reverse=True)
-                if revisions:
-                    return revisions[0].commit_hash
+        from pathlib import Path
+        home = Path.home()
+        cache_base = home / ".cache" / "huggingface" / "hub"
+        cache_name = "models--" + MODEL_ID.replace("/", "--")
+        refs_main = cache_base / cache_name / "refs" / "main"
+        if refs_main.exists():
+            return refs_main.read_text().strip()
         return None
     except Exception:
         return None

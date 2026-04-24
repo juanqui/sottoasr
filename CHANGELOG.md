@@ -2,7 +2,21 @@
 
 All notable changes to SottoASR are documented in this file.
 
-## [0.7.3] — 2026-04-12
+## [0.7.4] — 2026-04-24
+
+Fix LLM transcript cleanup failing on machines with Python 3.9, fix a loop where the app repeatedly showed "new model available" after downloading, and fix missing spaces after punctuation in cleaned output.
+
+### Fixed
+
+- **LLM cleanup crash on Python 3.9 (`TokenizersBackend` error)** — The model's `tokenizer_config.json` contains `tokenizer_class: "TokenizersBackend"`, a class that only exists in `transformers>=5.0`. On machines where the venv was built against Python 3.9 (macOS default), pip installs `transformers<5` which doesn't know that class, causing `AutoTokenizer.from_pretrained()` to fail with `ValueError: Tokenizer class TokenizersBackend does not exist or is not currently imported.` The sidecar now patches `tokenizer_config.json` in the HuggingFace cache to use `PreTrainedTokenizerFast`, which works with both transformers v4 and v5.
+- **Python 3.9 no longer accepted for LLM venv** — The venv setup now requires Python 3.11+ and returns a clear error with install instructions (`brew install python`) instead of silently falling back to the system Python 3.9. The venv readiness check also verifies Python version, so existing broken venvs are detected and trigger a rebuild.
+- **"New model available" loop after download** — The update check compared the locally cached model's commit hash against the remote, but the local hash was determined by scanning snapshot directories sorted by `last_modified`. The tokenizer patch and partial `config.json` downloads were updating timestamps on stale snapshot directories, causing the wrong commit hash to be returned. `get_local_revision()` now reads from `refs/main` (the authoritative branch pointer), and `_patch_tokenizer_config()` only patches the current revision instead of all snapshots.
+- **Missing space after period in cleaned output** — The 350M cleanup model occasionally produces text without proper spacing after punctuation (e.g., `word.Next` instead of `word. Next`). A post-processing step now fixes sentence-boundary spacing (lowercase `. Uppercase`), and spacing after commas, semicolons, and colons.
+
+### Infrastructure
+
+- **Tokenizer patch targets only current revision** — `_patch_tokenizer_config()` reads `refs/main` to find the active snapshot directory and patches only that one, avoiding timestamp changes on stale revisions.
+- **Local revision read from `refs/main`** — `get_local_revision()` reads the commit hash from the HuggingFace cache's `refs/main` file instead of scanning `scan_cache_dir()` by `last_modified`, making revision comparison reliable.
 
 Fix a v0.7.2 regression where the venv readiness check always failed with `IndentationError` and caused every LLM interaction to wipe and rebuild the Python venv from scratch.
 
