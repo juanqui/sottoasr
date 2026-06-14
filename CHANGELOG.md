@@ -2,6 +2,14 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.5] — 2026-06-14
+
+Remove the tray icon occlusion detection feature that notified users when the menu bar icon might be hidden behind the notch or other icons. The heuristic produced too many false alarms.
+
+### Removed
+
+- **Tray icon occlusion notification** — The background monitor that polled `NSWindowOcclusionState` every 30 seconds and showed a macOS notification when it believed the tray icon was hidden has been removed entirely. Users can still open Settings via the global hotkey or the tray menu.
+
 ## [0.7.4] — 2026-04-24
 
 Fix LLM transcript cleanup failing on machines with Python 3.9, fix a loop where the app repeatedly showed "new model available" after downloading, and fix missing spaces after punctuation in cleaned output.
