@@ -282,11 +282,6 @@ pub fn run() {
                     if let Err(e) = tray::menu::setup_tray_menu(app) {
                         log::error!("Failed to setup tray menu: {}", e);
                     }
-
-                    // Start tray icon occlusion monitor (detects when icon is
-                    // hidden behind the notch or by menu bar overflow).
-                    #[cfg(target_os = "macos")]
-                    tray::occlusion::start_occlusion_monitor(app);
                 }
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
                     // Only prevent exit when triggered by last window closing (code == None).
