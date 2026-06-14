@@ -3,10 +3,11 @@
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
-  import { getUpdateStatus, checkAppUpdate, performAppUpdate } from '../utils/tauri';
+  import { getUpdateStatus, checkAppUpdate, performAppUpdate, updateLlmModel } from '../utils/tauri';
   import type { UpdateDownloadProgress } from '../utils/tauri';
 
-  type UpdateStep = 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'error';
+  type UpdateStep = 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'error'
+    | 'model_available' | 'model_downloading' | 'model_ready' | 'model_error';
 
   let step = $state<UpdateStep>('checking');
   let currentVersion = $state('');
@@ -55,6 +56,27 @@
       step = 'error';
     }));
 
+    // Model update events.
+    unlisteners.push(await listen('llm-update-available', () => {
+      clearAutoClose();
+      if (step === 'checking' || step === 'up_to_date') {
+        step = 'model_available';
+      }
+    }));
+
+    unlisteners.push(await listen('llm-download-complete', () => {
+      if (step === 'model_downloading') {
+        step = 'model_ready';
+      }
+    }));
+
+    unlisteners.push(await listen<string>('llm-download-error', (event) => {
+      if (step === 'model_downloading') {
+        errorMessage = event.payload || 'Model download failed';
+        step = 'model_error';
+      }
+    }));
+
     // Determine initial state from existing update status.
     try {
       const status = await getUpdateStatus();
@@ -66,6 +88,8 @@
         availableVersion = status.version;
         releaseNotes = status.release_notes ?? '';
         step = 'available';
+      } else if (status.model_update_available) {
+        step = 'model_available';
       } else {
         step = 'checking';
         doCheck();
@@ -197,6 +221,32 @@
       autoCloseTimer = null;
     }
   }
+
+  async function handleModelUpdate() {
+    step = 'model_downloading';
+    errorMessage = '';
+    lastProgressTime = Date.now();
+
+    // Detect stalled downloads — if no progress events for 60 s, abort.
+    clearDownloadStallTimer();
+    downloadStallTimer = setInterval(() => {
+      if (step === 'model_downloading' && Date.now() - lastProgressTime > 60_000) {
+        clearDownloadStallTimer();
+        errorMessage = 'Download appears to have stalled. Please try again.';
+        step = 'model_error';
+      }
+    }, 10_000);
+
+    try {
+      await updateLlmModel();
+      step = 'model_ready';
+    } catch (err: any) {
+      errorMessage = err?.toString() || 'Model update failed';
+      step = 'model_error';
+    } finally {
+      clearDownloadStallTimer();
+    }
+  }
 </script>
 
 <div class="update-window">
@@ -308,6 +358,75 @@
       <div class="button-row">
         <button class="secondary" onclick={handleLater}>Close</button>
         <button class="primary" onclick={doCheck}>Try Again</button>
+      </div>
+    </div>
+
+  <!-- Model update available -->
+  {:else if step === 'model_available'}
+    <div class="step">
+      <div class="icon-circle available">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+      </div>
+      <h2>AI Model Update Available</h2>
+      <p class="subtitle">
+        A newer cleanup model is available.
+        <span class="current-hint">SottoASR v{currentVersion} is up to date.</span>
+      </p>
+      <p class="subtitle" style="margin-bottom: 1.5rem;">Installing the latest model improves transcription cleanup quality.</p>
+
+      <div class="button-row">
+        <button class="secondary" onclick={handleLater}>Later</button>
+        <button class="primary" onclick={handleModelUpdate}>Update Model</button>
+      </div>
+    </div>
+
+  <!-- Model downloading -->
+  {:else if step === 'model_downloading'}
+    <div class="step">
+      <h2>Updating AI Model</h2>
+      <p class="subtitle">Downloading the latest cleanup model (~233 MB)...</p>
+
+      <div class="progress-section">
+        <div class="progress-bar-container">
+          <div class="progress-bar indeterminate"></div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Model update ready -->
+  {:else if step === 'model_ready'}
+    <div class="step">
+      <div class="icon-circle success">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <h2>Model Updated</h2>
+      <p class="subtitle">The cleanup model has been updated. New transcriptions will use the improved model.</p>
+
+      <div class="button-row">
+        <button class="primary" onclick={handleLater} style="flex: 1;">Done</button>
+      </div>
+    </div>
+
+  <!-- Model update error -->
+  {:else if step === 'model_error'}
+    <div class="step">
+      <div class="icon-circle error-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </div>
+      <h2>Model Update Failed</h2>
+      <p class="error-message">{errorMessage}</p>
+
+      <div class="button-row">
+        <button class="secondary" onclick={handleLater}>Close</button>
+        <button class="primary" onclick={handleModelUpdate}>Try Again</button>
       </div>
     </div>
   {/if}

@@ -350,7 +350,13 @@
       <div class="toggle-field">
         <div class="toggle-info">
           <span class="toggle-label">Auto-check for updates</span>
-          <span class="toggle-hint">Check for new versions periodically</span>
+          <span class="toggle-hint">
+            {#if llmStatus?.available}
+              Check for app and model updates periodically
+            {:else}
+              Check for new versions periodically
+            {/if}
+          </span>
         </div>
         <label class="switch">
           <input type="checkbox" bind:checked={settingsStore.current.auto_check_updates} />

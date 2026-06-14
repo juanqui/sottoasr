@@ -2,6 +2,23 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.7.6] — 2026-06-14
+
+Auto-check for AI model updates and show the tray icon indicator when a new model version is available. Users who enable LLM cleanup now get passive notification of model improvements instead of having to check manually from Settings.
+
+### Added
+
+- **Auto model update checks** — The periodic update checker (every 4 hours) now also checks for newer AI cleanup models on HuggingFace when LLM cleanup is enabled. Uses the same `auto_check_updates` setting.
+- **Tray icon indicator for model updates** — The tray icon shows the update badge (dot) when a model update is available, even if the app itself is up to date. The menu label reads "AI Model Update Available..." to disambiguate.
+- **Combined update indicator** — When both app and model updates are available, the menu shows "Update Available — vX.Y.Z (+ model)" so the user knows both exist.
+- **Model update in update window** — The update window now shows a model update screen with an "Update Model" button, download progress, and completion state when only a model update (not an app update) is available.
+
+### Changed
+
+- **Consolidated tray refresh** — Replaced `refresh_tray_for_update()` and `refresh_tray_for_restart()` with a single `refresh_tray_from_state()` that reads `UpdateState` directly. Eliminates race conditions between periodic and manual update checks.
+- **Model update check extracted to `llm::engine`** — The core update-check logic moved from `commands/llm.rs` to `llm/engine.rs` so both the Tauri command and the background loop share the same implementation.
+- **"Auto-check for updates" hint** — Updated to mention "model updates" when the LLM feature is available.
+
 ## [0.7.5] — 2026-06-14
 
 Remove the tray icon occlusion detection feature that notified users when the menu bar icon might be hidden behind the notch or other icons. The heuristic produced too many false alarms.

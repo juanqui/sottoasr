@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicI8, AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
+use tauri::Manager;
 use crate::state::AppState;
 
 /// Monotonic job ID for stale-result prevention.
@@ -649,6 +650,70 @@ pub fn kill_orphan(state: &AppState) {
         let _ = pid;
         log::debug!("kill_orphan: unsupported platform, no-op");
     }
+}
+
+/// Check if a newer model is available on HuggingFace.
+/// Returns Ok(true) if update available, Ok(false) if up to date, Err on failure.
+/// Does NOT load the MLX model — only reads refs/main and calls repo_info().
+///
+/// Fast path: reuses existing sidecar if running. Drops the mutex guard BEFORE
+/// the blocking call so the cleanup pipeline is not blocked (~10s repo_info timeout).
+/// Slow path: spawns a temporary sidecar process (no MLX/model load).
+pub async fn check_model_update(
+    app: &tauri::AppHandle,
+) -> Result<bool, String> {
+    let state: tauri::State<'_, AppState> = app.state();
+
+    // Fast path — reuse existing sidecar if running.
+    // Take sidecar, DROP GUARD, do work, re-acquire to store.
+    {
+        let mut guard = state.llm_engine.lock().await;
+        if let Some(llm) = guard.take() {
+            drop(guard); // Release lock BEFORE spawn_blocking
+            match tokio::task::spawn_blocking(move || {
+                let mut llm = llm;
+                let resp = llm.request_raw(&serde_json::json!({"action": "check_update"}));
+                (llm, resp)
+            }).await {
+                Ok((llm_back, Ok(v))) => {
+                    let available = v.get("update_available")
+                        .and_then(|u| u.as_bool())
+                        .unwrap_or(false);
+                    // Re-acquire lock to store sidecar back.
+                    let mut guard = state.llm_engine.lock().await;
+                    *guard = Some(llm_back);
+                    return Ok(available);
+                }
+                Ok((llm_back, Err(e))) => {
+                    let mut guard = state.llm_engine.lock().await;
+                    *guard = Some(llm_back);
+                    return Err(format!("Sidecar check failed: {}", e));
+                }
+                Err(e) => {
+                    log::warn!("Model update check task panicked: {}", e);
+                    // Sidecar lost — fall through to slow path
+                }
+            }
+        }
+    }
+
+    // Slow path — spawn temporary sidecar (does not load MLX/model).
+    tokio::task::spawn_blocking(|| {
+        match LlmEngine::spawn() {
+            Ok(mut e) => {
+                let resp = e.request_raw(&serde_json::json!({"action": "check_update"}));
+                e.quit();
+                match resp {
+                    Ok(v) => Ok(v.get("update_available")
+                        .and_then(|u| u.as_bool())
+                        .unwrap_or(false)),
+                    Err(e) => Err(format!("Check failed: {}", e)),
+                }
+            }
+            Err(e) => Err(format!("Could not spawn sidecar: {}", e)),
+        }
+    }).await
+    .map_err(|e| format!("Check panicked: {}", e))?
 }
 
 /// The single model configuration for SottoASR transcript cleanup.

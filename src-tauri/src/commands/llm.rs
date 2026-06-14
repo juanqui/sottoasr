@@ -1,12 +1,18 @@
-use tauri::State;
+use std::sync::atomic::Ordering;
+
+use tauri::{AppHandle, Manager, State};
 use crate::state::AppState;
 use crate::models::LlmStatus;
 use crate::llm::{engine, download};
 use crate::llm::engine::LlmBackend;
+use crate::tray::menu;
 
 /// Get the current LLM model status.
 #[tauri::command]
-pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, String> {
+pub async fn get_llm_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<LlmStatus, String> {
     let compiled = engine::is_feature_compiled();
     let supported = if compiled {
         tokio::task::spawn_blocking(engine::is_platform_supported)
@@ -47,6 +53,12 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
 
     let last_cleanup_status = state.llm_last_status.lock().await.clone();
 
+    // Read model update availability from UpdateState (single source of truth)
+    let model_update_available = app
+        .try_state::<crate::updater::UpdateState>()
+        .map(|u| u.model_update_available.load(Ordering::SeqCst))
+        .unwrap_or(false);
+
     Ok(LlmStatus {
         available,
         unavailable_reason,
@@ -55,65 +67,17 @@ pub async fn get_llm_status(state: State<'_, AppState>) -> Result<LlmStatus, Str
         loaded,
         model_name: config.display_name.to_string(),
         model_path: None,
-        update_available: false, // Use check_llm_update for async update check
+        update_available: model_update_available,
         last_cleanup_status,
     })
 }
 
 /// Check if a model update is available on HuggingFace.
-/// Reuses the existing sidecar if one is running to avoid spawning a new process.
+/// Delegates to engine::check_model_update() which handles the two-path
+/// sidecar strategy (reuse existing or spawn temporary).
 #[tauri::command]
-pub async fn check_llm_update(state: State<'_, AppState>) -> Result<bool, String> {
-    // Reuse existing sidecar if one is running (avoids spawning a new process)
-    {
-        let mut guard = state.llm_engine.lock().await;
-        if let Some(llm) = guard.take() {
-            match tokio::task::spawn_blocking(move || {
-                let mut llm = llm;
-                let resp = llm.request_raw(&serde_json::json!({"action": "check_update"}));
-                (llm, resp)
-            }).await {
-                Ok((llm_back, Ok(v))) => {
-                    *guard = Some(llm_back);
-                    return Ok(v.get("update_available")
-                        .and_then(|u| u.as_bool())
-                        .unwrap_or(false));
-                }
-                Ok((llm_back, Err(e))) => {
-                    *guard = Some(llm_back);
-                    log::warn!("Update check via existing sidecar failed: {}", e);
-                    return Ok(false);
-                }
-                Err(e) => {
-                    log::error!("Update check task panicked, sidecar lost: {}", e);
-                    // Fall through to spawn a temporary sidecar
-                }
-            }
-        }
-    }
-
-    // No existing sidecar — spawn a temporary one (does not load MLX/model)
-    tokio::task::spawn_blocking(move || {
-        match engine::LlmEngine::spawn() {
-            Ok(mut e) => {
-                let resp = e.request_raw(&serde_json::json!({"action": "check_update"}));
-                e.quit(); // Local sidecar — use quit() directly
-                match resp {
-                    Ok(v) => Ok(v.get("update_available")
-                        .and_then(|u| u.as_bool())
-                        .unwrap_or(false)),
-                    Err(e) => {
-                        log::warn!("Update check failed: {}", e);
-                        Ok(false)
-                    }
-                }
-            }
-            Err(e) => {
-                log::warn!("Could not spawn sidecar for update check: {}", e);
-                Ok(false)
-            }
-        }
-    }).await.map_err(|e| format!("Update check panicked: {}", e))?
+pub async fn check_llm_update(app: AppHandle) -> Result<bool, String> {
+    engine::check_model_update(&app).await
 }
 
 /// Start downloading (or updating) the LLM model.
@@ -128,7 +92,7 @@ pub async fn download_llm_model(
 /// Update the LLM model: shut down sidecar, re-download, ready for reload.
 #[tauri::command]
 pub async fn update_llm_model(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     // Shut down running sidecar so it picks up new model on next use
@@ -140,7 +104,16 @@ pub async fn update_llm_model(
     }
 
     // Re-download (huggingface_hub will fetch the latest revision)
-    download::download_model(&app).await
+    download::download_model(&app).await?;
+
+    // Clear the model update flag now that the model is current
+    if let Some(updater) = app.try_state::<crate::updater::UpdateState>() {
+        updater.model_update_available.store(false, Ordering::SeqCst);
+        updater.model_update_consecutive_errors.store(0, Ordering::SeqCst);
+    }
+    // Refresh tray to remove indicator
+    menu::refresh_tray_from_state(&app);
+    Ok(())
 }
 
 /// Cancel an in-progress LLM model download.

@@ -20,22 +20,40 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
     build_tray_menu(app, TrayState::Normal)
 }
 
-/// Refresh the tray to show an "Update Available" item and badge icon.
-pub fn refresh_tray_for_update(app: &AppHandle, version: Option<&str>) {
-    let state = match version {
-        Some(v) => TrayState::UpdateAvailable(v.to_string()),
-        None => TrayState::Normal,
+/// Single canonical tray refresh. Reads UpdateState directly.
+/// Call from anywhere — periodic loop, manual check, download complete.
+pub fn refresh_tray_from_state(app: &AppHandle) {
+    let state = match app.try_state::<crate::updater::UpdateState>() {
+        Some(s) => s,
+        None => return,
     };
-    if let Err(e) = build_tray_menu(app, state) {
-        log::error!("Failed to rebuild tray menu for update: {}", e);
-    }
-    set_tray_icon(app, version.is_some());
-}
 
-/// Refresh the tray to show "Restart to Update".
-pub fn refresh_tray_for_restart(app: &AppHandle) {
-    if let Err(e) = build_tray_menu(app, TrayState::RestartPending) {
-        log::error!("Failed to rebuild tray menu for restart: {}", e);
+    let app_update = state.update_available.load(std::sync::atomic::Ordering::SeqCst);
+    let model_update = state.model_update_available.load(std::sync::atomic::Ordering::SeqCst);
+    let restart = state.restart_pending.load(std::sync::atomic::Ordering::SeqCst);
+    let version = state.available_version.blocking_lock().clone();
+
+    // Icon: any update → show indicator.
+    let has_any_update = app_update || model_update || restart;
+    set_tray_icon(app, has_any_update);
+
+    // Menu priority: restart > app update > model update > normal.
+    let tray_state = if restart {
+        TrayState::RestartPending
+    } else if let Some(v) = version {
+        let label = if model_update {
+            format!("{} (+ model)", v)
+        } else {
+            v
+        };
+        TrayState::UpdateAvailable(label)
+    } else if model_update {
+        TrayState::ModelUpdateAvailable
+    } else {
+        TrayState::Normal
+    };
+    if let Err(e) = build_tray_menu(app, tray_state) {
+        log::error!("Failed to rebuild tray menu: {}", e);
     }
 }
 
@@ -45,8 +63,9 @@ pub fn refresh_tray_for_restart(app: &AppHandle) {
 
 enum TrayState {
     Normal,
-    UpdateAvailable(String), // version string
+    UpdateAvailable(String), // version string, may include " (+ model)" suffix
     RestartPending,
+    ModelUpdateAvailable,
 }
 
 // ---------------------------------------------------------------------------
@@ -69,9 +88,10 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
     let update_label = match &state {
         TrayState::Normal => "Check for Updates...".to_string(),
         TrayState::UpdateAvailable(version) => {
-            format!("Update Available \u{2014} v{}", version)
+            format!("Update Available \u{2014} {}", version)
         }
         TrayState::RestartPending => "Restart to Update".to_string(),
+        TrayState::ModelUpdateAvailable => "AI Model Update Available...".to_string(),
     };
     let check_updates =
         MenuItem::with_id(app, "check_updates", &update_label, true, None::<&str>)
@@ -169,11 +189,26 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
             }
             "check_updates" => {
                 log::info!("Tray: Opening update window");
+                // Use context-appropriate title based on current tray state.
+                // We can't access TrayState here directly (it's dropped after build_tray_menu),
+                // so we read UpdateState to determine the title.
+                let title = if let Some(us) = app.try_state::<crate::updater::UpdateState>() {
+                    let app_update = us.update_available.load(std::sync::atomic::Ordering::SeqCst);
+                    let model_update = us.model_update_available.load(std::sync::atomic::Ordering::SeqCst);
+                    let restart = us.restart_pending.load(std::sync::atomic::Ordering::SeqCst);
+                    if model_update && !app_update && !restart {
+                        "SottoASR \u{2014} Model Update".to_string()
+                    } else {
+                        "SottoASR \u{2014} Software Update".to_string()
+                    }
+                } else {
+                    "SottoASR \u{2014} Update".to_string()
+                };
                 open_or_focus_window(
                     app,
                     "update",
                     "update.html",
-                    "SottoASR \u{2014} Software Update",
+                    &title,
                     420.0,
                     480.0,
                 );
