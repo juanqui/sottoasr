@@ -1,0 +1,2 @@
+# Archived unified diffs require a single-space prefix on empty context lines.
+benchmarks/**/*.patch whitespace=-blank-at-eol
