@@ -2,7 +2,7 @@
 
 - **Version:** 1.0
 - **Date:** 2026-09-08
-- **Status:** Approved
+- **Status:** Implemented
 
 ## Contents
 
@@ -54,7 +54,7 @@ One bounded public API request per page load. No new backend, hosting service or
 - [x] Implement release-aware badge and correct model copy.
 - [x] Add website checks and document actual hosting/release behavior.
 - [x] Verify browser rendering, fallback cases and build; update PR.
-- [ ] Restore existing Git connection and verify Cloudflare preview deployment.
+- [x] Restore existing Git connection and verify Cloudflare preview deployment.
 
 ## 12. Implementation Status
 
@@ -67,3 +67,5 @@ Review 3 — Actionability: preserve the existing version-bump badge literal, us
 Local verification: four real-HTML/jsdom tests pass, including nine invalid/incomplete release variants and three failure paths. Configuration assertions and Vite build pass. Chrome renders the live API result v0.7.4 and both matching release links; screenshot confirms download layout. GitHub sudo verification is pending for installation 118245048, so Git connection repair and Cloudflare preview remain unverified.
 
 Connection follow-up: account-holder GitHub verification completed. GitHub installation 118245048 is active with its existing repository access. Cloudflare no longer reports a disconnected account, and main/website automatic production routing is unchanged. A fresh documentation commit will verify preview delivery without touching the GitHub installation or publishing the app.
+
+Final deployment verification: Cloudflare automatically deployed commit c5476ab to https://0b936988.sottoasr.pages.dev. Chrome confirms the updated MiniCPM content, published v0.7.4 badge, both matching tag links and no console errors. This verifies the deployment connection; production still follows main, and 0.8.3 remains unpublished. A command-line byte comparison was blocked by HTTP 403 on the preview endpoint; browser verification succeeded.

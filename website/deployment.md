@@ -2,7 +2,7 @@
 
 - **Version:** 1.1
 - **Date:** 2026-09-08
-- **Status:** In Review
+- **Status:** Implemented
 
 ## Contents
 
@@ -50,3 +50,8 @@ app release is implied by a successful local build.
 
 References: [Cloudflare Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/)
 and [GitHub latest-release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).
+
+Verified September 8: commit `c5476ab` automatically deployed to
+[the Cloudflare preview](https://0b936988.sottoasr.pages.dev). Chrome confirmed
+the new content and both version-aligned download links. The public update feed
+remains 0.7.4 until a newer app release is published.
