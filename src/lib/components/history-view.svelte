@@ -4,12 +4,14 @@
   import { transcriptionStore } from '../stores/transcriptions.svelte';
   import { exportTranscriptionsCsvFile } from '../utils/tauri';
   import { createEventScope } from '../utils/event-scope';
+  import { cleanupOutcome } from '../utils/cleanup-outcome';
   import HistoryItem from './history-item.svelte';
   import ConfirmDialog from './confirm-dialog.svelte';
   import type { TranscriptionEvent } from '../utils/tauri';
 
   const PAGE_SIZE = 50;
   let searchQuery = $state('');
+  let outcomeFilter = $state<'all' | 'cleaned' | 'issues'>('all');
   let page = $state(0);
   let rowViews = $state<Record<string, { expanded: boolean; viewMode: 'cleaned' | 'raw' | 'diff' }>>({});
   let error = $state('');
@@ -20,13 +22,23 @@
   let disposed = false;
   let historyList: HTMLDivElement;
   let query = $derived(searchQuery.trim().toLocaleLowerCase());
-  let filteredItems = $derived(query ? transcriptionStore.items.filter((item) =>
-    item.text.toLocaleLowerCase().includes(query) || (item.raw_text?.toLocaleLowerCase().includes(query) ?? false)) : transcriptionStore.items);
+  let filteredItems = $derived(transcriptionStore.items.filter((item) =>
+    (!query || item.text.toLocaleLowerCase().includes(query) || (item.raw_text?.toLocaleLowerCase().includes(query) ?? false)) &&
+    (outcomeFilter === 'all' || (outcomeFilter === 'cleaned' ? item.llm_applied : !item.cancelled && cleanupOutcome(item.llm_cleanup_status).issue))));
+  function dayKey(value: string) { return new Date(value).toLocaleDateString(); }
+  function dayLabel(value: string) {
+    const day = new Date(value);
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    if (dayKey(value) === today.toLocaleDateString()) return 'Today';
+    if (dayKey(value) === yesterday.toLocaleDateString()) return 'Yesterday';
+    return day.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric', year:'numeric' });
+  }
   let pageCount = $derived(Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE)));
   let currentPage = $derived(Math.min(page, pageCount - 1));
   let visibleItems = $derived(filteredItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE));
 
-  $effect(() => { query; currentPage; if (historyList) historyList.scrollTop = 0; });
+  $effect(() => { query; outcomeFilter; currentPage; if (historyList) historyList.scrollTop = 0; });
 
   async function handleCopy(text: string) {
     error = '';
@@ -70,12 +82,18 @@
 
 <div class="history-window">
   <header class="history-header">
-    <h1>History</h1>
+    <div class="history-title"><h1>History</h1><span>{transcriptionStore.items.length} saved narrations</span></div>
     <div class="header-actions">
       <div class="search-wrapper"><input class="search-input" type="search" placeholder="Search all history…" aria-label="Search transcriptions" value={searchQuery} oninput={(event) => { searchQuery = event.currentTarget.value; page = 0; }} /></div>
       <button class="export-btn" type="button" onclick={handleExport} disabled={!transcriptionStore.loaded || !transcriptionStore.items.length || exporting}>{exporting ? 'Exporting…' : 'Export CSV'}</button>
       <button class="clear-all-btn" type="button" onclick={() => { deleteTarget = 'all'; }} disabled={!transcriptionStore.loaded || !transcriptionStore.items.length || deleting}>Clear All</button>
     </div>
+    <nav class="history-filters" aria-label="Filter cleanup outcomes">
+      {#each [{id:'all',label:'All'}, {id:'cleaned',label:'AI cleaned'}, {id:'issues',label:'Cleanup issues'}] as filter}
+        <button type="button" aria-pressed={outcomeFilter === filter.id} onclick={() => { outcomeFilter = filter.id as typeof outcomeFilter; page = 0; }}>{filter.label}</button>
+      {/each}
+      {#if query || outcomeFilter !== 'all'}<button class="reset-filter" type="button" onclick={() => { searchQuery = ''; outcomeFilter = 'all'; page = 0; }}>Clear filters</button>{/if}
+    </nav>
   </header>
   {#if error || transcriptionStore.error}
     <div class="history-error" role="alert">{error || transcriptionStore.error}
@@ -87,14 +105,16 @@
     {#if transcriptionStore.loading}<div class="empty-state" role="status"><p>Loading history…</p></div>
     {:else if !transcriptionStore.loaded}<div class="empty-state"><p class="empty-title">History is unavailable</p><p class="empty-subtitle">Your saved entries have not been changed.</p></div>
     {:else if !transcriptionStore.items.length}<div class="empty-state"><p class="empty-title">No transcriptions yet</p><p class="empty-subtitle">Press your hotkey to start recording. Transcriptions will appear here.</p></div>
-    {:else if !filteredItems.length}<div class="empty-state"><p class="empty-title">No results</p><p class="empty-subtitle">No transcriptions match “{searchQuery}”</p></div>
+    {:else if !filteredItems.length}<div class="empty-state"><p class="empty-title">No results</p><p class="empty-subtitle">Try another search or cleanup filter.</p></div>
     {:else}
-      {#each visibleItems as item (item.id)}<HistoryItem {item} expanded={rowViews[item.id]?.expanded ?? false} viewMode={rowViews[item.id]?.viewMode ?? 'cleaned'} onviewchange={(state) => { rowViews[item.id] = state; }} ondelete={(id) => { deleteTarget = id; }} oncopy={handleCopy} />{/each}
+      {#each visibleItems as item, index (item.id)}
+        {#if index === 0 || dayKey(item.created_at) !== dayKey(visibleItems[index - 1].created_at)}<h2 class="date-group">{dayLabel(item.created_at)}</h2>{/if}
+        <HistoryItem {item} expanded={rowViews[item.id]?.expanded ?? false} viewMode={rowViews[item.id]?.viewMode ?? 'cleaned'} onviewchange={(state) => { rowViews[item.id] = state; }} ondelete={(id) => { deleteTarget = id; }} oncopy={handleCopy} />{/each}
     {/if}
   </div>
   {#if transcriptionStore.loaded && filteredItems.length}
     <nav class="history-pagination" aria-label="History pages">
-      <span>{currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredItems.length)} of {filteredItems.length}{query ? ' matches' : ' entries'}</span>
+      <span>{currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredItems.length)} of {filteredItems.length}{query || outcomeFilter !== 'all' ? ' matches' : ' entries'}</span>
       <button type="button" disabled={currentPage === 0} onclick={() => { page = currentPage - 1; }}>Previous</button>
       <button type="button" disabled={currentPage + 1 >= pageCount} onclick={() => { page = currentPage + 1; }}>Next</button>
     </nav>
@@ -103,6 +123,14 @@
 <ConfirmDialog open={deleteTarget !== null} title={deleteTarget === 'all' ? 'Clear all history?' : 'Delete this transcription?'} message={deleteTarget === 'all' ? 'This permanently removes every saved transcription, including entries hidden by your search. Export a CSV first if you want a copy.' : 'This permanently removes the selected transcription from history.'} confirmLabel={deleteTarget === 'all' ? 'Clear all history' : 'Delete'} busy={deleting} onconfirm={confirmDelete} oncancel={() => { deleteTarget = null; }} />
 
 <style>
+  .history-title { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+  .history-title span { color:var(--text-dim); font-size:12px; }
+  .history-filters { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .history-filters button { border:1px solid var(--border); border-radius:7px; background:transparent; color:var(--text-dim); padding:6px 10px; font:inherit; font-size:11px; cursor:pointer; }
+  .history-filters button[aria-pressed="true"] { background:var(--accent-bg); color:#93c5fd; border-color:#3b82f640; }
+  .history-filters .reset-filter { margin-left:auto; border-color:transparent; }
+  .date-group { margin:12px 0 2px; color:var(--text-dim); font-size:11px; font-weight:600; letter-spacing:.3px; }
+
   .history-window {
     display: flex;
     flex-direction: column;
@@ -119,7 +147,7 @@
   h1 {
     font-size: 22px;
     font-weight: 600;
-    margin: 0 0 14px;
+    margin: 0;
     color: var(--text-bright);
     letter-spacing: -0.3px;
   }

@@ -7,17 +7,19 @@ const { listeners, onClose, closeWindow } = vi.hoisted(() => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onCloseRequested:onClose, close:closeWindow }) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (name:string, callback:(event:unknown)=>void) => { listeners.set(name,callback); return () => listeners.delete(name); }) }));
-vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn() }));
+vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn() }));
 import SettingsPanel from './settings-panel.svelte';
 import { listen } from '@tauri-apps/api/event';
 import { settingsStore, createDefaultSettings } from '../stores/settings.svelte';
-import { getSettings, updateSettings, getLlmStatus, prepareLlmModel, getVocabularyStatus } from '../utils/tauri';
+import { getSettings, updateSettings, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus } from '../utils/tauri';
 import type { LlmStatus } from '../utils/tauri';
 const status:LlmStatus = { available:true, unavailable_reason:null, downloaded:false, downloading:false, loaded:false, preparing:false, setup_error:null, update_available:false, model_name:'Test cleanup', model_path:null, model_url:'https://example.com/model', download_size_mb:227, last_cleanup_status:{kind:'idle'} };
 let component:ReturnType<typeof mount>|undefined;
 let target:HTMLDivElement;
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(listen).mockImplementation(async (name, callback) => { listeners.set(name, callback as (event:unknown)=>void); return () => { listeners.delete(name); }; });
+  vi.mocked(getModelStatus).mockResolvedValue({loaded:true,downloaded:true,path:null,name:'Parakeet',size_bytes:null});
   vi.mocked(getSettings).mockResolvedValue(createDefaultSettings());
   vi.mocked(updateSettings).mockImplementation(async (settings) => ({ settings, warnings:[] }));
   vi.mocked(getLlmStatus).mockResolvedValue({...status});
@@ -93,7 +95,7 @@ it('saves unrelated edits during preparation and leaves late activation unsaved'
 
 it('subscribes before its first cleanup status read so setup completion cannot fall in a gap', async () => {
   let subscribed!: (off:()=>void)=>void;
-  vi.mocked(listen).mockImplementationOnce(() => new Promise((resolve) => {subscribed=resolve;}));
+  vi.mocked(listen).mockImplementation((name) => name === 'llm-preparation-changed' ? new Promise((resolve) => {subscribed=resolve;}) : Promise.resolve(vi.fn()));
   await render(); expect(getLlmStatus).not.toHaveBeenCalled();
   vi.mocked(getLlmStatus).mockResolvedValue({...status,downloaded:true,loaded:true});
   subscribed(vi.fn()); await vi.waitFor(() => expect(getLlmStatus).toHaveBeenCalledOnce());

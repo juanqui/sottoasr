@@ -176,7 +176,7 @@ pub async fn open_transcription_history(app: AppHandle) -> Result<(), String> {
     let handle = app.clone();
     app.run_on_main_thread(move || {
         crate::tray::menu::open_or_focus_window(
-            &handle, "history", "history.html", "SottoASR — History", 520.0, 640.0,
+            &handle, "history", "history.html", "SottoASR — History", 680.0, 760.0,
         );
     }).map_err(|error| error.to_string())
 }

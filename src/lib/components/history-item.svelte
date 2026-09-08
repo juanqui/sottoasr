@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import { diffWords } from 'diff';
   import { formatRelativeTime, formatDuration, truncateText } from '../utils/format';
+  import { cleanupOutcome } from '../utils/cleanup-outcome';
   import CleanupSuggestion from './cleanup-suggestion.svelte';
   import type { Transcription } from '../utils/tauri';
 
@@ -18,7 +19,7 @@
 
   type ViewMode = 'cleaned' | 'raw' | 'diff';
 
-  let copyFeedback: boolean = $state(false);
+  let copyFeedback = $state<'transcript' | 'original' | null>(null);
 
   let relativeTime = $derived(formatRelativeTime(item.created_at));
   let durationText = $derived(formatDuration(item.duration_ms));
@@ -30,7 +31,7 @@
 
   // Compute word-level diff parts using the `diff` library
   let diffParts = $derived.by(() => {
-    if (!item.raw_text) return [];
+    if (!item.raw_text || !expanded || viewMode !== 'diff') return [];
     return diffWords(item.raw_text, item.text);
   });
 
@@ -39,36 +40,9 @@
   let suggestion = $derived(!item.cancelled && !item.capture_error && item.cleanup_suggestion?.trim()
     && item.cleanup_suggestion !== item.text ? item.cleanup_suggestion : null);
 
-  // Cleanup-status hint for non-Applied outcomes. We only show a small icon
-  // for failure modes (Failed/Unavailable/TimedOut) — not for Applied (the
-  // existing "AI Cleaned" badge already conveys success), not for Disabled
-  // or Idle (no cleanup was attempted), and not for SkippedTooShort (the
-  // skip is intentional and not interesting in retrospect).
-  type StatusHint = { tooltip: string; emoji: string };
-  let cleanupHint = $derived.by<StatusHint | null>(() => {
-    const status = item.llm_cleanup_status;
-    if (!status) return null;
-    switch (status.kind) {
-      case 'unavailable':
-        return { tooltip: `Cleanup unavailable: ${status.detail.reason}`, emoji: '⚠' };
-      case 'failed':
-        return { tooltip: `Cleanup failed: ${status.detail.reason}`, emoji: '⚠' };
-      case 'timed_out':
-        return {
-          tooltip: `Cleanup timed out after ${(status.detail.elapsed_ms / 1000).toFixed(1)}s`,
-          emoji: '⏱',
-        };
-      default:
-        return null;
-    }
-  });
-  let cleanupExplanation = $derived.by(() => {
-    switch (item.llm_cleanup_status?.kind) {
-      case 'skipped_no_candidates': return 'AI suggestions did not run: no edits qualified, or the transcript exceeded cleanup limits.';
-      case 'no_changes': return 'Cleanup made no changes.';
-      default: return null;
-    }
-  });
+  let outcome = $derived(cleanupOutcome(item.llm_cleanup_status));
+  let fullDate = $derived(new Date(item.created_at).toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' }));
+  let cleanupExplanation = $derived(item.llm_cleanup_status ? outcome.detail : null);
 
   let disposed = false;
   let copyTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -76,6 +50,7 @@
   function notifyView() { onviewchange?.({ expanded, viewMode }); }
 
   function setView(mode: ViewMode) {
+    expanded = true;
     if (viewMode === mode) {
       viewMode = 'cleaned';
     } else {
@@ -89,14 +64,14 @@
     notifyView();
   }
 
-  async function handleCopy() {
-    try { await oncopy(item.text); } catch { return; }
+  async function handleCopy(original = false) {
+    try { await oncopy(original && item.raw_text ? item.raw_text : item.text); } catch { return; }
     if (disposed) return;
-    copyFeedback = true;
+    copyFeedback = original ? 'original' : 'transcript';
     // Clear any existing timeout to avoid stale callbacks
     if (copyTimeoutId) clearTimeout(copyTimeoutId);
     copyTimeoutId = setTimeout(() => {
-      copyFeedback = false;
+      copyFeedback = null;
       copyTimeoutId = null;
     }, 1500);
   }
@@ -116,50 +91,30 @@
 </script>
 
 <div class="history-item" class:expanded>
-  <!-- Main text area -->
-  <button class="item-body" onclick={toggleExpand} type="button" aria-expanded={expanded}>
-    {#if item.capture_error}
-      <span class="interrupted-badge">Interrupted</span>
-      <p class="capture-error">{item.capture_error}</p>
-    {:else if item.cancelled}
-      <span class="cancelled-badge">Cancelled</span>
-    {:else if hasLlm}
-      <span class="llm-badge">AI Cleaned</span>
-    {:else if hasEdits}
-      <span class="llm-badge">Dictionary applied</span>
-    {/if}
+  <div class="entry-labels">
+    {#if item.capture_error}<span class="interrupted-badge">Interrupted</span>
+    {:else if item.cancelled}<span class="cancelled-badge">Cancelled</span>
+    {:else if hasLlm}<span class="llm-badge">AI Cleaned</span>
+    {:else if hasEdits}<span class="llm-badge">Dictionary applied</span>{/if}
     {#if suggestion}<span class="suggestion-badge">Suggestion to review</span>{/if}
-    {#if cleanupHint && !item.cancelled}
-      <span class="cleanup-fail-badge" title={cleanupHint.tooltip}>
-        <span class="cleanup-fail-icon">{cleanupHint.emoji}</span>
-        AI cleanup skipped
-      </span>
-    {/if}
-
-    {#if !item.text && item.cancelled}
-      <p class="text-preview empty">No transcription (recording was cancelled)</p>
-    {:else if viewMode === 'diff' && expanded && hasEdits}
-      <div class="diff-inline">
-        {#each diffParts as part}
-          {#if part.added}
-            <span class="diff-added">{part.value}</span>
-          {:else if part.removed}
-            <span class="diff-removed">{part.value}</span>
-          {:else}
-            <span>{part.value}</span>
-          {/if}
-        {/each}
-      </div>
-    {:else}
-      <p class="text-preview">
-        {expanded ? displayText : previewText}
-      </p>
-    {/if}
+    {#if outcome.issue && !item.cancelled}<span class="cleanup-fail-badge">{outcome.label}</span>{/if}
+  </div>
+  <button class="item-body" onclick={toggleExpand} type="button" aria-expanded={expanded}>
+    {#if expanded}<span class="collapse-label">Collapse transcript ↑</span>
+    {:else}<p class="text-preview" class:empty={!item.text && item.cancelled}>{!item.text && item.cancelled ? 'No transcription (recording was cancelled)' : previewText}</p>{/if}
   </button>
+  {#if expanded}
+    <div class="expanded-content">
+      {#if viewMode === 'diff' && hasEdits}
+        <div class="diff-inline">{#each diffParts as part}{#if part.added}<span class="diff-added">{part.value}</span>{:else if part.removed}<span class="diff-removed">{part.value}</span>{:else}<span>{part.value}</span>{/if}{/each}</div>
+      {:else}<p class="text-preview">{displayText}</p>{/if}
+    </div>
+  {/if}
+  {#if item.capture_error}<p class="capture-error">{item.capture_error}</p>{/if}
 
   <!-- Metadata row -->
   <div class="item-meta">
-    <span class="timestamp" title={item.created_at}>{relativeTime}</span>
+    <span class="timestamp" title={item.created_at}>{expanded ? fullDate : relativeTime}</span>
     <span class="sep">&middot;</span>
     <span class="duration">{durationText}</span>
     <span class="sep">&middot;</span>
@@ -172,20 +127,23 @@
           class:active={viewMode === 'raw'}
           onclick={() => setView('raw')}
           type="button"
-        >Raw</button>
+        >Original</button>
         <button
           class="action-btn"
           class:active={viewMode === 'diff'}
           onclick={() => { if (!expanded) expanded = true; setView('diff'); }}
           type="button"
-        >Diff</button>
+        >Changes</button>
       {/if}
       <button
         class="action-btn"
-        class:copied={copyFeedback}
-        onclick={handleCopy}
+        class:copied={copyFeedback === 'transcript'}
+        onclick={() => handleCopy()}
         type="button"
-      >{copyFeedback ? 'Copied' : viewMode !== 'cleaned' || (expanded && suggestion) ? 'Copy transcript' : 'Copy'}</button>
+      >{copyFeedback === 'transcript' ? 'Copied' : viewMode !== 'cleaned' || (expanded && suggestion) ? 'Copy transcript' : 'Copy'}</button>
+      {#if expanded && item.raw_text}
+        <button class="action-btn" type="button" class:copied={copyFeedback === 'original'} onclick={() => handleCopy(true)}>{copyFeedback === 'original' ? 'Original copied' : 'Copy original'}</button>
+      {/if}
       <button
         class="action-btn delete"
         onclick={handleDelete}
@@ -209,6 +167,11 @@
 </div>
 
 <style>
+  .entry-labels { display:flex; gap:6px; padding:12px 16px 0; flex-wrap:wrap; }
+  .entry-labels:empty { display:none; }
+  .expanded-content { padding:0 16px 14px; user-select:text; cursor:text; }
+  .collapse-label { font-size:11px; color:var(--text-dim); }
+
   .interrupted-badge { display:inline-block; margin-bottom:6px; font-size:10px; font-weight:600; color:#fcd34d; }
   .capture-error { margin:0 0 8px; font-size:12px; line-height:1.5; color:#fcd34d; overflow-wrap:anywhere; }
   .suggestion-badge { display:inline-block; margin:0 4px 6px; color:#fcd34d; font-size:10px; font-weight:600; }
@@ -230,7 +193,7 @@
   .item-body {
     display: block;
     width: 100%;
-    padding: 12px 16px 8px;
+    padding: 10px 16px 10px;
     background: none;
     border: none;
     color: inherit;
@@ -286,9 +249,6 @@
     cursor: help;
   }
 
-  .cleanup-fail-icon {
-    font-size: 11px;
-  }
 
   .text-preview {
     font-size: 14px;

@@ -28,6 +28,9 @@
   {:else if !cleanup.status?.downloaded}
     <p class="setting-hint">Turning this on handles setup automatically{cleanup.status ? `, including a one-time ${cleanup.status.download_size_mb} MB download` : ''}.</p>
   {/if}
+  {#if settingsStore.saved?.llm_cleanup_enabled && !cleanup.pending && cleanup.status?.downloaded && !cleanup.status.loaded && !cleanup.error}
+    <button class="secondary-button" type="button" onclick={() => cleanup.prepare()}>Prepare cleanup now</button>
+  {/if}
   {#if cleanup.error}
     <div class="setting-error" role="alert">
       <p>{cleanup.error}</p>

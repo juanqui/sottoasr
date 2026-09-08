@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use crate::llm::engine::{ensure_running, is_zombie_error, kill_orphan};
-use crate::llm::validation::{validate, MAX_CLEANUP_BYTES};
+use crate::llm::validation::{validate_cleanup, MAX_CLEANUP_BYTES};
 use crate::models::LlmCleanupStatus;
 use crate::state::AppState;
 
@@ -35,6 +35,20 @@ pub const LLM_CLEANUP_TIMEOUT: Duration = Duration::from_secs(30);
 /// This function does NOT check the enabled flag — callers that need to skip
 /// cleanup entirely should return `Disabled` without calling this.
 pub async fn run_cleanup(
+    state: &AppState,
+    raw: &str,
+    protected_terms: &[String],
+) -> (String, LlmCleanupStatus) {
+    let started = Instant::now();
+    let request_id = crate::llm::engine::next_job_id();
+    let result = run_cleanup_attempt(state, raw, protected_terms).await;
+    // Status contains controlled reasons, never model output or transcript text.
+    log::info!("Cleanup request={} input_bytes={} elapsed_ms={} outcome={:?}",
+        request_id, raw.len(), started.elapsed().as_millis(), result.1);
+    result
+}
+
+async fn run_cleanup_attempt(
     state: &AppState,
     raw: &str,
     protected_terms: &[String],
@@ -126,7 +140,7 @@ async fn run_cleanup_inner(
             let mut guard = state.llm_engine.lock().await;
             *guard = Some(llm_back);
             drop(guard);
-            match validate(raw, &proposal, protected_terms) {
+            match validate_cleanup(raw, &proposal, protected_terms) {
                 Ok(cleaned) if cleaned != raw => {
                     let elapsed_ms = started.elapsed().as_millis() as u64;
                     log::info!("LLM cleanup applied source deletions in {}ms", elapsed_ms);
@@ -135,7 +149,7 @@ async fn run_cleanup_inner(
                 Ok(_) => (raw.to_string(), LlmCleanupStatus::NoChanges),
                 Err(reason) => {
                     log::warn!("LLM cleanup rejected: {}", reason);
-                    (raw.to_string(), LlmCleanupStatus::Failed { reason })
+                    (raw.to_string(), LlmCleanupStatus::Rejected { reason })
                 }
             }
         }

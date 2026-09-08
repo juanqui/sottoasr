@@ -21,7 +21,7 @@ fn main() {
             if language_skip {
                 serde_json::json!({"accepted":false,"language_skip":true,"output":source,"reason":"reliable_non_english"})
             } else {
-                match validation::validate(source, proposal, &terms) {
+                match validation::validate_cleanup(source, proposal, &terms) {
                     Ok(output) => serde_json::json!({"accepted":true,"language_skip":false,"output":output}),
                     Err(reason) => serde_json::json!({"accepted":false,"language_skip":false,"output":source,"reason":reason}),
                 }

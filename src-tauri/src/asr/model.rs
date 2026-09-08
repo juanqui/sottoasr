@@ -59,6 +59,8 @@ pub fn get_model_status() -> ModelStatus {
         ModelStatus {
             downloaded: available,
             loaded: false,
+            initializing: false,
+            error: None,
             path: if available {
                 fluidaudio_model_dir().map(|dir| dir.to_string_lossy().into_owned())
             } else {
@@ -79,6 +81,8 @@ pub fn get_model_status() -> ModelStatus {
         ModelStatus {
             downloaded: false,
             loaded: false,
+            initializing: false,
+            error: None,
             path: None,
             name: "none".to_string(),
             size_bytes: None,
@@ -164,6 +168,8 @@ fn get_parakeet_model_status() -> ModelStatus {
     ModelStatus {
         downloaded,
         loaded: false,
+        initializing: false,
+        error: None,
         path: if downloaded { Some(model_dir.to_string_lossy().to_string()) } else { None },
         name: format!("{} (ONNX INT8)", PARAKEET_MODEL_NAME),
         size_bytes: if downloaded {

@@ -197,6 +197,8 @@
         return { label: 'Suggestion in History', variant: 'success' };
       case 'unavailable':
         return { label: 'Cleanup unavailable', variant: 'warn' };
+      case 'rejected':
+        return { label: 'Original kept', variant: 'warn' };
       case 'failed':
         return { label: 'Cleanup failed', variant: 'warn' };
       case 'timed_out':

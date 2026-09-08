@@ -897,9 +897,122 @@ pub fn validate(
         .expect("one accepted reconstruction"))
 }
 
+/// Keep independently valid source deletions from a completed proposal, even
+/// when it also contains an unsupported rewrite. Generated words/punctuation
+/// never enter this fallback. The frozen validator remains the edit authority.
+pub fn validate_cleanup(
+    source: &str,
+    proposal: &str,
+    protected_terms: &[String],
+) -> Result<String, String> {
+    let reason = match validate(source, proposal, protected_terms) {
+        Ok(text) => return Ok(text),
+        Err(reason) => reason,
+    };
+    if source.len().max(proposal.len()) > MAX_CLEANUP_BYTES {
+        return Err(reason);
+    }
+    let tokens = tokenize(source);
+    let proposed = tokenize(proposal);
+    let (n, m) = (tokens.len(), proposed.len());
+    if n == 0 || m == 0 || n.max(m) > MAX_CLEANUP_WORDS {
+        return Err(reason);
+    }
+    // At most ~2 MiB. This alignment only proposes deletion runs; it does not
+    // authorize them. Repeated/ambiguous words still pass the full validator.
+    let width = m + 1;
+    let mut lengths = vec![0u16; (n + 1) * width];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            lengths[i * width + j] = if tokens[i].is(proposed[j].value) {
+                lengths[(i + 1) * width + j + 1] + 1
+            } else {
+                lengths[(i + 1) * width + j].max(lengths[i * width + j + 1])
+            };
+        }
+    }
+    let (mut i, mut j, mut start_i, mut start_j) = (0, 0, 0, 0);
+    let mut runs = Vec::new();
+    while i < n || j < m {
+        if i < n && j < m && tokens[i].is(proposed[j].value) {
+            if i > start_i && j == start_j {
+                runs.push(start_i..i);
+            }
+            i += 1;
+            j += 1;
+            start_i = i;
+            start_j = j;
+        } else if i < n && (j == m || lengths[(i + 1) * width + j] >= lengths[i * width + j + 1]) {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    if i > start_i && j == start_j {
+        runs.push(start_i..i);
+    }
+    if runs.len() > 64 {
+        return Err(reason);
+    }
+    let mut accepted = vec![false; n];
+    for run in runs {
+        let mut deleted = vec![false; n];
+        deleted[run.clone()].fill(true);
+        if let Some((candidate, _)) = reconstruct(source, &tokens, &deleted) {
+            if validate(source, &candidate, protected_terms).is_ok() {
+                accepted[run].fill(true);
+            }
+        }
+    }
+    if !accepted.iter().any(|&deleted| deleted) {
+        return Err(reason);
+    }
+    let Some((candidate, _)) = reconstruct(source, &tokens, &accepted) else {
+        return Err(reason);
+    };
+    // Composition can change literal/repeat context; validate the whole set.
+    let output = validate(source, &candidate, protected_terms)?;
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_safe_deletions_without_adopting_rewrites_or_added_punctuation() {
+        let source = "Uh I need the report. Please um keep the final instruction and number 859";
+        let proposal = "I need the summary. Please keep the final instruction.";
+        let cleaned = validate_cleanup(source, proposal, &[]).unwrap();
+        assert_eq!(cleaned, "I need the report. Please keep the final instruction and number 859");
+        assert!(validate(source, &cleaned, &[]).is_ok());
+    }
+
+    #[test]
+    fn partial_cleanup_preserves_protected_mentions_quotes_and_vocabulary() {
+        for (source, proposal, expected, terms) in [
+            ("Uh keep the word um in this label.", "Keep the word in this label.", "keep the word um in this label.", vec![]),
+            ("Um, Qwen said \"uh keep 859\" today.", "Qwen said \"keep 859\" today.", "Qwen said \"uh keep 859\" today.", vec![]),
+            ("Uh keep um here and never omit 859.", "Keep here and omit 859.", "keep um here and never omit 859.", vec!["um".to_string()]),
+        ] {
+            let cleaned = validate_cleanup(source, proposal, &terms).unwrap();
+            assert_eq!(cleaned, expected);
+            assert!(validate(source, &cleaned, &terms).is_ok());
+        }
+    }
+
+    #[test]
+    fn unsupported_proposals_without_valid_deletions_remain_rejected() {
+        for (source, proposal) in [
+            ("Keep the final number 859.", "Keep the final number."),
+            ("Never delete this.", "Delete this."),
+            ("The literal word um is required.", "The literal word is required."),
+            ("Keep the report.", "Write a summary."),
+        ] {
+            assert!(validate_cleanup(source, proposal, &[]).is_err());
+        }
+    }
+
 
     #[test]
     fn matches_frozen_python_development_oracle() {
@@ -933,6 +1046,22 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn partial_results_stay_inside_the_original_edit_policy_across_frozen_cases() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/cleanup-validation-v6.json")).unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let source = case["source"].as_str().unwrap();
+            let proposal = case["proposal"].as_str().unwrap();
+            let terms: Vec<String> = serde_json::from_value(case["protected_terms"].clone()).unwrap();
+            if let Ok(output) = validate_cleanup(source, proposal, &terms) {
+                assert_eq!(validate(source, &output, &terms).unwrap(), output);
+            }
+        }
+        assert!(validate_cleanup(&"x".repeat(MAX_CLEANUP_BYTES + 1), "x", &[]).is_err());
+        assert!(validate_cleanup(&"um ".repeat(MAX_CLEANUP_WORDS + 1), "um", &[]).is_err());
     }
 
     #[test]

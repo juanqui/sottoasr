@@ -179,13 +179,13 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
             "view_history" => {
                 log::info!("Tray: Opening history window");
                 open_or_focus_window(
-                    app, "history", "history.html", "SottoASR \u{2014} History", 520.0, 640.0,
+                    app, "history", "history.html", "SottoASR \u{2014} History", 680.0, 760.0,
                 );
             }
             "settings" => {
                 log::info!("Tray: Opening settings window");
                 open_or_focus_window(
-                    app, "settings", "settings.html", "SottoASR \u{2014} Settings", 520.0, 600.0,
+                    app, "settings", "settings.html", "SottoASR \u{2014} Settings", 640.0, 760.0,
                 );
             }
             "check_updates" => {

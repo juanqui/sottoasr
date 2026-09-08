@@ -37,6 +37,8 @@ pub enum LlmCleanupStatus {
     Unavailable { reason: String },
     /// Sidecar responded with an error. Raw text was pasted.
     Failed { reason: String },
+    /// Inference completed, but no proposal edits passed source validation.
+    Rejected { reason: String },
     /// Cleanup exceeded the outer timeout. The subprocess was killed.
     TimedOut { elapsed_ms: u64 },
     /// Default / no cleanup was attempted this recording.
@@ -238,6 +240,8 @@ impl PartialEq for Transcription {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmStatus {
+    pub enabled: bool,
+    pub busy: bool,
     pub available: bool,
     pub unavailable_reason: Option<String>,
     pub downloaded: bool,
@@ -261,6 +265,8 @@ pub struct LlmStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelStatus {
+    pub initializing: bool,
+    pub error: Option<String>,
     pub downloaded: bool,
     pub loaded: bool,
     pub path: Option<String>,

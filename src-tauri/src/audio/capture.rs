@@ -285,7 +285,7 @@ impl AudioCaptureBackend for AudioCapture {
                         level_emit_count += 1;
                         if level_emit_count % 30 == 1 {
                             // Log every ~1 second to verify levels are flowing
-                            log::info!("Audio level: {:.4} (emit #{})", rms, level_emit_count);
+                            log::debug!("Audio level: {:.4} (emit #{})", rms, level_emit_count);
                         }
                     }
                 },

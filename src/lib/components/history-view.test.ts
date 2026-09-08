@@ -49,3 +49,17 @@ it('registers live history before taking its initial authoritative snapshot',asy
   subscribed(vi.fn());await vi.waitFor(()=>expect(getTranscriptions).toHaveBeenCalledOnce());
   await vi.waitFor(()=>expect(transcriptionStore.loaded).toBe(true));
 });
+
+it('filters cleanup issues, keeps diagnostics readable, and clears search/filter together', async () => {
+  vi.mocked(getTranscriptions).mockResolvedValue([
+    {id:'good',text:'Cleaned narration',created_at:'2026-09-08T12:00:00Z',duration_ms:1000,word_count:2,llm_applied:true,llm_cleanup_status:{kind:'applied',detail:{elapsed_ms:100}}},
+    {id:'rejected',text:'Original narration',created_at:'2026-09-07T12:00:00Z',duration_ms:1000,word_count:2,llm_cleanup_status:{kind:'rejected',detail:{reason:'Protected span changed'}}},
+  ]);
+  await render();button('Cleanup issues').click();flushSync();
+  expect(target.querySelectorAll('.history-item')).toHaveLength(1);
+  expect(target.querySelector('.date-group')).toBeTruthy();
+  target.querySelector<HTMLButtonElement>('.item-body')!.click();flushSync();
+  expect(target.querySelector('.cleanup-explanation')?.textContent).toContain('The model responded');
+  expect(target.querySelector('.cleanup-explanation')?.textContent).toContain('Protected span changed');
+  button('Clear filters').click();flushSync();expect(target.querySelectorAll('.history-item')).toHaveLength(2);
+});

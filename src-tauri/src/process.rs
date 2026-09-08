@@ -52,6 +52,14 @@ impl ProcessRegistry {
         }
     }
 
+    fn is_alive(&self, pid: u32) -> bool {
+        let registry = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        registry.children.iter().filter_map(Weak::upgrade).any(|child| {
+            let mut child = child.lock().unwrap_or_else(|e| e.into_inner());
+            child.id() == pid && matches!(child.try_wait(), Ok(None))
+        })
+    }
+
     fn shutdown(&self) {
         let children = {
             let mut registry = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -121,6 +129,10 @@ pub(crate) fn terminate_registered(pid: u32) {
     PROCESSES.terminate(pid);
 }
 
+pub(crate) fn registered_is_alive(pid: i32) -> bool {
+    pid > 0 && PROCESSES.is_alive(pid as u32)
+}
+
 /// Bound a subprocess and its owned process group. Output readers keep pipes
 /// flowing while try_wait enforces the deadline, retaining at most 1 MiB per pipe.
 pub(crate) fn bounded_command(
@@ -178,6 +190,16 @@ pub(crate) fn bounded_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readiness_uses_owned_live_child_state_and_detects_exit() {
+        let child = OwnedChild::spawn(Command::new("sh").args(["-c", "sleep 20"])).unwrap();
+        let pid = child.id() as i32;
+        assert!(registered_is_alive(pid));
+        assert!(!registered_is_alive(0));
+        child.terminate();
+        assert!(!registered_is_alive(pid));
+    }
 
     #[test]
     #[cfg(unix)]

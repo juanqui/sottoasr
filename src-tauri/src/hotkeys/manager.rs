@@ -207,8 +207,8 @@ pub fn register_shortcuts(
                     "settings",
                     "settings.html",
                     "SottoASR \u{2014} Settings",
-                    520.0,
-                    600.0,
+                    640.0,
+                    760.0,
                 );
             }
         }).map_err(|e| format!("Failed to register open-settings shortcut '{}': {}", open_settings_shortcut, e))?;
@@ -507,6 +507,7 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
                         | LlmCleanupStatus::Idle => 0,
                         LlmCleanupStatus::Unavailable { .. }
                         | LlmCleanupStatus::Failed { .. }
+                        | LlmCleanupStatus::Rejected { .. }
                         | LlmCleanupStatus::TimedOut { .. } => 2000,
                     }
                 };

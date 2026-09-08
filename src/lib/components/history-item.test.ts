@@ -28,12 +28,12 @@ it('exposes raw text and differences for dictionary edits with AI disabled', () 
 
   expect(target.textContent).toContain('Dictionary applied');
   expect(target.textContent).not.toContain('AI Cleaned');
-  button('Raw').click();
+  button('Original').click();
   flushSync();
   button('Copy transcript').click();
   expect(oncopy).toHaveBeenCalledWith('Use Qwen next.');
 
-  button('Diff').click();
+  button('Changes').click();
   flushSync();
   expect(target.querySelector('.diff-removed')?.textContent).toBe('Quen');
   expect(target.querySelector('.diff-added')?.textContent).toBe('Qwen');
@@ -116,4 +116,14 @@ it.each([
   (target.querySelector('.item-body') as HTMLButtonElement).click(); flushSync();
   expect(target.querySelector('.cleanup-explanation')?.textContent).toBe(explanation);
   expect(target.querySelector('.cleanup-fail-badge')).toBeNull();
+});
+
+it('keeps expanded narration selectable and copies the explicit original separately', () => {
+  const item:Transcription={id:'copy-original',text:'Please keep this.',raw_text:'Please um keep this.',created_at:'2026-09-08T12:00:00Z',duration_ms:1000,word_count:3,llm_applied:true,llm_cleanup_status:{kind:'applied',detail:{elapsed_ms:123}}};
+  const oncopy=vi.fn();target=document.createElement('div');document.body.append(target);
+  component=mount(HistoryItem,{target,props:{item,oncopy,ondelete:vi.fn(),expanded:true}});flushSync();
+  expect(target.querySelector('.expanded-content')?.closest('button')).toBeNull();
+  Array.from(target.querySelectorAll('button')).find((button)=>button.textContent?.trim()==='Copy original')!.click();
+  expect(oncopy).toHaveBeenCalledWith(item.raw_text);
+  expect(target.querySelector('.cleanup-explanation')?.textContent).toContain('0.1s');
 });

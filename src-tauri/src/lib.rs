@@ -25,6 +25,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default()
             .level(log::LevelFilter::Info)
+            .max_file_size(2 * 1024 * 1024)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
             .targets([
                 tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir { file_name: None },
@@ -159,7 +161,7 @@ pub fn run() {
                 log::error!("Keyboard shortcuts could not be registered: {error}");
                 tray::menu::open_or_focus_window(
                     &handle, "settings", "settings.html",
-                    "SottoASR — Review Keyboard Shortcuts", 520.0, 600.0,
+                    "SottoASR — Review Keyboard Shortcuts", 640.0, 760.0,
                 );
             }
 
@@ -190,12 +192,8 @@ pub fn run() {
                 let asr_handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let state: tauri::State<'_, AppState> = asr_handle.state();
-                    if let Err(e) = asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await {
+                    if let Err(e) = commands::setup::init_asr(asr_handle.clone(), state).await {
                         log::error!("Background ASR init failed: {}", e);
-                    } else {
-                        state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
-                        log::info!("ASR engine ready");
-                        commands::vocabulary::restore_cached(asr_handle.clone());
                     }
                 });
             }

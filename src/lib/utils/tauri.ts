@@ -15,6 +15,7 @@ export type LlmCleanupStatus =
 	| { kind: "disabled" }
 	| { kind: "unavailable"; detail: { reason: string } }
 	| { kind: "failed"; detail: { reason: string } }
+	| { kind: "rejected"; detail: { reason: string } }
 	| { kind: "timed_out"; detail: { elapsed_ms: number } }
 	| { kind: "idle" };
 
@@ -82,6 +83,8 @@ export interface Settings {
 }
 
 export interface ModelStatus {
+	initializing?: boolean;
+	error?: string | null;
 	downloaded: boolean;
 	loaded: boolean;
 	path: string | null;
@@ -255,6 +258,8 @@ export function completeSetup(): Promise<SetupResult> {
 // ---- LLM transcript cleanup commands ----
 
 export interface LlmStatus {
+	enabled?: boolean;
+	busy?: boolean;
 	available: boolean;
 	unavailable_reason: string | null;
 	downloaded: boolean;

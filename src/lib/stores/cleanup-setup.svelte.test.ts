@@ -43,3 +43,19 @@ it('clears the Save-to-enable reminder when a ready activation is cancelled', as
   expect(setup.notice).toContain('Ready. Save'); expect(setup.pending).toBe(false);
   setup.cancel(); expect(setup.notice).toBe('');
 });
+
+it('does not let a poll started during preparation erase ready acknowledgement', async () => {
+  const preparing=deferred<LlmStatus>(); const reading=deferred<LlmStatus>();
+  vi.mocked(prepareLlmModel).mockReturnValue(preparing.promise); vi.mocked(getLlmStatus).mockReturnValue(reading.promise);
+  const setup=new CleanupSetup(); const activation=setup.enable(vi.fn()); const poll=setup.refresh();
+  preparing.resolve(ready); await activation;
+  reading.resolve({...ready,loaded:false,preparing:true}); await poll;
+  expect(setup.status?.loaded).toBe(true); expect(setup.status?.preparing).toBe(false);
+});
+it('coalesces status reads and clears stale loaded status after a read failure', async () => {
+  const reading=deferred<LlmStatus>();vi.mocked(getLlmStatus).mockReturnValueOnce(reading.promise);
+  const setup=new CleanupSetup(); const first=setup.refresh();await setup.refresh();
+  expect(getLlmStatus).toHaveBeenCalledOnce();reading.resolve(ready);await first;
+  vi.mocked(getLlmStatus).mockRejectedValueOnce(new Error('Connection lost'));await setup.refresh();
+  expect(setup.status).toBeNull();expect(setup.error).toContain('Connection lost');
+});

@@ -5,6 +5,7 @@
   import { CleanupSetup } from '../stores/cleanup-setup.svelte';
   import { VocabularySetup } from '../stores/vocabulary-setup.svelte';
   import { createEventScope } from '../utils/event-scope';
+  import ModelDashboard from './model-dashboard.svelte';
   import SettingsGeneral from './settings-general.svelte';
   import SettingsDictation from './settings-dictation.svelte';
   import SettingsVocabulary from './settings-vocabulary.svelte';
@@ -84,6 +85,7 @@
 
 <div class="settings-window">
   <header class="settings-header"><h1>Settings</h1><p>Make SottoASR work your way.</p></header>
+  <ModelDashboard {cleanup} onconfigure={() => { selected = 1; }} />
   <div class="settings-nav" role="tablist" aria-label="Settings sections">
     {#each sections as item, index}
       <button type="button" role="tab" id={`settings-tab-${item.id}`} aria-controls="settings-section" aria-selected={selected === index} tabindex={selected === index ? 0 : -1} class:active={selected === index} onclick={() => { selected = index; }} onkeydown={(event) => navigate(event, index)}>{item.label}</button>

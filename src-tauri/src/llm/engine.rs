@@ -20,6 +20,7 @@ pub fn next_job_id() -> u64 {
 /// Production: Python sidecar via stdin/stdout JSON protocol.
 /// Tests: returns an untrusted complete text proposal.
 pub trait LlmBackend: Send {
+    fn is_alive(&mut self) -> bool { true }
     /// Propose cleanup; the source validator authorizes reconstruction separately.
     fn cleanup(&mut self, text: &str) -> Result<String, String>;
 
@@ -361,6 +362,13 @@ pub fn validate_loaded_model(response: &serde_json::Value) -> Result<(), String>
 
 fn cleanup_proposal(response: &serde_json::Value) -> Result<String, String> {
     if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+        // These failures can leave native generation in a permanently bad state.
+        // Do not keep reusing that process just because its JSON pipe still works.
+        if matches!(response["error_code"].as_str(),
+            Some("operation_failed" | "timeout" | "model_identity" | "runtime_setup" | "model_setup")) {
+            return Err(format!("Cleanup runtime requires restart ({}); original text preserved",
+                response["error_code"].as_str().unwrap_or("unknown")));
+        }
         return Err(response
             .get("error")
             .and_then(serde_json::Value::as_str)
@@ -385,9 +393,16 @@ fn cleanup_proposal(response: &serde_json::Value) -> Result<String, String> {
 }
 
 impl LlmBackend for LlmEngine {
+    fn is_alive(&mut self) -> bool {
+        matches!(self.child.lock().try_wait(), Ok(None))
+    }
     fn cleanup(&mut self, text: &str) -> Result<String, String> {
         let response = self.request(&serde_json::json!({"action": "cleanup", "text": text}))?;
-        cleanup_proposal(&response)
+        let result = cleanup_proposal(&response);
+        if result.as_ref().err().is_some_and(|error| is_zombie_error(error)) {
+            self.quit();
+        }
+        result
     }
 
     fn request_raw(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -775,6 +790,7 @@ pub fn is_zombie_error(err: &str) -> bool {
         || e.contains("crashed")
         || e.contains("timed out")
         || e.starts_with("sidecar protocol closed:")
+        || e.starts_with("cleanup runtime requires restart")
 }
 
 /// Ensure a live sidecar handle is available, spawning + loading the model if
@@ -790,11 +806,15 @@ pub async fn ensure_running(state: &AppState) -> Result<Box<dyn LlmBackend>, Str
     // Fast path — sidecar already running in the guard.
     {
         let mut guard = state.llm_engine.lock().await;
-        if let Some(llm) = guard.take() {
-            state.llm_loaded.store(true, Ordering::SeqCst);
-            return Ok(llm);
+        if let Some(mut llm) = guard.take() {
+            if llm.is_alive() {
+                state.llm_loaded.store(true, Ordering::SeqCst);
+                return Ok(llm);
+            }
+            log::warn!("Resident cleanup process exited; starting a fresh process");
         }
     }
+    state.llm_loaded.store(false, Ordering::SeqCst);
 
     // Slow path — spawn + load, with retries.
     let mut last_err = String::new();
@@ -1022,6 +1042,32 @@ mod tests {
                 .load(Ordering::SeqCst),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_fault_after_three_requests_retires_the_resident_process() {
+        use crate::test_support::{MockAudioCapture, MockAsrEngine, MockPasteBackend};
+        let engine = stub_engine("import json,sys\nn=0\nfor line in sys.stdin:\n r=json.loads(line); n+=1\n print(json.dumps({'ok':True,'finish_reason':'stop','text':'Please keep the final instruction.'} if n<=3 else {'ok':False,'error_code':'operation_failed','error':'Local cleanup operation failed; original text preserved.'}),flush=True)");
+        let pid = engine.registered_pid.as_ref().unwrap().clone();
+        let mut state = AppState::new_with_backends(Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")), Some(Box::new(engine)),
+            Box::new(MockPasteBackend::new()), crate::models::Settings::default());
+        state.llm_pid = pid.clone();
+        let source = "Please um keep the final instruction.";
+        for _ in 0..3 {
+            let (_, status) = crate::llm::cleanup::run_cleanup(&state, source, &[]).await;
+            assert!(matches!(status, crate::models::LlmCleanupStatus::Applied { .. }));
+        }
+        let (output, status) = crate::llm::cleanup::run_cleanup(&state, source, &[]).await;
+        assert_eq!(output, source);
+        assert!(matches!(status, crate::models::LlmCleanupStatus::Failed { .. }));
+        assert!(state.llm_engine.lock().await.is_none());
+        assert!(!state.llm_loaded.load(Ordering::SeqCst));
+        assert_eq!(pid.load(Ordering::SeqCst), 0);
+        // A fresh process handles the next recording; no poisoned handle survives.
+        *state.llm_engine.lock().await = Some(Box::new(stub_engine("import json,sys\nfor line in sys.stdin:\n print(json.dumps({'ok':True,'finish_reason':'stop','text':'Please keep the final instruction.'}),flush=True)")));
+        let (_, status) = crate::llm::cleanup::run_cleanup(&state, source, &[]).await;
+        assert!(matches!(status, crate::models::LlmCleanupStatus::Applied { .. }));
     }
 
     #[test]

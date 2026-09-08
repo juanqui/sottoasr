@@ -235,6 +235,18 @@ class CleanupProtocolTests(unittest.TestCase):
         self.assertEqual(len(output.getvalue().splitlines()), 1)
         self.assertEqual(json.loads(output.getvalue())['error_code'], 'request_limit')
 
+    def test_runtime_diagnostics_have_locations_without_private_exception_values(self):
+        stream = MagicMock(side_effect=RuntimeError('SECRET transcript value'))
+        stack, _, _, _ = self.fake_runtime(stream)
+        stderr = io.StringIO()
+        with stack, patch('sys.stderr', stderr):
+            response = cleanup.safe_response({'action': 'cleanup', 'text': 'PRIVATE narration'})
+        self.assertEqual(response['error_code'], 'operation_failed')
+        self.assertIn('RuntimeError', stderr.getvalue())
+        self.assertIn('llm_cleanup.py:', stderr.getvalue())
+        self.assertNotIn('SECRET', stderr.getvalue())
+        self.assertNotIn('PRIVATE', stderr.getvalue())
+
     def test_invalid_requests_never_echo_private_data(self):
         source = io.BytesIO(b'{private malformed\n["private"]\n{"action":"private-action"}\n{"action":"quit"}\n')
         output = io.BytesIO()

@@ -745,7 +745,7 @@ mod tests {
             if !enabled {
                 assert_eq!(transcription.llm_cleanup_status, LlmCleanupStatus::Disabled);
             } else if cleaned.is_none() {
-                assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Failed { .. }));
+                assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Rejected { .. }));
             }
         }
     }
@@ -772,13 +772,21 @@ mod tests {
                 pipeline_stop_recording(&state, &events).await.unwrap();
                 let last = state.last_transcription.lock().await;
                 let transcription = last.as_ref().unwrap();
-                assert_eq!(transcription.text, raw); // Also the source for Copy Last.
-                assert!(!transcription.llm_applied);
+                let expected = if raw.starts_with("Please um") {
+                    "Please retain the final instruction and number 859."
+                } else { raw };
+                assert_eq!(transcription.text, expected); // Also the source for Copy Last.
+                assert_eq!(transcription.llm_applied, expected != raw);
                 assert!(transcription.cleanup_suggestion.is_none());
-                assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Failed { .. }));
-                assert_eq!(events.transcriptions.lock().unwrap()[0].text, raw);
-                if auto_paste { assert_eq!(paste.last_pasted().unwrap().text, raw); }
-                else { assert_eq!(paste.copied_texts.lock().unwrap().last().map(String::as_str), Some(raw)); }
+                if expected == raw {
+                    assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Rejected { .. }));
+                } else {
+                    assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Applied { .. }));
+                    assert_eq!(transcription.raw_text.as_deref(), Some(raw));
+                }
+                assert_eq!(events.transcriptions.lock().unwrap()[0].text, expected);
+                if auto_paste { assert_eq!(paste.last_pasted().unwrap().text, expected); }
+                else { assert_eq!(paste.copied_texts.lock().unwrap().last().map(String::as_str), Some(expected)); }
             }
         }
     }
@@ -820,7 +828,7 @@ mod tests {
         let item = last.as_ref().unwrap();
         assert_eq!(item.text, raw);
         assert!(!item.llm_applied);
-        assert!(matches!(item.llm_cleanup_status, LlmCleanupStatus::Failed { .. }));
+        assert!(matches!(item.llm_cleanup_status, LlmCleanupStatus::Rejected { .. }));
     }
 
     #[tokio::test]

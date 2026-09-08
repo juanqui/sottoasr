@@ -34,7 +34,10 @@ async fn current_status(app: &AppHandle, state: &AppState) -> Result<LlmStatus, 
         downloading: state.llm_downloading.load(Ordering::SeqCst),
         preparing: state.llm_preparing.load(Ordering::SeqCst),
         setup_error: state.llm_setup_error.lock().await.clone(),
-        loaded: state.llm_loaded.load(Ordering::SeqCst) && state.llm_pid.load(Ordering::SeqCst) > 0,
+        loaded: state.llm_loaded.load(Ordering::SeqCst)
+            && crate::process::registered_is_alive(state.llm_pid.load(Ordering::SeqCst)),
+        enabled: state.settings.lock().await.llm_cleanup_enabled,
+        busy: state.llm_operation.try_lock().is_err(),
         model_name: config.display_name.to_string(),
         model_url: format!("https://huggingface.co/{}", config.id),
         download_size_mb: config.download_size_mb,
@@ -116,8 +119,14 @@ async fn load_locked(state: &AppState) -> Result<(), String> {
     .await
     .map_err(|e| format!("Cleanup load task failed: {e}"))?;
     let (sidecar, response) = result;
-    let response = response?;
-    engine::validate_loaded_model(&response)?;
+    let response = response.and_then(|response| {
+        engine::validate_loaded_model(&response)?;
+        Ok(response)
+    });
+    if let Err(error) = response {
+        state.llm_loaded.store(false, Ordering::SeqCst);
+        return Err(error);
+    }
     state.llm_loaded.store(true, Ordering::SeqCst);
     *state.llm_engine.lock().await = Some(sidecar);
     Ok(())

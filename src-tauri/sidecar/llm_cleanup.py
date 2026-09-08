@@ -13,6 +13,7 @@ import signal
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 MODEL_ID = "openbmb/MiniCPM5-2B-MLX"
@@ -317,9 +318,13 @@ def safe_response(request):
         return {"ok": False, "error_code": error.code, "error": str(error)}
     except TimeoutError:
         return {"ok": False, "error_code": "timeout", "error": "Cleanup timed out; original text preserved."}
-    except Exception:
-        # Library/tokenizer exception strings can contain private transcript data.
-        return {"ok": False, "error_code": "operation_failed", "error": "Local cleanup operation failed; original text preserved."}
+    except Exception as error:
+        # Exception values, source lines and locals can contain dictated text.
+        # Code locations and the exception class identify faults without it.
+        frames = traceback.extract_tb(error.__traceback__)[-6:]
+        locations = ",".join(f"{Path(f.filename).name}:{f.lineno}:{f.name}" for f in frames)
+        log(f"runtime_error type={type(error).__name__} frames={locations}")
+        return {"ok": False, "error_code": "operation_failed", "error": "Local cleanup runtime failed; it will restart for the next recording. Original text preserved."}
 
 
 def encode_response(response):

@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use tauri::{AppHandle, Emitter, State};
 use crate::asr::model;
 use crate::models::ModelStatus;
@@ -17,6 +19,8 @@ pub async fn get_asr_backend() -> Result<serde_json::Value, String> {
 pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus, String> {
     let mut status = model::get_model_status();
     status.loaded = state.is_model_loaded.load(std::sync::atomic::Ordering::SeqCst);
+    status.initializing = state.asr_initializing.load(Ordering::SeqCst);
+    status.error = state.asr_init_error.lock().unwrap_or_else(|e| e.into_inner()).clone();
     Ok(status)
 }
 
@@ -37,12 +41,18 @@ pub async fn init_asr(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    app.emit("asr-init-started", serde_json::json!({
+    if state.asr_initializing.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return Err("Speech recognition is already loading".into());
+    }
+    *state.asr_init_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let _ = app.emit("asr-init-started", serde_json::json!({
         "backend": model::backend_name(),
-    })).map_err(|e| e.to_string())?;
+    }));
 
     let init_result = crate::asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await;
 
+    state.asr_initializing.store(false, Ordering::SeqCst);
+    *state.asr_init_error.lock().unwrap_or_else(|e| e.into_inner()) = init_result.as_ref().err().cloned();
     match init_result {
         Ok(()) => {
             state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -54,6 +64,7 @@ pub async fn init_asr(
             Ok(())
         }
         Err(e) => {
+            state.is_model_loaded.store(false, Ordering::SeqCst);
             log::error!("ASR init failed: {}", e);
             let _ = app.emit("asr-init-error", serde_json::json!({ "error": &e }));
             Err(e)
@@ -110,23 +121,7 @@ pub async fn complete_setup(
     })).map_err(|e| e.to_string())?;
 
     // Initialize ASR — FluidAudio blocks for 20-30s on first run
-    let asr_ok = {
-        match crate::asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await {
-            Ok(()) => {
-                state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
-                crate::commands::vocabulary::restore_cached(app.clone());
-                true
-            }
-            Err(e) => {
-                log::error!("ASR init failed during setup: {}", e);
-                let _ = app.emit("setup-progress", serde_json::json!({
-                    "step": "asr_error",
-                    "message": format!("Model setup failed: {}", e),
-                }));
-                false
-            }
-        }
-    };
+    let asr_ok = init_asr(app.clone(), state).await.is_ok();
 
     app.emit("setup-progress", serde_json::json!({
         "step": "complete",

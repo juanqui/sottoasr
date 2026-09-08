@@ -15,13 +15,14 @@ export class CleanupSetup {
   private statusRequest = 0;
 
   async refresh() {
+    if (this.loading || this.disposed) return;
     const request = ++this.statusRequest;
     this.loading = true;
     try {
       const status = await getLlmStatus();
       if (!this.disposed && request === this.statusRequest) { this.status = status; if (!this.pending) this.error = status.setup_error ?? ''; }
     } catch (error) {
-      if (!this.disposed && request === this.statusRequest) this.error = String(error);
+      if (!this.disposed && request === this.statusRequest) { this.status = null; this.error = String(error); }
     } finally {
       if (!this.disposed && request === this.statusRequest) this.loading = false;
     }
@@ -38,6 +39,10 @@ export class CleanupSetup {
     try {
       const status = await prepareLlmModel();
       if (this.disposed || intent !== this.intent) return;
+      // A poll begun during preparation may still describe the old unloaded
+      // process. The preparation acknowledgement is newer and authoritative.
+      ++this.statusRequest;
+      this.loading = false;
       this.status = status;
       if (!status.loaded || !status.downloaded || status.setup_error) {
         throw new Error(status.setup_error || 'The cleanup model is not ready. Try setup again.');
@@ -49,6 +54,11 @@ export class CleanupSetup {
     } finally {
       if (!this.disposed && intent === this.intent) this.pending = false;
     }
+  }
+
+  async prepare() {
+    await this.enable(() => {});
+    this.acknowledgeSaved(this.status?.enabled === true);
   }
 
   cancel() {

@@ -2,6 +2,24 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.8.4] — 2026-09-08
+
+### Added
+- Live ASR and AI cleanup readiness indicators in Settings, with preparation and recovery actions.
+- History filters for cleaned transcripts and cleanup issues, date groups, visible failure details and explicit original-text copying.
+
+### Fixed
+- Recover the cleanup sidecar after fatal runtime errors so later recordings can start a fresh process.
+- Retain independently validated filler removals from otherwise rejected model proposals while preserving source wording and protected content.
+- Distinguish rejected cleanup proposals from runtime failures and prevent stale readiness indicators.
+- Retain more diagnostic logs and report cleanup outcomes without logging transcript text.
+
+### Changed
+- Give Settings and History more room and compute transcript differences only when opened.
+
+### Infrastructure
+- Add resident-process failure recovery, conservative cleanup, readiness and history regression coverage.
+
 ## [0.8.3] — 2026-09-08
 
 ### Changed
