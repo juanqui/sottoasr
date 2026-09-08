@@ -2,9 +2,19 @@ name: Build & Release
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: Create a draft release (otherwise only verify and upload artifacts)
+        type: boolean
+        default: false
+
+concurrency:
+  group: signed-build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-macos:
@@ -27,16 +37,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify release target
+        if: github.event_name != 'workflow_dispatch' || inputs.create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/check-release-target.py
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 'lts/*'
+          node-version: '24'
           cache: 'npm'
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install verified Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: ${{ matrix.target }}
+          components: clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -58,7 +76,19 @@ jobs:
 
       - name: Run Rust tests
         working-directory: src-tauri
-        run: cargo test --no-default-features --features custom-protocol,llm-cleanup
+        run: cargo test --locked
+
+      - name: Rust lint
+        working-directory: src-tauri
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Python protocol tests
+        run: |
+          python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
 
       - name: Frontend type check
         run: npm run check
@@ -66,16 +96,8 @@ jobs:
       - name: Audit Rust dependencies
         working-directory: src-tauri
         run: |
-          cargo install cargo-audit --quiet
-          # RUSTSEC-2026-0097: rand 0.9.x unsound with custom loggers — not applicable,
-          #   transitive via tokenizers -> parakeet-rs
-          # RUSTSEC-2026-0098/0099/0104: rustls-webpki certificate validation issues —
-          #   transitive via Tauri/Wry, fixed in newer rustls but not yet pulled by Wry
-          cargo audit \
-            --ignore RUSTSEC-2026-0097 \
-            --ignore RUSTSEC-2026-0098 \
-            --ignore RUSTSEC-2026-0099 \
-            --ignore RUSTSEC-2026-0104
+          cargo install cargo-audit --version 0.22.2 --locked --quiet
+          cargo audit
 
       - name: Audit npm dependencies
         run: npm audit --omit=dev || true
@@ -116,7 +138,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Build and release
-        # v0 is the latest major for Tauri v2 — auto-updates within 0.x
+        # Keep the established v0 action contract; PR CI exercises the same action.
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,7 +151,8 @@ jobs:
           # which contain critical -rpath entries for Swift runtime resolution.
           # The Swift compat library -L search path lives in .cargo/config.toml.
         with:
-          tagName: v__VERSION__
+          tagName: ${{ (github.event_name != 'workflow_dispatch' || inputs.create_release) && 'v__VERSION__' || '' }}
+          releaseCommitish: ${{ github.sha }}
           releaseName: 'SottoASR v__VERSION__'
           releaseBody: |
             ## What's New
@@ -150,9 +173,19 @@ jobs:
 
             - macOS 14 Sonoma or later
             - Apple Silicon (M1 or later)
-            - Python 3.10+ (only required for optional AI Transcript Cleanup feature)
+            - Python 3.11+ (only required for optional AI Transcript Cleanup feature)
 
             This build is signed and notarized by Apple.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
+
+      - name: Upload verified macOS packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-macos-${{ github.sha }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz*
+          if-no-files-found: error
+          retention-days: 14

@@ -50,6 +50,7 @@ impl AudioCaptureBackend for MockAudioCapture {
         sender: Sender<Vec<f32>>,
         _is_recording: Arc<AtomicBool>,
         _level_callback: Box<dyn Fn(f32) + Send + 'static>,
+        _error_callback: Box<dyn Fn(String) + Send + 'static>,
     ) -> Result<(), String> {
         // Send all samples immediately as a single chunk
         sender.send(self.samples.clone())
@@ -72,6 +73,7 @@ impl AudioCaptureBackend for MockAudioCapture {
 pub struct MockAsrEngine {
     /// Text to return from transcribe_file/transcribe_samples.
     response: Result<String, String>,
+    vocabulary_response: Option<(Vec<String>, String)>,
 }
 
 impl MockAsrEngine {
@@ -79,6 +81,14 @@ impl MockAsrEngine {
     pub fn with_text(text: &str) -> Self {
         Self {
             response: Ok(text.to_string()),
+            vocabulary_response: None,
+        }
+    }
+
+    pub fn with_vocabulary(base: &str, terms: &[&str], text: &str) -> Self {
+        Self {
+            response: Ok(base.into()),
+            vocabulary_response: Some((terms.iter().map(|term| (*term).to_owned()).collect(), text.into())),
         }
     }
 
@@ -86,6 +96,7 @@ impl MockAsrEngine {
     pub fn with_error(error: &str) -> Self {
         Self {
             response: Err(error.to_string()),
+            vocabulary_response: None,
         }
     }
 }
@@ -101,7 +112,7 @@ impl AsrEngine for MockAsrEngine {
 
     fn transcribe_file(&mut self, _path: &str) -> Result<AsrResult, String> {
         match &self.response {
-            Ok(text) => Ok(AsrResult {
+            Ok(text) => Ok(AsrResult { unboosted_text: None,
                 text: text.clone(),
                 duration_secs: 1.0,
                 processing_time_secs: 0.01,
@@ -109,6 +120,21 @@ impl AsrEngine for MockAsrEngine {
             }),
             Err(e) => Err(e.clone()),
         }
+    }
+
+    fn transcribe_file_with_vocabulary(&mut self, path: &str, terms: &[String]) -> Result<AsrResult, String> {
+        let mut result = self.transcribe_file(path)?;
+        if let Some((expected, boosted)) = &self.vocabulary_response {
+            if terms == expected && *boosted != result.text {
+                result.unboosted_text = Some(result.text);
+                result.text = boosted.clone();
+            }
+        }
+        Ok(result)
+    }
+
+    fn install_vocabulary(&mut self, _: crate::asr::engine::PreparedVocabulary) -> Result<(), String> {
+        Ok(())
     }
 
     fn transcribe_samples(&mut self, _samples: &[f32], _sample_rate: u32) -> Result<AsrResult, String> {
@@ -136,12 +162,10 @@ pub struct MockLlmBackend {
 }
 
 impl MockLlmBackend {
-    /// Create a mock that returns the given fixed text regardless of input.
-    pub fn fixed(output: &str) -> Self {
-        let output = output.to_string();
-        Self {
-            transform: Box::new(move |_| Ok(output.clone())),
-        }
+    /// Create a mock that proposes complete, untrusted text.
+    pub fn proposal(text: &str) -> Self {
+        let output = text.to_string();
+        Self { transform: Box::new(move |_| Ok(output.clone())) }
     }
 
     /// Create a mock that returns an error.
@@ -194,6 +218,7 @@ pub struct MockPasteBackend {
     pub accessibility_trusted: bool,
     /// If set, paste operations return this error.
     pub paste_error: Mutex<Option<String>>,
+    pub copy_error: Mutex<Option<String>>,
 }
 
 impl MockPasteBackend {
@@ -204,6 +229,7 @@ impl MockPasteBackend {
             frontmost_pid: 12345,
             accessibility_trusted: true,
             paste_error: Mutex::new(None),
+            copy_error: Mutex::new(None),
         }
     }
 
@@ -239,6 +265,7 @@ impl PasteBackend for MockPasteBackend {
     }
 
     fn copy_to_clipboard(&self, text: &str) -> Result<(), String> {
+        if let Some(error) = self.copy_error.lock().unwrap().as_ref() { return Err(error.clone()); }
         self.copied_texts.lock().unwrap().push(text.to_string());
         Ok(())
     }

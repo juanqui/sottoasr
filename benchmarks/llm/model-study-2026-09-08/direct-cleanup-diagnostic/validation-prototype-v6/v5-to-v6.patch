@@ -1,0 +1,202 @@
+--- v5/source_validation.py
++++ v6/source_validation.py
+@@ -1,6 +1,6 @@
+ """Experimental source-deletion validator; no semantic safety guarantee.
+ 
+-Version 5 fixes complete code delimiters after version 4 development. No model
++Version 6 revises reviewed eligibility/protection rules on revealed development data. No model
+ loading, production imports, network, or release-qualification labels. Run this file directly for focused unit checks.
+ """
+ from dataclasses import dataclass
+@@ -20,8 +20,16 @@
+     'to', 'of', 'for', 'from', 'in', 'on', 'at', 'with', 'by', 'and', 'or',
+     'is', 'are', 'was', 'were', 'have', 'has', 'had', 'this', 'that',
+ })
++SINGLE_REPEAT_PROTECTED = frozenset({
++    'very', 'really', 'so', 'too', 'much', 'more', 'less', 'quite', 'rather',
++    'extremely', 'absolutely', 'yes', 'yeah', 'yep', 'yup', 'nope', 'okay', 'ok',
++    'right', 'hey', 'wait', 'stop', 'please',
++})
++HONORIFICS = frozenset({'dr', 'mr', 'mrs', 'ms', 'mx', 'prof', 'rev', 'hon'})
++LITERAL_NOUNS = frozenset({'string', 'literal', 'label', 'labels', 'tag', 'tags',
++                           'parameter', 'parameters'})
+ MENTION_MARKERS = frozenset({
+-    'word', 'words', 'token', 'tokens', 'name', 'names', 'label', 'labels',
++    'word', 'words', 'token', 'tokens', 'name', 'names',
+     'letter', 'letters', 'identifier', 'identifiers', 'sequence', 'spell', 'type',
+ })
+ UNITS = frozenset({'mm', 'cm', 'm', 'km', 'kg', 'g', 'mg', 'lb', 'lbs',
+@@ -164,13 +172,19 @@
+     spans = []
+     keys = [token.key for token in tokens]
+     for i, token in enumerate(tokens):
+-        if token.key in {'string', 'literal'}:
++        if token.key in LITERAL_NOUNS:
+             start = i + 1
+             if start < len(tokens) and keys[start] in {'literal', 'value'}:
+                 start += 1
++            elif (token.key in {'label', 'labels'} and start < len(tokens)
++                  and keys[start] in {'reads', 'says', 'is', 'was'}):
++                start += 1
++            elif (start+1 < len(tokens) and keys[start] in {'starts', 'ends'}
++                  and keys[start+1] in {'in', 'with'}):
++                start += 2
+             if start < len(tokens) and re.fullmatch(r'[ \t:]*', text[token.end:tokens[start].start]) is None:
+-                # Permit only the one explicitly recognized intervening keyword.
+-                if start != i+2 or not _ordinary_gap(text, tokens, i, start):
++                # Permit only the explicitly recognized bounded introducer.
++                if start == i+1 or not _ordinary_gap(text, tokens, i, start):
+                     continue
+             if start < len(tokens):
+                 end = start + 1
+@@ -213,6 +227,13 @@
+             spans.append((token.start, token.end, 'negation'))
+         if token.key in UNITS and i and any(c.isdigit() for c in tokens[i-1].value):
+             spans.append((token.start, token.end, 'unit'))
++        if i and token.value[:1].isupper():
++            previous = tokens[i-1]
++            initial = (len(previous.value) == 1 and previous.value.isalpha()
++                       and previous.value.isupper())
++            if ((previous.key in HONORIFICS or initial)
++                    and re.fullmatch(r'\.[ \t]*', text[previous.end:token.start])):
++                spans.append((token.start, token.end, 'honorific/initial name'))
+         initial_common_restart = (
+             _sentence_start(text, tokens, i)
+             and any(len(block) > 1 and block[0] == i
+@@ -245,8 +266,9 @@
+     for size in range(1, 5):
+         for start in range(len(tokens) - 2*size + 1):
+             pattern = keys[start:start+size]
+-            # Preserve isolated emphatic content repeats such as 'very very'.
+-            if size == 1 and pattern[0] not in FUNCTION_WORDS:
++            # This exclusion applies only to isolated repeated words. It must
++            # not lock words inside otherwise eligible multiword restarts.
++            if size == 1 and pattern[0] in SINGLE_REPEAT_PROTECTED:
+                 continue
+             if size > 1 and len(set(pattern)) == 1:
+                 continue
+@@ -375,11 +397,14 @@
+     return proposal
+ 
+ 
+-def _punctuation_signature(text):
++def _punctuation_signature(text, *, keep_commas=False):
+     # These choices never enter delivered text: comma/horizontal whitespace,
+     # paired quote delimiter style, and one optional final period. No arbitrary
+     # punctuation changes, question/exclamation changes, or newline flattening.
+-    signature = re.sub(r'[ \t]+', ' ', _canonical_quotes(text).replace(',', ' ')).strip(' \t')
++    canonical = _canonical_quotes(text)
++    canonical = (re.sub(r'[ \t]*,[ \t]*', ',', canonical) if keep_commas
++                 else canonical.replace(',', ' '))
++    signature = re.sub(r'[ \t]+', ' ', canonical).strip(' \t')
+     if signature.endswith('.') and not signature.endswith('..'):
+         signature = signature[:-1]
+     return signature
+@@ -441,7 +466,7 @@
+             stack.append((i+1, j, kept))
+         if j < len(proposed) and tokens[i].key == proposed[j].key:
+             same_case = tokens[i].value == proposed[j].value
+-            initial_cap = (i not in locked and tokens[i].value[:1] in 'abcdefghijklmnopqrstuvwxyz'
++            initial_cap = (tokens[i].value[:1] in 'abcdefghijklmnopqrstuvwxyz'
+                            and proposed[j].value == tokens[i].value[:1].upper()+tokens[i].value[1:])
+             if same_case or initial_cap:
+                 stack.append((i+1, j+1, kept+(i,)))
+@@ -488,15 +513,23 @@
+             continue
+         if gaps:
+             categories.add('paired filler em-dash gap')
++        comma_match = (_punctuation_signature(output, keep_commas=True)
++                       == _punctuation_signature(comparison, keep_commas=True))
+         if output in accepted:
+             accepted[output][2] += 1
++            accepted[output][5] |= comma_match
+         else:
+-            accepted[output] = [spans, tuple(sorted(categories)), 1, tuple(caps), gaps]
++            accepted[output] = [spans, tuple(sorted(categories)), 1, tuple(caps), gaps, comma_match]
+     if not accepted:
+         return reject('Proposal requires protected/unsupported edits or punctuation changes')
+     if len(accepted) != 1:
+-        return reject('Ambiguous source reconstruction')
+-    output, (spans, categories, count, caps, gaps) = next(iter(accepted.items()))
++        # Choose only an already-valid source reconstruction. Comparison never
++        # supplies delivered punctuation, whitespace or words.
++        matching = {output: data for output, data in accepted.items() if data[5]}
++        if len(matching) != 1:
++            return reject('Ambiguous source reconstruction')
++        accepted = matching
++    output, (spans, categories, count, caps, gaps, _) = next(iter(accepted.items()))
+     return Result(True, output, 'Source-derived deletions accepted', spans, categories, count, caps, gaps)
+ 
+ 
+@@ -595,8 +628,14 @@
+         self.assert_reject('We go.\n\nUm, tomorrow.', 'We go. Tomorrow.')
+         self.assert_accept('We go.\n\nUm, tomorrow.', 'We go.\n\nUm, tomorrow.')
+ 
+-    def test_materially_different_duplicate_alignment_is_rejected(self):
+-        self.assert_reject('I, I need the report.', 'I need the report.')
++    def test_source_comma_tie_break_requires_one_existing_reconstruction(self):
++        self.assert_accept('I, I need the report.', 'I need the report.')
++        self.assert_accept('At the moment at the moment, the server is unavailable.',
++                           'At the moment, the server is unavailable.')
++        self.assert_accept('Before we start before we start, check the room.',
++                           'Before we start, check the room.')
++        self.assert_reject('I I  need the report.', 'I need the report.')
++        self.assert_reject('I, I need the report.', 'I; need the report.')
+ 
+     def test_incomplete_and_work_limits(self):
+         self.assert_reject('We um need it.', 'We need it.', completed=False)
+@@ -736,6 +775,54 @@
+         self.assert_accept(r'Keep ``path\\`` um today.', r'Keep ``path\\`` today.')
+         self.assert_reject(r'Keep ``path\`` um today.', r'Keep ``path\`` today.')
+ 
++    def test_retained_negation_can_receive_narrow_initial_capitalization(self):
++        self.assert_accept('Uh, not yet.', 'Not yet.')
++        self.assert_accept("Um, don't send it.", "Don't send it.")
++        self.assert_reject('Uh, not yet.', 'Yet.')
++        self.assert_reject('Uh, "not yet" was written.', '"Not yet" was written.')
++        self.assert_reject('Uh, not yet.', 'Not yet.', dictionary=['not yet'])
++
++    def test_general_single_word_repeats_preserve_explicit_emphasis_and_names(self):
++        for source, proposal in [
++            ('We can can finish the test.', 'We can finish the test.'),
++            ('She will will arrive soon.', 'She will arrive soon.'),
++            ('Please bring bring the wrench.', 'Please bring the wrench.'),
++            ('The device stopped stopped responding.', 'The device stopped responding.'),
++            ('I opened opened the file.', 'I opened the file.'),
++        ]:
++            self.assert_accept(source, proposal)
++        for word in ['very', 'really', 'so', 'too', 'yes', 'yeah', 'hey', 'wait', 'please', 'much']:
++            self.assert_reject(f'We said {word} {word} today.', f'We said {word} today.')
++        self.assert_reject('Meet Anna Anna tomorrow.', 'Meet Anna tomorrow.')
++        self.assert_reject('Use qwen qwen now.', 'Use qwen now.', dictionary=['Qwen'])
++        self.assert_accept('Please attach please attach the photo.', 'Please attach the photo.')
++        self.assert_accept('It is very useful very useful here.', 'It is very useful here.')
++
++    def test_bounded_labels_parameters_and_tag_endpoints(self):
++        self.assert_accept('The return label should go on on the carton.',
++                           'The return label should go on the carton.')
++        for source, proposal in [
++            ('The label reads um exactly.', 'The label reads exactly.'),
++            ('The label says uh clearly.', 'The label says clearly.'),
++            ('The label is um.', 'The label is.'),
++            ('The label was er.', 'The label was.'),
++            ('Set the parameter um to zero.', 'Set the parameter to zero.'),
++            ('The tag ends in uh, um.', 'The tag ends in.'),
++            ('The tag starts with erm, uh.', 'The tag starts with.'),
++        ]:
++            self.assert_reject(source, proposal)
++        self.assert_accept('The tag ends in uh, um.', 'The tag ends in uh.')
++        self.assert_accept('The tag starts with erm, uh.', 'The tag starts with erm.')
++        self.assert_accept('The parameter should um remain unchanged.',
++                           'The parameter should remain unchanged.')
++
++    def test_honorific_and_initial_periods_do_not_expose_names(self):
++        for prefix in ['Dr.', 'Mr.', 'Ms.', 'Prof.', 'J.']:
++            self.assert_reject(f'{prefix} Um um confirmed it.', f'{prefix} confirmed it.')
++            self.assert_accept(f'{prefix} Um um confirmed it.', f'{prefix} Um confirmed it.')
++        self.assert_accept('All set. Um, bring it.', 'All set. Bring it.')
++        self.assert_accept('Go. Um, bring it.', 'Go. Bring it.')
++
+ 
+ if __name__ == '__main__':
+     unittest.main(verbosity=2)

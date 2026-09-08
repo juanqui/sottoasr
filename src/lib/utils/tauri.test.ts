@@ -130,6 +130,7 @@ describe('Settings commands', () => {
     toggle_shortcut: 'CommandOrControl+Shift+D',
     toggle_shortcut_alt: null,
     cancel_shortcut: 'Escape',
+    open_settings_shortcut: 'CommandOrControl+Shift+Comma',
     cancel_shortcut_alt: null,
     show_overlay: true,
     auto_paste: true,
@@ -140,6 +141,8 @@ describe('Settings commands', () => {
     max_history: 500,
     launch_at_login: false,
     llm_cleanup_enabled: false,
+    dictionary: [],
+    vocabulary: [],
     auto_check_updates: true,
   };
 

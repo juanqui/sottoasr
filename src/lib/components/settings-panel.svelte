@@ -1,1019 +1,148 @@
 <script lang="ts">
-  import { settingsStore } from '../stores/settings.svelte';
-  import {
-    checkMicrophonePermission,
-    checkAccessibilityPermission,
-    requestAccessibilityPermission,
-    getLlmStatus,
-    downloadLlmModel,
-    deleteLlmModel,
-  } from '../utils/tauri';
-  import type { Settings, LlmStatus } from '../utils/tauri';
-  import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
-  import ShortcutRecorder from './shortcut-recorder.svelte';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { settingsStore } from '../stores/settings.svelte';
+  import { CleanupSetup } from '../stores/cleanup-setup.svelte';
+  import { VocabularySetup } from '../stores/vocabulary-setup.svelte';
+  import { createEventScope } from '../utils/event-scope';
+  import SettingsGeneral from './settings-general.svelte';
+  import SettingsDictation from './settings-dictation.svelte';
+  import SettingsVocabulary from './settings-vocabulary.svelte';
+  import SettingsAdvanced from './settings-advanced.svelte';
+  import ConfirmDialog from './confirm-dialog.svelte';
+  import './settings-panels.css';
 
-  // Permission status (using structured check)
-  let micPermission: string = $state('checking');
-  let accessibilityPermission: boolean | null = $state(null);
-  let accessibilityFunctional: boolean | null = $state(null);
-  let checkingPermissions: boolean = $state(false);
-  let fixingAccessibility: boolean = $state(false);
+  const sections = [
+    { id:'general', label:'General', hint:'Shortcuts, startup, and updates.' },
+    { id:'dictation', label:'Dictation', hint:'Choose how your words reach the page.' },
+    { id:'vocabulary', label:'Vocabulary', hint:'Help SottoASR recognize the words you use.' },
+    { id:'advanced', label:'Advanced', hint:'Permissions and local model details.' },
+  ] as const;
+  let selected = $state(0);
+  let feedback = $state('');
+  let closeConfirm = $state(false);
+  let closeError = $state('');
+  let allowClose = false;
+  let disposed = false;
+  const cleanup = new CleanupSetup();
+  const vocabulary = new VocabularySetup();
+  let section = $derived(sections[selected]);
 
-  // Save feedback
-  let saveMessage: string = $state('');
+  async function save(closeAfter = false) {
+    feedback = '';
+    try {
+      const result = await settingsStore.save();
+      if (disposed) return;
+      cleanup.acknowledgeSaved(result.settings.llm_cleanup_enabled);
+      feedback = settingsStore.dirty ? 'Saved. Your newer edits are still unsaved.' : 'Settings saved.';
+      void vocabulary.refresh();
+      void cleanup.refresh();
+      if (closeAfter && !settingsStore.dirty) await closeWindow();
+      else closeConfirm = false;
+    } catch { closeConfirm = false; }
+  }
 
-  // Track which shortcut recorder is active (mutual exclusion)
-  let activeRecorder: string | null = $state(null);
+  function discard() {
+    cleanup.cancel();
+    settingsStore.discard();
+    feedback = 'Changes discarded.';
+  }
 
-  // LLM status
-  let llmStatus: LlmStatus | null = $state(null);
-  let llmDownloading = $state(false);
-  let llmUpdateAvailable = $state(false);
-  let llmUpdating = $state(false);
-  let llmError = $state('');
-  let llmDeleteConfirm = $state(false);
+  async function closeWindow() {
+    try { allowClose = true; await getCurrentWindow().close(); }
+    catch (error) { allowClose = false; closeError = String(error); }
+  }
 
-  // Snapshot of settings at load time for dirty detection
-  let savedSnapshot: string = $state('');
-
-  // Dirty detection: compare current settings JSON to saved snapshot
-  let isDirty = $derived(
-    settingsStore.loaded && JSON.stringify(settingsStore.current) !== savedSnapshot
-  );
-
-
-  // SottoASR cleanup model info
-  const cleanupModel = { label: 'SottoASR Cleanup (233 MB)', sizeMb: 233 };
-  const cleanupModelUrl = 'https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit';
-
-  // Available languages
-  const languages = [
-    { value: 'auto', label: 'Auto-detect' },
-    { value: 'en', label: 'English' },
-    { value: 'es', label: 'Spanish' },
-    { value: 'fr', label: 'French' },
-    { value: 'de', label: 'German' },
-    { value: 'it', label: 'Italian' },
-    { value: 'pt', label: 'Portuguese' },
-    { value: 'nl', label: 'Dutch' },
-    { value: 'ja', label: 'Japanese' },
-    { value: 'ko', label: 'Korean' },
-    { value: 'zh', label: 'Chinese' },
-    { value: 'ru', label: 'Russian' },
-    { value: 'ar', label: 'Arabic' },
-    { value: 'hi', label: 'Hindi' },
-  ];
-
-  // Track timeouts for cleanup
-  const timeouts: Array<ReturnType<typeof setTimeout>> = [];
+  function navigate(event: KeyboardEvent, index: number) {
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % sections.length;
+    else if (event.key === 'ArrowLeft') next = (index + sections.length - 1) % sections.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = sections.length - 1;
+    else return;
+    event.preventDefault();
+    selected = next;
+    document.getElementById(`settings-tab-${sections[next].id}`)?.focus();
+  }
 
   onMount(() => {
-    const cleanups: Array<() => void> = [];
-
-    // Load settings and permissions
-    settingsStore.load().then(() => {
-      savedSnapshot = JSON.stringify(settingsStore.current);
-    });
-    refreshPermissions();
-    refreshLlmStatus();
-
-    // Listen for LLM download events
-    listen('llm-download-complete', () => {
-      llmDownloading = false;
-      refreshLlmStatus();
-    }).then((u) => cleanups.push(u));
-
-    listen<{ message: string }>('llm-download-error', (event) => {
-      llmDownloading = false;
-      llmError = event.payload.message;
-      refreshLlmStatus();
-    }).then((u) => cleanups.push(u));
-
-    return () => {
-      cleanups.forEach((fn) => fn());
-      timeouts.forEach((t) => clearTimeout(t));
-    };
+    const scope = createEventScope((error) => { feedback = `Live status unavailable: ${String(error)}`; });
+    void settingsStore.load();
+    void scope.listen('llm-preparation-changed', () => { void cleanup.refresh(); })
+      .then(() => { if (!disposed) void cleanup.refresh(); });
+    void scope.listen('vocabulary-status', () => { void vocabulary.refresh(); })
+      .then(() => { if (!disposed) void vocabulary.refresh(); });
+    void getCurrentWindow().onCloseRequested((event) => {
+      if (!allowClose && (settingsStore.dirty || settingsStore.saving || cleanup.pending)) {
+        event.preventDefault();
+        closeConfirm = true;
+      }
+    }).then((unlisten) => scope.add(unlisten)).catch((error) => { if (!disposed) closeError = String(error); });
+    return () => { disposed = true; cleanup.dispose(); vocabulary.dispose(); settingsStore.invalidateLoad(); scope.dispose(); };
   });
-
-  async function refreshPermissions() {
-    checkingPermissions = true;
-    try {
-      const status = await invoke<{
-        microphone: string;
-        accessibility_api: boolean;
-        accessibility_functional: boolean;
-        needs_restart: boolean;
-      }>('check_all_permissions');
-      micPermission = status.microphone;
-      accessibilityPermission = status.accessibility_api;
-      accessibilityFunctional = status.accessibility_functional;
-    } catch (err) {
-      console.error('Failed to check permissions:', err);
-    } finally {
-      checkingPermissions = false;
-    }
-  }
-
-  async function handleRequestAccessibility() {
-    await requestAccessibilityPermission();
-    timeouts.push(setTimeout(refreshPermissions, 2000));
-  }
-
-  async function handleFixAccessibility() {
-    fixingAccessibility = true;
-    try {
-      await invoke('fix_accessibility_permission');
-      // Wait for user to grant in System Settings, then re-check
-      timeouts.push(setTimeout(refreshPermissions, 3000));
-    } catch (err) {
-      console.error('Fix accessibility failed:', err);
-    } finally {
-      fixingAccessibility = false;
-    }
-  }
-
-  async function handleSave() {
-    try {
-      await settingsStore.save();
-      savedSnapshot = JSON.stringify(settingsStore.current);
-      saveMessage = 'Settings saved';
-
-      // Re-register shortcuts with the new values (non-blocking)
-      try {
-        await invoke('apply_shortcuts');
-        saveMessage = 'Settings saved & shortcuts applied';
-      } catch (e) {
-        console.error('Shortcut registration failed:', e);
-        saveMessage = 'Saved (shortcuts may need restart)';
-      }
-
-      timeouts.push(setTimeout(() => { saveMessage = ''; }, 2500));
-    } catch (e) {
-      console.error('Save failed:', e);
-      saveMessage = `Save failed: ${e}`;
-      timeouts.push(setTimeout(() => { saveMessage = ''; }, 4000));
-    }
-  }
-
-  function handleDiscard() {
-    settingsStore.current = JSON.parse(savedSnapshot);
-    saveMessage = '';
-  }
-
-  async function refreshLlmStatus() {
-    try {
-      llmStatus = await getLlmStatus();
-      // Check for updates in background if model is downloaded
-      if (llmStatus?.downloaded) {
-        import('../utils/tauri').then(({ checkLlmUpdate }) =>
-          checkLlmUpdate().then(available => { llmUpdateAvailable = available; }).catch(() => {})
-        );
-      }
-    } catch (err) {
-      console.error('Failed to get LLM status:', err);
-    }
-  }
-
-  async function handleLlmDownload() {
-    llmDownloading = true;
-    llmError = '';
-    try {
-      await downloadLlmModel();
-    } catch (err: any) {
-      llmError = err?.toString() || 'Download failed';
-      llmDownloading = false;
-    }
-  }
-
-  async function handleLlmUpdate() {
-    llmUpdating = true;
-    llmError = '';
-    try {
-      const { updateLlmModel } = await import('../utils/tauri');
-      await updateLlmModel();
-      llmUpdateAvailable = false;
-      llmUpdating = false;
-      // refreshLlmStatus() is called by the llm-download-complete event listener
-    } catch (err: any) {
-      llmError = err?.toString() || 'Update failed';
-      llmUpdating = false;
-    }
-  }
-
-  async function handleLlmDelete() {
-    if (!llmDeleteConfirm) {
-      llmDeleteConfirm = true;
-      return;
-    }
-    try {
-      settingsStore.update('llm_cleanup_enabled', false);
-      await deleteLlmModel();
-      llmDeleteConfirm = false;
-      refreshLlmStatus();
-    } catch (err: any) {
-      llmError = err?.toString() || 'Delete failed';
-      llmDeleteConfirm = false;
-    }
-  }
 </script>
 
 <div class="settings-window">
-  <header class="settings-header">
-    <h1>Settings</h1>
-    <div class="header-actions">
-      {#if saveMessage}
-        <span class="save-message" class:error={saveMessage.includes('Failed')}>
-          {saveMessage}
-        </span>
-      {/if}
-      <button class="discard-btn" onclick={handleDiscard} disabled={!isDirty} type="button">
-        Cancel
-      </button>
-      <button
-        class="save-btn"
-        onclick={handleSave}
-        disabled={settingsStore.saving || !isDirty}
-        type="button"
-      >
-        {settingsStore.saving ? 'Saving...' : 'Save'}
-      </button>
-    </div>
-  </header>
-
-  <div class="settings-body">
-    <!-- Keyboard Shortcuts -->
-    <section class="settings-section">
-      <h2>Keyboard Shortcuts</h2>
-      <div class="field">
-        <label>Push-to-talk</label>
-        <div class="shortcut-pair">
-          <ShortcutRecorder
-            value={settingsStore.current.push_to_talk_shortcut}
-            onchange={(v) => settingsStore.update('push_to_talk_shortcut', v)}
-            disabled={activeRecorder !== null && activeRecorder !== 'ptt'}
-            onrecordstart={() => { activeRecorder = 'ptt'; }}
-            onrecordend={() => { activeRecorder = null; }}
-          />
-          <ShortcutRecorder
-            value={settingsStore.current.push_to_talk_shortcut_alt ?? ''}
-            onchange={(v) => settingsStore.update('push_to_talk_shortcut_alt', v || null)}
-            disabled={activeRecorder !== null && activeRecorder !== 'ptt-alt'}
-            onrecordstart={() => { activeRecorder = 'ptt-alt'; }}
-            onrecordend={() => { activeRecorder = null; }}
-            placeholder="Alt shortcut"
-          />
-        </div>
-        <span class="field-hint">Hold to record, release to transcribe</span>
-      </div>
-      <div class="field">
-        <label>Toggle recording</label>
-        <div class="shortcut-pair">
-          <ShortcutRecorder
-            value={settingsStore.current.toggle_shortcut}
-            onchange={(v) => settingsStore.update('toggle_shortcut', v)}
-            disabled={activeRecorder !== null && activeRecorder !== 'toggle'}
-            onrecordstart={() => { activeRecorder = 'toggle'; }}
-            onrecordend={() => { activeRecorder = null; }}
-          />
-          <ShortcutRecorder
-            value={settingsStore.current.toggle_shortcut_alt ?? ''}
-            onchange={(v) => settingsStore.update('toggle_shortcut_alt', v || null)}
-            disabled={activeRecorder !== null && activeRecorder !== 'toggle-alt'}
-            onrecordstart={() => { activeRecorder = 'toggle-alt'; }}
-            onrecordend={() => { activeRecorder = null; }}
-            placeholder="Alt shortcut"
-          />
-        </div>
-        <span class="field-hint">Press to start, press again to stop</span>
-      </div>
-    </section>
-
-    <!-- Behavior -->
-    <section class="settings-section">
-      <h2>Behavior</h2>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Show overlay</span>
-          <span class="toggle-hint">Display recording pill during capture</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.show_overlay} />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Auto-paste</span>
-          <span class="toggle-hint">Paste transcribed text at cursor position</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.auto_paste} />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Restore clipboard</span>
-          <span class="toggle-hint">Restore previous clipboard after pasting</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.restore_clipboard} />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Paste in original app</span>
-          <span class="toggle-hint">
-            {settingsStore.current.restore_focus_before_paste
-              ? 'Restores focus to the app that was active when you started recording, then pastes'
-              : 'Pastes into whatever app is focused when transcription completes'}
-          </span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.restore_focus_before_paste} />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Launch at login</span>
-          <span class="toggle-hint">Start SottoASR when you log in</span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.launch_at_login} />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Auto-check for updates</span>
-          <span class="toggle-hint">
-            {#if llmStatus?.available}
-              Check for app and model updates periodically
-            {:else}
-              Check for new versions periodically
-            {/if}
-          </span>
-        </div>
-        <label class="switch">
-          <input type="checkbox" bind:checked={settingsStore.current.auto_check_updates} />
-          <span class="slider"></span>
-        </label>
-      </div>
-    </section>
-
-    <!-- AI Transcript Cleanup -->
-    {#if llmStatus?.available}
-    <section class="settings-section">
-      <h2>AI Transcript Cleanup</h2>
-      <div class="toggle-field">
-        <div class="toggle-info">
-          <span class="toggle-label">Clean up transcriptions with AI</span>
-          <span class="toggle-hint">Fine-tuned SottoASR model running locally via MLX on Metal GPU (233 MB) —
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <span class="link" onclick={() => invoke('open_url', { url: cleanupModelUrl })}>View on HuggingFace</span>
-          </span>
-        </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            checked={settingsStore.current.llm_cleanup_enabled}
-            disabled={llmDownloading}
-            onchange={(e) => {
-              const enabled = (e.target as HTMLInputElement).checked;
-              if (enabled && !llmStatus?.downloaded) {
-                // Need to download model first (download_model now auto-preloads)
-                (e.target as HTMLInputElement).checked = false;
-                handleLlmDownload().then(() => {
-                  settingsStore.update('llm_cleanup_enabled', true);
-                });
-              } else {
-                settingsStore.update('llm_cleanup_enabled', enabled);
-                if (enabled) {
-                  // Pre-load model so it's warm for first cleanup
-                  import('../utils/tauri').then(({ loadLlmModel }) => loadLlmModel().catch(() => {}));
-                } else {
-                  // Unload model on disable (async, non-blocking)
-                  import('../utils/tauri').then(({ unloadLlmModel }) => unloadLlmModel().catch(() => {}));
-                }
-              }
-            }}
-          />
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <!-- Model status -->
-      <div class="llm-status" style="margin-top: 8px;">
-        {#if llmDownloading || llmUpdating}
-          <div class="llm-downloading">
-            <div class="spinner-small"></div>
-            <span>{llmUpdating ? 'Updating model...' : 'Downloading model...'}</span>
-          </div>
-        {:else if llmStatus?.downloaded}
-          <span class="llm-badge ready">Model Ready</span>
-          {#if llmUpdateAvailable}
-            <button class="update-btn" onclick={handleLlmUpdate} type="button" style="margin-left: 8px;">
-              Update Available — Install
-            </button>
-          {/if}
-        {:else}
-          <button class="download-btn" onclick={handleLlmDownload} type="button">
-            Download Cleanup Model (~{cleanupModel.sizeMb} MB)
-          </button>
-        {/if}
-      </div>
-
-      {#if llmError}
-        <div class="llm-error">{llmError}</div>
-      {/if}
-
-      {#if llmStatus?.downloaded}
-        <button
-          class="delete-btn"
-          onclick={handleLlmDelete}
-          type="button"
-        >
-          {llmDeleteConfirm ? 'Are you sure? Click again to confirm' : `Delete Model (~${cleanupModel.sizeMb} MB)`}
-        </button>
-      {/if}
-    </section>
-    {/if}
-
-    <!-- Language & History -->
-    <section class="settings-section">
-      <h2>Language & History</h2>
-      <div class="field">
-        <label for="language">Transcription language</label>
-        <select
-          id="language"
-          class="select-input"
-          bind:value={settingsStore.current.language}
-        >
-          {#each languages as lang}
-            <option value={lang.value}>{lang.label}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="field">
-        <label for="max-history">Maximum history entries</label>
-        <input
-          id="max-history"
-          type="number"
-          class="text-input short"
-          bind:value={settingsStore.current.max_history}
-          min="10"
-          max="10000"
-          step="10"
-        />
-      </div>
-    </section>
-
-    <!-- Permissions -->
-    <section class="settings-section">
-      <h2>Permissions</h2>
-      <div class="permission-row">
-        <div class="permission-info">
-          <span class="permission-label">Microphone</span>
-          <span class="permission-hint">Required for audio capture</span>
-        </div>
-        <div class="permission-action">
-          <span class="permission-badge" class:granted={micPermission === 'authorized'} class:denied={micPermission === 'denied'}>
-            {#if micPermission === 'checking'}
-              Checking...
-            {:else if micPermission === 'authorized'}
-              Granted
-            {:else if micPermission === 'denied'}
-              Denied
-            {:else}
-              Not Set
-            {/if}
-          </span>
-          {#if micPermission !== 'authorized' && micPermission !== 'checking'}
-            <button class="grant-btn" onclick={() => invoke('open_microphone_settings')} type="button">
-              Open Settings
-            </button>
-          {/if}
-        </div>
-      </div>
-      <div class="permission-row">
-        <div class="permission-info">
-          <span class="permission-label">Accessibility</span>
-          <span class="permission-hint">Required for paste-at-cursor, hotkeys, and key detection</span>
-        </div>
-        <div class="permission-action">
-          <span class="permission-badge" class:granted={accessibilityPermission === true} class:denied={accessibilityPermission === false}>
-            {#if accessibilityPermission === null}
-              Checking...
-            {:else if accessibilityPermission}
-              Granted
-            {:else}
-              Not Granted
-            {/if}
-          </span>
-          {#if accessibilityPermission === false}
-            <button
-              class="grant-btn"
-              onclick={handleFixAccessibility}
-              disabled={fixingAccessibility}
-              type="button"
-            >
-              {fixingAccessibility ? 'Fixing...' : 'Fix Permission'}
-            </button>
-          {/if}
-        </div>
-      </div>
-      {#if accessibilityPermission === false}
-        <p class="permission-explain">
-          SottoASR appears enabled in System Settings but the app was updated since then.
-          Click "Fix Permission" to re-register, then toggle SottoASR ON in the System Settings
-          window that opens. You may need to restart SottoASR afterwards.
-        </p>
-      {/if}
-      <button
-        class="check-btn"
-        onclick={refreshPermissions}
-        disabled={checkingPermissions}
-        type="button"
-      >
-        {checkingPermissions ? 'Checking...' : 'Check Permissions'}
-      </button>
-    </section>
+  <header class="settings-header"><h1>Settings</h1><p>Make SottoASR work your way.</p></header>
+  <div class="settings-nav" role="tablist" aria-label="Settings sections">
+    {#each sections as item, index}
+      <button type="button" role="tab" id={`settings-tab-${item.id}`} aria-controls="settings-section" aria-selected={selected === index} tabindex={selected === index ? 0 : -1} class:active={selected === index} onclick={() => { selected = index; }} onkeydown={(event) => navigate(event, index)}>{item.label}</button>
+    {/each}
   </div>
+  <div class="settings-content" id="settings-section" role="tabpanel" aria-labelledby={`settings-tab-${section.id}`} tabindex="0">
+    {#if settingsStore.loading}
+      <p class="load-state" role="status">Loading settings…</p>
+    {:else if !settingsStore.loaded}
+      <div class="setting-error" role="alert"><p>{settingsStore.error || 'Settings are unavailable.'}</p><button class="secondary-button" type="button" onclick={() => settingsStore.load()}>Retry</button></div>
+    {:else}
+      <div class="section-heading"><h2>{section.label}</h2><p>{section.hint}</p></div>
+      {#if selected === 0}<SettingsGeneral />
+      {:else if selected === 1}<SettingsDictation {cleanup} />
+      {:else if selected === 2}<SettingsVocabulary {vocabulary} />
+      {:else}<SettingsAdvanced {cleanup} />{/if}
+    {/if}
+  </div>
+  <footer class="settings-footer">
+    <div class="footer-feedback" aria-live="polite">
+      {#if settingsStore.loading}<span>Loading settings…</span>
+      {:else if !settingsStore.loaded}<span class="error">Settings unavailable</span>
+      {:else if settingsStore.error}<span class="error">{settingsStore.error}</span>
+      {:else if closeError}<span class="error">{closeError}</span>
+      {:else if settingsStore.warnings.length}<span class="warning">Saved. {settingsStore.warnings.join(' ')}</span>
+      {:else if settingsStore.saving}<span>Saving…</span>
+      {:else if cleanup.pending}<span>Setup is running. Other changes can be saved.</span>
+      {:else if settingsStore.dirty}<span>Unsaved changes</span>
+      {:else}<span>{feedback || 'All changes saved'}</span>{/if}
+    </div>
+    <div class="footer-actions">
+      <button type="button" class="cancel-button" onclick={discard} disabled={settingsStore.saving || (!settingsStore.dirty && !cleanup.pending)}>Cancel</button>
+      <button type="button" class="save-button" onclick={() => save()} disabled={!settingsStore.loaded || settingsStore.loading || settingsStore.saving || !settingsStore.dirty}>{settingsStore.saving ? 'Saving…' : 'Save'}</button>
+    </div>
+  </footer>
 </div>
+<ConfirmDialog open={closeConfirm} title="Save your changes?" message={cleanup.pending ? 'Cleanup setup may finish in the background. Discarding changes keeps your saved preferences.' : 'You have unsaved settings. Save them before closing, or discard this draft.'} confirmLabel="Save and close" cancelLabel="Keep editing" secondaryLabel="Discard" busy={settingsStore.saving} confirmDisabled={cleanup.pending} onconfirm={() => save(true)} oncancel={() => { closeConfirm = false; }} onsecondary={() => { discard(); void closeWindow(); }} />
 
 <style>
-  .settings-window {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  .settings-header {
-    flex-shrink: 0;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  h1 {
-    font-size: 22px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--text-bright);
-    letter-spacing: -0.3px;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .save-message {
-    font-size: 12px;
-    color: #22c55e;
-  }
-
-  .save-message.error {
-    color: #ef4444;
-  }
-
-  .discard-btn {
-    padding: 6px 14px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: none;
-    color: var(--text-dim);
-    font-size: 13px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .discard-btn:hover {
-    border-color: var(--border-hover);
-    color: var(--text);
-  }
-
-  .save-btn {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    background: var(--accent);
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    font-family: inherit;
-    cursor: pointer;
-    transition: opacity 0.15s ease;
-  }
-
-  .save-btn:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .save-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .settings-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 24px 24px;
-  }
-
-  .settings-section {
-    padding: 18px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .settings-section:last-of-type {
-    border-bottom: none;
-  }
-
-  h2 {
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-dim);
-    margin: 0 0 14px;
-  }
-
-  /* Text & select fields */
-  .field {
-    margin-bottom: 14px;
-  }
-
-  .field:last-child {
-    margin-bottom: 0;
-  }
-
-  .field label {
-    display: block;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-
-  .text-input,
-  .select-input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--input-bg);
-    color: var(--text-bright);
-    font-size: 13px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.15s ease;
-    box-sizing: border-box;
-  }
-
-  .text-input:focus,
-  .select-input:focus {
-    border-color: var(--accent);
-  }
-
-  .text-input.short {
-    width: 120px;
-  }
-
-  .select-input {
-    cursor: pointer;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    padding-right: 30px;
-  }
-
-  .select-input option {
-    background: var(--card-bg);
-    color: var(--text);
-  }
-
-  .shortcut-pair {
-    display: flex;
-    gap: 8px;
-  }
-
-  .field-hint {
-    display: block;
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-
-  /* Toggle fields */
-  .toggle-field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-  }
-
-  .toggle-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .toggle-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .toggle-hint {
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-
-  /* Switch toggle */
-  .switch {
-    position: relative;
-    display: inline-block;
-    width: 40px;
-    height: 22px;
-    flex-shrink: 0;
-  }
-
-  .switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .slider {
-    position: absolute;
-    inset: 0;
-    cursor: pointer;
-    background: var(--border);
-    border-radius: 11px;
-    transition: background 0.2s ease;
-  }
-
-  .slider::before {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    left: 3px;
-    bottom: 3px;
-    background: white;
-    border-radius: 50%;
-    transition: transform 0.2s ease;
-  }
-
-  .switch input:checked + .slider {
-    background: var(--accent);
-  }
-
-  .switch input:checked + .slider::before {
-    transform: translateX(18px);
-  }
-
-  /* Permissions */
-  .permission-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-  }
-
-  .permission-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .permission-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .permission-hint {
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-
-  .permission-action {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .permission-badge {
-    font-size: 12px;
-    padding: 3px 10px;
-    border-radius: 6px;
-    background: var(--hover-bg);
-    color: var(--text-dim);
-  }
-
-  .permission-badge.granted {
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
-  }
-
-  .permission-badge.denied {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-  }
-
-  .grant-btn {
-    padding: 4px 10px;
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    background: none;
-    color: var(--accent);
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .grant-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
-  }
-
-  .permission-explain {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin: 6px 0 0;
-    line-height: 1.5;
-    padding: 8px 12px;
-    background: rgba(59, 130, 246, 0.06);
-    border-radius: 6px;
-    border: 1px solid rgba(59, 130, 246, 0.15);
-  }
-
-  .check-btn {
-    margin-top: 12px;
-    padding: 7px 14px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: none;
-    color: var(--text-dim);
-    font-size: 13px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .check-btn:hover:not(:disabled) {
-    border-color: var(--border-hover);
-    color: var(--text);
-  }
-
-  .check-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  /* LLM section */
-  .llm-status {
-    margin-top: 8px;
-    margin-bottom: 4px;
-  }
-
-  .llm-downloading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .spinner-small {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .llm-badge {
-    display: inline-block;
-    font-size: 12px;
-    padding: 3px 10px;
-    border-radius: 10px;
-    font-weight: 500;
-  }
-
-  .llm-badge.ready {
-    background: rgba(34, 197, 94, 0.15);
-    color: rgb(34, 197, 94);
-  }
-
-  .download-btn {
-    padding: 6px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text);
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .download-btn:hover {
-    background: var(--bg-hover);
-  }
-
-  .update-btn {
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid rgba(59, 130, 246, 0.5);
-    background: rgba(59, 130, 246, 0.1);
-    color: rgba(59, 130, 246, 0.9);
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .update-btn:hover {
-    background: rgba(59, 130, 246, 0.2);
-    color: rgb(59, 130, 246);
-  }
-
-  .delete-btn {
-    margin-top: 8px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    background: transparent;
-    color: rgba(239, 68, 68, 0.8);
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .delete-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: rgb(239, 68, 68);
-  }
-
-  .llm-setup-notice {
-    padding: 12px 16px;
-    border-radius: 8px;
-    background: rgba(59, 130, 246, 0.08);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
-  .llm-setup-notice p {
-    margin: 4px 0;
-  }
-
-  .llm-install-cmd {
-    display: block;
-    margin: 8px 0;
-    padding: 8px 12px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.3);
-    color: rgb(129, 199, 132);
-    font-family: 'SF Mono', Menlo, Monaco, monospace;
-    font-size: 12px;
-    user-select: all;
-  }
-
-  .llm-setup-hint {
-    font-size: 12px;
-    opacity: 0.7;
-  }
-
-  .llm-error {
-    margin-top: 6px;
-    font-size: 12px;
-    color: rgb(239, 68, 68);
-  }
-
-  .link {
-    color: var(--accent);
-    cursor: pointer;
-    text-decoration: underline;
-  }
-
-  .link:hover {
-    opacity: 0.8;
-  }
+  .settings-window { height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  .settings-header { padding:22px 24px 17px; flex:none; }
+  h1 { font-size:23px; line-height:1.2; font-weight:650; color:var(--text-bright); margin:0; letter-spacing:-.4px; }
+  .settings-header p { margin:5px 0 0; font-size:12px; color:var(--text-dim); }
+  .settings-nav { display:flex; gap:4px; padding:0 20px 12px; border-bottom:1px solid var(--border); flex:none; }
+  .settings-nav button { flex:1; padding:9px 5px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--text-dim); font:inherit; font-size:12px; font-weight:500; cursor:pointer; }
+  .settings-nav button.active { background:var(--accent-bg); color:#93c5fd; border-color:#3b82f630; }
+  .settings-nav button:hover { color:var(--text-bright); }
+  .settings-content { flex:1; min-height:0; min-width:0; overflow:auto; padding:20px; }
+  .section-heading { margin:0 0 16px; }
+  .section-heading h2 { font-size:17px; font-weight:600; color:var(--text-bright); margin:0; }
+  .section-heading p { font-size:12px; color:var(--text-dim); margin:4px 0 0; }
+  .settings-footer { flex:none; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; border-top:1px solid var(--border); background:var(--bg); }
+  .footer-feedback { min-width:0; font-size:11px; color:var(--text-dim); overflow-wrap:anywhere; max-height:64px; overflow:auto; }
+  .footer-feedback .error { color:#fca5a5; }
+  .footer-feedback .warning { color:#fcd34d; }
+  .footer-actions { display:flex; flex:none; gap:8px; }
+  .footer-actions button { padding:8px 18px; font:inherit; font-size:12px; border-radius:8px; border:1px solid var(--border-hover); cursor:pointer; }
+  .cancel-button { background:var(--card-bg); color:var(--text); }
+  .save-button { background:var(--accent); border-color:var(--accent)!important; color:white; }
+  .footer-actions button:disabled { opacity:.4; cursor:default; }
+  .load-state { font-size:13px; color:var(--text-dim); text-align:center; padding:32px; }
 </style>

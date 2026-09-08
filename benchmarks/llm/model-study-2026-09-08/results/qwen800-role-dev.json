@@ -1,0 +1,237 @@
+{
+  "summary": {
+    "label": "qwen800",
+    "load_s": 1.947974292037543,
+    "cases": 8,
+    "exact": 4,
+    "harmful": 0,
+    "safe_useful_cases": 0,
+    "fallbacks": 1,
+    "median_judgment_s": 0.3124925410374999,
+    "max_case_s": 0.9929349579615518,
+    "peak_metal_bytes": 878554404,
+    "prompt_sha256": "33ff44b8a425179278550f1a2ba2cba73beb2c99c24014de079276662a2c97b6"
+  },
+  "rows": [
+    {
+      "case_id": "dev_01",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.35267145896796137,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_01",
+      "id": 1,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3113473750418052,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_01",
+      "id": 2,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3124925410374999,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_02",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3092911660205573,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_03",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3110571660217829,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_03",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3062092090258375,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_04",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3178290000068955,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_04",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.31531570898368955,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_05",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.3105396669707261,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_05",
+      "id": 1,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.30980120797175914,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_06",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": false,
+      "raw_generation": "<target>and </target>and",
+      "elapsed_s": 0.3476989999762736,
+      "generation_tokens": 8
+    },
+    {
+      "case_id": "dev_08",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.31349683401640505,
+      "generation_tokens": 2
+    },
+    {
+      "case_id": "dev_08",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "CONTENT",
+      "elapsed_s": 0.31938841700321063,
+      "generation_tokens": 2
+    }
+  ],
+  "cases": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "output": "I I bought the the wrong charger, um, this morning.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.9929349579615518,
+      "fallback": false
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "output": "The token um, should remain because it is the literal name of this field.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.3109001250122674,
+      "fallback": false
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "output": "Please uh, type a a into the box without removing either letter.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.6200329579878598,
+      "fallback": false
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "output": "Há um, e apenas um, sensor conectado ao computador.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.6363131660036743,
+      "fallback": false
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "output": "We uh, need to to check the same result again.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.6232838329742663,
+      "fallback": false
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "output": "Repeat the words and and as a literal sequence.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.3492357089999132,
+      "fallback": true
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 4.3290958274155855e-05,
+      "fallback": false
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "output": "I I wrote the word erm, in the glossary yesterday.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 0.6356361249927431,
+      "fallback": false
+    }
+  ]
+}

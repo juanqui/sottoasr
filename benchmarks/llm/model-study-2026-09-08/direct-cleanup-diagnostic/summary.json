@@ -1,0 +1,499 @@
+[
+  {
+    "model": "liquid350",
+    "mode": "zero_shot",
+    "exact_dev8": 1,
+    "lexical_exact_dev8": 2,
+    "introduced_words_cases": 3,
+    "deleted_required_words_cases": 5,
+    "median_s": 0.10349685451365076,
+    "maximum_s": 0.1346223340369761,
+    "safe_useful_dev4": 2,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if it can remove all the \"uh\" and \"uh\" from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.6210698329959996,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "replace",
+        "removed": [
+          "this"
+        ],
+        "added": [
+          "it"
+        ]
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "replace",
+        "removed": [
+          "um",
+          "uh",
+          "yeah,",
+          "those",
+          "things"
+        ],
+        "added": [
+          "\"uh\"",
+          "and",
+          "\"uh\""
+        ]
+      }
+    ]
+  },
+  {
+    "model": "liquid350",
+    "mode": "few_shot",
+    "exact_dev8": 2,
+    "lexical_exact_dev8": 4,
+    "introduced_words_cases": 3,
+    "deleted_required_words_cases": 4,
+    "median_s": 0.10360447899438441,
+    "maximum_s": 0.11893470800714567,
+    "safe_useful_dev4": 2,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the \"uh\" and \"ye\" from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.14943783404305577,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "replace",
+        "removed": [
+          "um",
+          "uh",
+          "yeah,",
+          "those",
+          "things"
+        ],
+        "added": [
+          "\"uh\"",
+          "and",
+          "\"ye\""
+        ]
+      }
+    ]
+  },
+  {
+    "model": "qwen800",
+    "mode": "zero_shot",
+    "exact_dev8": 5,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 1,
+    "deleted_required_words_cases": 1,
+    "median_s": 0.31347193746478297,
+    "maximum_s": 1.0804403749643825,
+    "safe_useful_dev4": 4,
+    "truncated_cases": 1,
+    "sample_output": "This is a test to see if this can remove all the uh yeah, those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 1.631094500015024,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "qwen800",
+    "mode": "few_shot",
+    "exact_dev8": 5,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 1,
+    "deleted_required_words_cases": 1,
+    "median_s": 0.30866102053551003,
+    "maximum_s": 0.3240957079688087,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the uh yeah, those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.3705638329847716,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "minicpm1000",
+    "mode": "zero_shot",
+    "exact_dev8": 2,
+    "lexical_exact_dev8": 5,
+    "introduced_words_cases": 2,
+    "deleted_required_words_cases": 1,
+    "median_s": 0.26142589599476196,
+    "maximum_s": 0.33677695895312354,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if it can remove all the um, uh, and those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.42380474996753037,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "replace",
+        "removed": [
+          "this"
+        ],
+        "added": [
+          "it"
+        ]
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "replace",
+        "removed": [
+          "um",
+          "uh",
+          "yeah,"
+        ],
+        "added": [
+          "um,",
+          "uh,",
+          "and"
+        ]
+      }
+    ]
+  },
+  {
+    "model": "minicpm1000",
+    "mode": "few_shot",
+    "exact_dev8": 2,
+    "lexical_exact_dev8": 3,
+    "introduced_words_cases": 4,
+    "deleted_required_words_cases": 4,
+    "median_s": 0.25983841650304385,
+    "maximum_s": 0.3892845830414444,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "I need the green notebook tomorrow. Please write um exactly as the label. This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.45483004103880376,
+    "sample_word_changes": [
+      {
+        "op": "insert",
+        "removed": [],
+        "added": [
+          "I",
+          "need",
+          "the",
+          "green",
+          "notebook",
+          "tomorrow.",
+          "Please",
+          "write",
+          "um",
+          "exactly",
+          "as",
+          "the",
+          "label."
+        ]
+      }
+    ]
+  },
+  {
+    "model": "minicpm2000",
+    "mode": "zero_shot",
+    "exact_dev8": 5,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 2,
+    "median_s": 0.5175559795170557,
+    "maximum_s": 0.5957974169868976,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.8337877499870956,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um",
+          "uh",
+          "yeah,",
+          "those"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "minicpm2000",
+    "mode": "few_shot",
+    "exact_dev8": 6,
+    "lexical_exact_dev8": 7,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 0,
+    "median_s": 0.6559434999944642,
+    "maximum_s": 0.7129966670181602,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 0.7138755000196397,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um",
+          "uh",
+          "yeah,",
+          "those"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "qwen4000",
+    "mode": "zero_shot",
+    "exact_dev8": 3,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 2,
+    "median_s": 1.0081143749994226,
+    "maximum_s": 1.286558541993145,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all those things from the sentences.",
+    "sample_accepted": true,
+    "sample_s": 1.4859497920260765,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "the",
+          "um",
+          "uh",
+          "yeah,"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "qwen4000",
+    "mode": "few_shot",
+    "exact_dev8": 6,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 0,
+    "median_s": 1.170496312493924,
+    "maximum_s": 1.3134647500119172,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+    "sample_accepted": true,
+    "sample_s": 1.5237877080217004,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um",
+          "uh"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "granite4200",
+    "mode": "zero_shot",
+    "exact_dev8": 2,
+    "lexical_exact_dev8": 6,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 2,
+    "median_s": 0.7133848545199726,
+    "maximum_s": 0.8604282080195844,
+    "safe_useful_dev4": 3,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the um uh those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 1.1052732919924892,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "yeah,"
+        ],
+        "added": []
+      }
+    ]
+  },
+  {
+    "model": "granite4200",
+    "mode": "few_shot",
+    "exact_dev8": 2,
+    "lexical_exact_dev8": 3,
+    "introduced_words_cases": 0,
+    "deleted_required_words_cases": 2,
+    "median_s": 0.832010124984663,
+    "maximum_s": 0.9680486250435933,
+    "safe_useful_dev4": 2,
+    "truncated_cases": 0,
+    "sample_output": "This is a test to see if this can remove all the um uh yeah, those things from the sentences.",
+    "sample_accepted": false,
+    "sample_s": 1.1642969580134377,
+    "sample_word_changes": [
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      },
+      {
+        "op": "delete",
+        "removed": [
+          "um"
+        ],
+        "added": []
+      }
+    ]
+  }
+]

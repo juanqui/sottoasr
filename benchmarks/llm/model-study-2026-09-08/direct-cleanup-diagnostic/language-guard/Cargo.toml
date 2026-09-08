@@ -1,0 +1,8 @@
+[package]
+name = "sotto-language-guard-probe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+whatlang = "=0.18.0"
+serde_json = "1"

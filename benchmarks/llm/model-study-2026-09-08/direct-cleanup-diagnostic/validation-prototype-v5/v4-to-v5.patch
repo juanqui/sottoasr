@@ -1,0 +1,158 @@
+--- frozen-v4/source_validation.py
++++ frozen-v5/source_validation.py
+@@ -1,6 +1,6 @@
+ """Experimental source-deletion validator; no semantic safety guarantee.
+ 
+-Version 4 fixes escaped quote parsing after version 3 development. No model
++Version 5 fixes complete code delimiters after version 4 development. No model
+ loading, production imports, network, or release-qualification labels. Run this file directly for focused unit checks.
+ """
+ from dataclasses import dataclass
+@@ -28,16 +28,6 @@
+                    'ms', 's', 'seconds', 'minutes', 'hours', 'inches', 'feet',
+                    'percent', 'dollars', 'volts', 'amps', 'watts'})
+ WORD = re.compile(r"\w+(?:['’]\w+)*", re.UNICODE)
+-QUOTES_CODE = re.compile(
+-    r'```[\s\S]*?(?:```|$)|`[^`]*(?:`|$)|'
+-    # Consume a backslash and its following character together. Thus an odd
+-    # run escapes a delimiter, while an even run leaves the delimiter active.
+-    # An unterminated quote, including a dangling backslash, protects to EOF.
+-    r'"(?:\\[\s\S]|[^"\\])*(?:"|\\?$)|'
+-    r'“(?:\\[\s\S]|[^”\\])*(?:”|\\?$)|'
+-    r'‘(?:\\[\s\S]|[^’\\]|(?<=\w)’(?=\w))*(?:’|\\?$)|'
+-    r'(?<!\w)\x27(?:\\[\s\S]|[^\x27\\]|(?<=\w)\x27(?=\w))*(?:\x27|\\?$)'
+-)
+ IDENTIFIER = re.compile(
+     r'https?://[^\s]+|www\.[^\s]+|[^\s@]+@[^\s@]+|'
+     r'\b\w+(?:[._:/+\-]\w+)+\b|\b\w*[\d_]\w*\b', re.UNICODE
+@@ -86,18 +76,81 @@
+     return '\n' in gap or bool(re.fullmatch(r'[.!?]+[ \t]*', gap))
+ 
+ 
++def _word_char(char):
++    return bool(char) and (char.isalnum() or char == '_')
++
++
++def _escaped_at(text, position):
++    start = position
++    while start and text[start-1] == '\\':
++        start -= 1
++    return (position-start) % 2 == 1
++
++
++def _quote_code_spans(text):
++    """Conservative protected spans, not a Markdown renderer.
++
++    A complete backtick run closes only with the same complete, unescaped run.
++    Shorter, longer and escaped runs remain code payload. Quotes preserve v4's
++    backslash escaping and in-word apostrophes. Unterminated spans protect EOF.
++    Escaped openers outside a span still conservatively begin protection.
++    """
++    spans, i = [], 0
++    while i < len(text):
++        start, char = i, text[i]
++        if char == '`':
++            while i < len(text) and text[i] == '`':
++                i += 1
++            width, end = i-start, len(text)
++            while i < len(text):
++                if text[i] != '`':
++                    i += 1
++                    continue
++                run = i
++                while i < len(text) and text[i] == '`':
++                    i += 1
++                if i-run == width and not _escaped_at(text, run):
++                    end = i
++                    break
++            spans.append((start, end))
++            i = end
++            continue
++        close = {'"': '"', '“': '”', '‘': '’', "'": "'"}.get(char)
++        if close is None or (char == "'" and start and _word_char(text[start-1])):
++            i += 1
++            continue
++        i += 1
++        end = len(text)
++        while i < len(text):
++            if text[i] == '\\':
++                i = min(i+2, len(text))
++                continue
++            inside_word = (close in {"'", '’'} and i and i+1 < len(text)
++                           and _word_char(text[i-1]) and _word_char(text[i+1]))
++            if text[i] == close and not inside_word:
++                end = i+1
++                break
++            i += 1
++        spans.append((start, end))
++        i = end
++    return spans
++
++
+ def _canonical_quotes(text):
+     """Normalize paired smart/straight delimiter styles, never inner payload/code."""
+-    def replace(match):
+-        value = match.group()
++    parts, cursor = [], 0
++    for start, end in _quote_code_spans(text):
++        parts.append(text[cursor:start])
++        value = text[start:end]
+         for opening, closing, canonical in [('“', '”', '"'), ('‘', '’', "'")]:
+-            before_closing = value[:-1]
+-            backslashes = len(before_closing) - len(before_closing.rstrip('\\'))
+             if (value.startswith(opening) and value.endswith(closing)
+-                    and len(value) >= 2 and backslashes % 2 == 0):
+-                return canonical + value[1:-1] + canonical
+-        return value
+-    return QUOTES_CODE.sub(replace, text)
++                    and len(value) >= 2 and not _escaped_at(value, len(value)-1)):
++                value = canonical + value[1:-1] + canonical
++                break
++        parts.append(value)
++        cursor = end
++    parts.append(text[cursor:])
++    return ''.join(parts)
+ 
+ 
+ def _literal_context_spans(text, tokens):
+@@ -148,7 +201,7 @@
+ 
+ 
+ def protected_spans(text, tokens, dictionary, repeats):
+-    spans = [(m.start(), m.end(), 'quote/code') for m in QUOTES_CODE.finditer(text)]
++    spans = [(a, b, 'quote/code') for a, b in _quote_code_spans(text)]
+     spans.extend((m.start(), m.end(), 'identifier/number') for m in IDENTIFIER.finditer(text))
+     for term in dictionary:
+         if not isinstance(term, str) or not term:
+@@ -658,6 +711,31 @@
+                 self.assert_accept(f'We um keep {opening}um,\nuh next{closing} verbatim.',
+                                    f'We keep {opening}um,\nuh next{closing} verbatim.')
+ 
++    def test_complete_backtick_runs_protect_nested_short_and_unterminated_payloads(self):
++        for width in [1, 2, 3, 5, 12]:
++            fence = '`' * width
++            with self.subTest(width=width):
++                self.assert_reject(f'Keep {fence}um uh{fence} intact.',
++                                   f'Keep {fence}{fence} intact.')
++                self.assert_accept(f'We um keep {fence}um uh{fence} intact.',
++                                   f'We keep {fence}um uh{fence} intact.')
++                self.assert_reject(f'Keep {fence}um uh', f'Keep {fence}')
++                shorter = '`' * max(width-1, 1)
++                if width > 1:
++                    self.assert_reject(f'Keep {fence}before {shorter}um uh{shorter} after{fence} intact.',
++                                       f'Keep {fence}before {shorter}{shorter} after{fence} intact.')
++                longer = '`' * (width+1)
++                self.assert_reject(f'Keep {fence}before {longer}um uh{longer} after{fence} intact.',
++                                   f'Keep {fence}before {longer}{longer} after{fence} intact.')
++
++    def test_code_escaped_delimiter_runs_remain_payload(self):
++        self.assert_reject(r'Keep `say \`um uh\` now` intact.',
++                           r'Keep `say \`\` now` intact.')
++        self.assert_accept(r'We um keep ``say \``um uh\`` now`` intact.',
++                           r'We keep ``say \``um uh\`` now`` intact.')
++        self.assert_accept(r'Keep ``path\\`` um today.', r'Keep ``path\\`` today.')
++        self.assert_reject(r'Keep ``path\`` um today.', r'Keep ``path\`` today.')
++
+ 
+ if __name__ == '__main__':
+     unittest.main(verbosity=2)

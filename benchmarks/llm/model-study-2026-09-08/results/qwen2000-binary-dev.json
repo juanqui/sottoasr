@@ -1,0 +1,442 @@
+{
+  "summary": {
+    "label": "qwen2000",
+    "load_s": 1.860218417015858,
+    "cases": 8,
+    "eligible_cases": 7,
+    "candidate_judgments": 13,
+    "thresholds": [
+      {
+        "threshold": 0,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 1,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 2,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 3,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 4,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 5,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 6,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      },
+      {
+        "threshold": 8,
+        "exact": 4,
+        "harm": 0,
+        "safe_useful_cases": 0,
+        "deletions": 0
+      }
+    ],
+    "median_judgment_s": 0.668006082996726,
+    "peak_metal_bytes": 1722245772,
+    "dataset_sha256": "cdec7f40c22d105f2d7f28cf150b3c417a46112ec2bb90fb800388eaec27c7ce",
+    "prompt_sha256": "46b1a0628b59aee293e6bf4513d6c96234b3b824345521a1666cfba219e2aac6",
+    "label_token_ids": [
+      [
+        15
+      ],
+      [
+        16
+      ]
+    ]
+  },
+  "rows": [
+    {
+      "case_id": "dev_01",
+      "id": 0,
+      "gold_delete": true,
+      "margin": -1.0,
+      "label_probability_mass": 0.9401288745957187,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.7113721250207163
+    },
+    {
+      "case_id": "dev_01",
+      "id": 1,
+      "gold_delete": true,
+      "margin": -1.125,
+      "label_probability_mass": 1.0316403788761512,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.686431874986738
+    },
+    {
+      "case_id": "dev_01",
+      "id": 2,
+      "gold_delete": true,
+      "margin": -0.875,
+      "label_probability_mass": 0.9737940756511623,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6944817919866182
+    },
+    {
+      "case_id": "dev_02",
+      "id": 0,
+      "gold_delete": false,
+      "margin": -0.375,
+      "label_probability_mass": 1.0233926793911419,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6750927079701796
+    },
+    {
+      "case_id": "dev_03",
+      "id": 0,
+      "gold_delete": true,
+      "margin": -0.25,
+      "label_probability_mass": 0.9521234481974987,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.698488374997396
+    },
+    {
+      "case_id": "dev_03",
+      "id": 1,
+      "gold_delete": false,
+      "margin": -0.75,
+      "label_probability_mass": 1.011941746149322,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6905767080024816
+    },
+    {
+      "case_id": "dev_04",
+      "id": 0,
+      "gold_delete": false,
+      "margin": -1.125,
+      "label_probability_mass": 1.0316403788761512,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6598379159695469
+    },
+    {
+      "case_id": "dev_04",
+      "id": 1,
+      "gold_delete": false,
+      "margin": -0.875,
+      "label_probability_mass": 0.9737940756511623,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6669875000370666
+    },
+    {
+      "case_id": "dev_05",
+      "id": 0,
+      "gold_delete": true,
+      "margin": -0.5,
+      "label_probability_mass": 0.9744101008840758,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.668006082996726
+    },
+    {
+      "case_id": "dev_05",
+      "id": 1,
+      "gold_delete": true,
+      "margin": -0.375,
+      "label_probability_mass": 1.0233926793911419,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6511117080226541
+    },
+    {
+      "case_id": "dev_06",
+      "id": 0,
+      "gold_delete": false,
+      "margin": -0.625,
+      "label_probability_mass": 0.9311831270709832,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6520937090390362
+    },
+    {
+      "case_id": "dev_08",
+      "id": 0,
+      "gold_delete": true,
+      "margin": -0.5,
+      "label_probability_mass": 0.9744101008840758,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6648814170039259
+    },
+    {
+      "case_id": "dev_08",
+      "id": 1,
+      "gold_delete": false,
+      "margin": -0.875,
+      "label_probability_mass": 0.9737940756511623,
+      "argmax_token": 15,
+      "argmax_is_label": true,
+      "argmax_text": "0",
+      "elapsed_s": 0.6615276670199819
+    }
+  ],
+  "cases": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_01",
+          "id": 0,
+          "gold_delete": true,
+          "margin": -1.0,
+          "label_probability_mass": 0.9401288745957187,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.7113721250207163,
+          "original": "I I bought the the wrong charger, um, this morning.",
+          "edited": "I bought the the wrong charger, um, this morning."
+        },
+        {
+          "case_id": "dev_01",
+          "id": 1,
+          "gold_delete": true,
+          "margin": -1.125,
+          "label_probability_mass": 1.0316403788761512,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.686431874986738,
+          "original": "I I bought the the wrong charger, um, this morning.",
+          "edited": "I I bought the wrong charger, um, this morning."
+        },
+        {
+          "case_id": "dev_01",
+          "id": 2,
+          "gold_delete": true,
+          "margin": -0.875,
+          "label_probability_mass": 0.9737940756511623,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6944817919866182,
+          "original": "I I bought the the wrong charger, um, this morning.",
+          "edited": "I I bought the the wrong charger, this morning."
+        }
+      ]
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_02",
+          "id": 0,
+          "gold_delete": false,
+          "margin": -0.375,
+          "label_probability_mass": 1.0233926793911419,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6750927079701796,
+          "original": "The token um, should remain because it is the literal name of this field.",
+          "edited": "The token should remain because it is the literal name of this field."
+        }
+      ]
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_03",
+          "id": 0,
+          "gold_delete": true,
+          "margin": -0.25,
+          "label_probability_mass": 0.9521234481974987,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.698488374997396,
+          "original": "Please uh, type a a into the box without removing either letter.",
+          "edited": "Please type a a into the box without removing either letter."
+        },
+        {
+          "case_id": "dev_03",
+          "id": 1,
+          "gold_delete": false,
+          "margin": -0.75,
+          "label_probability_mass": 1.011941746149322,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6905767080024816,
+          "original": "Please uh, type a a into the box without removing either letter.",
+          "edited": "Please uh, type a into the box without removing either letter."
+        }
+      ]
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_04",
+          "id": 0,
+          "gold_delete": false,
+          "margin": -1.125,
+          "label_probability_mass": 1.0316403788761512,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6598379159695469,
+          "original": "Há um, e apenas um, sensor conectado ao computador.",
+          "edited": "Há e apenas um, sensor conectado ao computador."
+        },
+        {
+          "case_id": "dev_04",
+          "id": 1,
+          "gold_delete": false,
+          "margin": -0.875,
+          "label_probability_mass": 0.9737940756511623,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6669875000370666,
+          "original": "Há um, e apenas um, sensor conectado ao computador.",
+          "edited": "Há um, e apenas sensor conectado ao computador."
+        }
+      ]
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_05",
+          "id": 0,
+          "gold_delete": true,
+          "margin": -0.5,
+          "label_probability_mass": 0.9744101008840758,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.668006082996726,
+          "original": "We uh, need to to check the same result again.",
+          "edited": "We need to to check the same result again."
+        },
+        {
+          "case_id": "dev_05",
+          "id": 1,
+          "gold_delete": true,
+          "margin": -0.375,
+          "label_probability_mass": 1.0233926793911419,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6511117080226541,
+          "original": "We uh, need to to check the same result again.",
+          "edited": "We uh, need to check the same result again."
+        }
+      ]
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_06",
+          "id": 0,
+          "gold_delete": false,
+          "margin": -0.625,
+          "label_probability_mass": 0.9311831270709832,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6520937090390362,
+          "original": "Repeat the words and and as a literal sequence.",
+          "edited": "Repeat the words and as a literal sequence."
+        }
+      ]
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "scores": []
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "scores": [
+        {
+          "case_id": "dev_08",
+          "id": 0,
+          "gold_delete": true,
+          "margin": -0.5,
+          "label_probability_mass": 0.9744101008840758,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6648814170039259,
+          "original": "I I wrote the word erm, in the glossary yesterday.",
+          "edited": "I wrote the word erm, in the glossary yesterday."
+        },
+        {
+          "case_id": "dev_08",
+          "id": 1,
+          "gold_delete": false,
+          "margin": -0.875,
+          "label_probability_mass": 0.9737940756511623,
+          "argmax_token": 15,
+          "argmax_is_label": true,
+          "argmax_text": "0",
+          "elapsed_s": 0.6615276670199819,
+          "original": "I I wrote the word erm, in the glossary yesterday.",
+          "edited": "I I wrote the word in the glossary yesterday."
+        }
+      ]
+    }
+  ]
+}

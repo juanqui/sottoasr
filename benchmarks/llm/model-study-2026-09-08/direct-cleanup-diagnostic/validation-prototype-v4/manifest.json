@@ -1,0 +1,25 @@
+{
+  "files": {
+    "README.md": "523fe366d403573a233ced2b834257123655b0bd951dc42ee8b546a236ae0208",
+    "evaluate.py": "8ed20ca32191823caed4723bcb73e91b74f288e9ce1ca8f7ffa21db219c42c46",
+    "freeze.json": "25bd9dc96cea34de6c4f34d7e3f2afca343419d288fa706e012e07a90145c643",
+    "minicpm2000-D1.json": "e44bba43c8d061a305d5a8137ab1dc0835c69750a04e9c47822b0e5305571517",
+    "minicpm2000-D3.json": "9b9e8e04fc5745b8aaff4a00b883419c5d139e30af2b69a3d561ce7ed30caf31",
+    "minicpm2000-D4.json": "fa66e2ffed400ac8b79ef8f001898a13b6e896bc0c1a94dde8a48d880cf9173c",
+    "minicpm2000-common.json": "17fe2107e748d02abc585d7742a5afce2be4702d38df5529543ad2682c106289",
+    "pollard_mixed-common.json": "d12b813d413e1d84aaa122f80a0be8872c8be6782b7827bdd8f1317ca0a7daa9",
+    "qwen4000-best-dev.json": "73cd2712988d901712f7fce56efe3be32dc7c8b6846c5f3debc174eba1d34006",
+    "qwen4000-common.json": "2a32938969240b361bd54c67bfd734ecfe94d4c960298929ef04c7d54db4312b",
+    "review.json": "628eac43ab58b6e31726fda51860b0c5b80e3d6440eae4914a0044354f6b4c85",
+    "source_validation.py": "5f871555c86441d581650e280da676c9396a3d23f27b754c6cfd5d4e61fda6d9",
+    "spark4000-best-dev.json": "b0e3ada42804e945a8ca8b609c141c55bd28feecd695b4a0664957f0714810a7",
+    "spark4000-common.json": "9b9440616c23bcaba3b143f10babd37e2988fc8a8972a4d195426d080b9413f8",
+    "summary.json": "d4116462788e6aae7329430f84e599e8a72bf9e0670305b6d4601dc2dd7bf2fa",
+    "unit-tests.txt": "74ce173401c3ce53151e08f5f81669e8e8db76706bb672802e6b5c3aa68b9c66",
+    "v3-to-v4.patch": "3820f6c1dae2fae43de48bc691003ad3e33cf7d902bf9d3afb72f7561397581d"
+  },
+  "exclude": [
+    "**/__pycache__/**",
+    "**/*.pyc"
+  ]
+}

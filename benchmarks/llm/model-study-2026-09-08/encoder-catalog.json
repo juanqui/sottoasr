@@ -1,0 +1,228 @@
+[
+  {
+    "id": "arielcerdap/modernbert-base-multiclass-disfluency-v2",
+    "revision": "bb56bf6b789b94faa126c953499fa138137d602c",
+    "created": "2026-03-11 15:12:14+00:00",
+    "modified": "2026-03-13 14:08:15+00:00",
+    "card": {
+      "datasets": [
+        "disfluency-dataset"
+      ],
+      "language": "en",
+      "metrics": [
+        "accuracy",
+        "f1"
+      ],
+      "tags": [
+        "disfluency-detection",
+        "token-classification",
+        "modernbert",
+        "speech-pathology"
+      ],
+      "model-index": [
+        {
+          "name": "ModernBERT Multiclass Disfluency Detection",
+          "results": [
+            {
+              "task": {
+                "type": "token-classification",
+                "name": "Token Classification"
+              },
+              "dataset": {
+                "name": "Disfluency Dataset",
+                "type": "custom",
+                "config": "default",
+                "split": "test"
+              },
+              "metrics": [
+                {
+                  "type": "accuracy",
+                  "value": 0.9319,
+                  "name": "Accuracy",
+                  "verified": false
+                },
+                {
+                  "type": "f1",
+                  "value": 0.7543,
+                  "name": "F1",
+                  "verified": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "root_files": [
+      {
+        "name": ".gitattributes",
+        "bytes": 1519
+      },
+      {
+        "name": "README.md",
+        "bytes": 1008
+      },
+      {
+        "name": "config.json",
+        "bytes": 2149
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 598449012
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 3583228
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 351
+      },
+      {
+        "name": "training_args.bin",
+        "bytes": 5201
+      }
+    ]
+  },
+  {
+    "id": "sam-castro/mow-disfluency-classifier",
+    "revision": "e1f59b45e03988dd55b8ff307c602f0d4567bf8c",
+    "created": "2026-04-04 05:47:42+00:00",
+    "modified": "2026-04-04 05:54:10+00:00",
+    "card": {
+      "base_model": "arielcerdap/modernbert-base-multiclass-disfluency-v2",
+      "license": "cc-by-4.0",
+      "tags": [
+        "disfluency-detection",
+        "token-classification",
+        "speech-processing",
+        "onnx",
+        "quantized"
+      ]
+    },
+    "root_files": [
+      {
+        "name": ".gitattributes",
+        "bytes": 1519
+      },
+      {
+        "name": "DisfluencyClassifier.onnx",
+        "bytes": 150593575
+      },
+      {
+        "name": "README.md",
+        "bytes": 1803
+      },
+      {
+        "name": "label_map.json",
+        "bytes": 66
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 3583228
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 351
+      }
+    ]
+  },
+  {
+    "id": "Teloxico/modernBERT-4-disfluency",
+    "revision": "108d2519396235a98c97f974fbbd41fdeb8edc6e",
+    "created": "2025-06-25 05:47:01+00:00",
+    "modified": "2025-06-25 06:31:25+00:00",
+    "card": {},
+    "root_files": [
+      {
+        "name": ".gitattributes",
+        "bytes": 1519
+      },
+      {
+        "name": "README.md",
+        "bytes": 821
+      },
+      {
+        "name": "config.json",
+        "bytes": 1517
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 299226948
+      },
+      {
+        "name": "results.json",
+        "bytes": 1212
+      },
+      {
+        "name": "special_tokens_map.json",
+        "bytes": 694
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 3583228
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 20836
+      },
+      {
+        "name": "training_args.bin",
+        "bytes": 5304
+      }
+    ]
+  },
+  {
+    "id": "stillerman/fdt-disfluency-small-29m",
+    "revision": "1d7a4ed440256b8d6ee3119b2afd79549bf9edb6",
+    "created": "2026-07-07 03:42:15+00:00",
+    "modified": "2026-07-07 03:42:30+00:00",
+    "card": {
+      "license": "apache-2.0",
+      "pipeline_tag": "token-classification",
+      "tags": [
+        "disfluency-detection",
+        "transformers.js",
+        "onnx"
+      ]
+    },
+    "root_files": [
+      {
+        "name": ".gitattributes",
+        "bytes": 1519
+      },
+      {
+        "name": "README.md",
+        "bytes": 1114
+      },
+      {
+        "name": "config.json",
+        "bytes": 903
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 114020336
+      },
+      {
+        "name": "special_tokens_map.json",
+        "bytes": 695
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 711649
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 351
+      },
+      {
+        "name": "val_metrics.json",
+        "bytes": 154
+      },
+      {
+        "name": "vocab.txt",
+        "bytes": 231508
+      }
+    ]
+  }
+]

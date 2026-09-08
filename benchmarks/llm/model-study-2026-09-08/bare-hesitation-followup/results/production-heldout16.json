@@ -1,0 +1,397 @@
+{
+  "summary": {
+    "label": "stock350",
+    "prompt_variant": "production",
+    "dataset_sha256": "e0cf11ddd28188cfde59f55193f85d86c3d03a6ce51cf6538a7ef683024e9fc0",
+    "protocol_sha256": "5e69290a0bce931f5fe17c9d9dac5e8db065f4d4cb7cad3e0fca5878a18a9ee7",
+    "runtime": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    },
+    "python": "3.14.5",
+    "load_s": 1.02844979200745,
+    "load_cpu_s": 0.747076,
+    "process_to_loaded_s": 1.0507249160436913,
+    "after_load": {
+      "rss_bytes": 429375488,
+      "peak_rss_bytes": 457768960,
+      "metal_active_bytes": 221772808,
+      "metal_cache_bytes": 1860,
+      "metal_peak_bytes": 221772808
+    },
+    "first_cleanup_s": 0.1081069580395706,
+    "process_to_first_result_s": 1.1595905830035917,
+    "all": {
+      "cases": 16,
+      "exact": 8,
+      "needs_edits": 8,
+      "needed_exact": 5,
+      "needed_safe_useful": 6,
+      "preserve_cases": 8,
+      "preserve_unchanged": 3,
+      "changed": 11,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.08261625003069639,
+      "p95_s": 0.08354433299973607,
+      "max_s": 0.1081069580395706
+    },
+    "eligible": {
+      "cases": 11,
+      "exact": 5,
+      "needs_edits": 6,
+      "needed_exact": 5,
+      "needed_safe_useful": 6,
+      "preserve_cases": 5,
+      "preserve_unchanged": 0,
+      "changed": 11,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.08261625003069639,
+      "p95_s": 0.08354433299973607,
+      "max_s": 0.1081069580395706
+    },
+    "warm_eligible": {
+      "cases": 10,
+      "exact": 4,
+      "needs_edits": 5,
+      "needed_exact": 4,
+      "needed_safe_useful": 5,
+      "preserve_cases": 5,
+      "preserve_unchanged": 0,
+      "changed": 10,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.08260110401897691,
+      "p95_s": 0.08339874999364838,
+      "max_s": 0.08354433299973607
+    },
+    "after_run": {
+      "rss_bytes": 438796288,
+      "peak_rss_bytes": 457768960,
+      "metal_active_bytes": 221772808,
+      "metal_cache_bytes": 262144,
+      "metal_peak_bytes": 554330200
+    },
+    "process_cpu_s": 1.066797,
+    "measured_processing_wall_s": 1.9905262080137618,
+    "idle": {
+      "seconds": 9.874987881630659e-06,
+      "cpu_s": 1.0000000000065512e-05,
+      "before": {
+        "rss_bytes": 438796288,
+        "peak_rss_bytes": 457768960,
+        "metal_active_bytes": 221772808,
+        "metal_cache_bytes": 262144,
+        "metal_peak_bytes": 554330200
+      },
+      "after": {
+        "rss_bytes": 438796288,
+        "peak_rss_bytes": 457768960,
+        "metal_active_bytes": 221772808,
+        "metal_cache_bytes": 262144,
+        "metal_peak_bytes": 554330200
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "fresh16_h01",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "I saved the revised diagram in the project folder.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.1081069580395706,
+      "cpu_s": 0.042511999999999994,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 213,
+      "prompt_tps": 2583.413887771523,
+      "generation_tps": 408.2327044885979,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h02",
+      "preserve": false,
+      "eligible": false,
+      "selected_ids": [],
+      "output": "Uh, I left the adapter beside the monitor.",
+      "exact": false,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 1.7909915186464787e-06,
+      "cpu_s": 8.000000000008e-06
+    },
+    {
+      "id": "fresh16_h03",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "I checked the serial number twice.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.08238479198189452,
+      "cpu_s": 0.02300599999999997,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 210,
+      "prompt_tps": 3116.0197910203538,
+      "generation_tps": 391.88634620905157,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h04",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "The delivery should arrive before sunset.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.08261625003069639,
+      "cpu_s": 0.02300100000000005,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 210,
+      "prompt_tps": 3173.2680030012916,
+      "generation_tps": 373.0386313811921,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h05",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Please schedule the inspection for, next Wednesday.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.08258595800725743,
+      "cpu_s": 0.025787000000000004,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 213,
+      "prompt_tps": 3178.1241909524942,
+      "generation_tps": 392.45185487111274,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h06",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "I packed the spare batteries before sunrise.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.0814790420117788,
+      "cpu_s": 0.025754999999999972,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 213,
+      "prompt_tps": 3215.175242400855,
+      "generation_tps": 394.636223121577,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h07",
+      "preserve": false,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Send the parcel to the west entrance.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.08354433299973607,
+      "cpu_s": 0.027409999999999934,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 212,
+      "prompt_tps": 3089.6246200743785,
+      "generation_tps": 398.5469762987319,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_h08",
+      "preserve": false,
+      "eligible": false,
+      "selected_ids": [],
+      "output": "The estimate is is ready for approval.",
+      "exact": false,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 2.2500171326100826e-06,
+      "cpu_s": 1.0999999999983245e-05
+    },
+    {
+      "id": "fresh16_p01",
+      "preserve": true,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "The syllable is printed beneath the pronunciation guide.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.08325808303197846,
+      "cpu_s": 0.026688999999999963,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 213,
+      "prompt_tps": 3146.7543881891756,
+      "generation_tps": 369.7640948237325,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_p02",
+      "preserve": true,
+      "eligible": false,
+      "selected_ids": [],
+      "output": "She wrote \"um, uh\" in the margin as examples of hesitation.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 2.125045284628868e-06,
+      "cpu_s": 1.2999999999929734e-05
+    },
+    {
+      "id": "fresh16_p03",
+      "preserve": true,
+      "eligible": false,
+      "selected_ids": [],
+      "output": "Dr. Um Hye-jin will present the microscopy results on Friday.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 1.333013642579317e-06,
+      "cpu_s": 1.3000000000040757e-05
+    },
+    {
+      "id": "fresh16_p04",
+      "preserve": true,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Use the identifier for the unit multiplier in this function.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.08228883298579603,
+      "cpu_s": 0.02715999999999985,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 215,
+      "prompt_tps": 3219.4123083466957,
+      "generation_tps": 388.9599925621589,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_p05",
+      "preserve": true,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Eu preciso de mapa para encontrar a entrada principal.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.08153191703604534,
+      "cpu_s": 0.025376000000000065,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 215,
+      "prompt_tps": 3202.810512606455,
+      "generation_tps": 406.6624716911914,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_p06",
+      "preserve": true,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Wir treffen uns neun Uhr vor dem alten Rathaus.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.08339874999364838,
+      "cpu_s": 0.025088,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 214,
+      "prompt_tps": 3134.899562384038,
+      "generation_tps": 389.2249299967516,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "fresh16_p07",
+      "preserve": true,
+      "eligible": false,
+      "selected_ids": [],
+      "output": "That was a long, long, long drive through the mountains.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 2.2500171326100826e-06,
+      "cpu_s": 1.1999999999900979e-05
+    },
+    {
+      "id": "fresh16_p08",
+      "preserve": true,
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Write exactly as shown in the answer field.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.08268449996830896,
+      "cpu_s": 0.026068999999999898,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 212,
+      "prompt_tps": 3184.290849578959,
+      "generation_tps": 362.9805236806161,
+      "finish_reason": "stop"
+    }
+  ]
+}

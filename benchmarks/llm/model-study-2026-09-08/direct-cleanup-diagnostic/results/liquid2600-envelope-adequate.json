@@ -1,0 +1,79 @@
+{
+  "label": "liquid2600",
+  "load_s": 1.5303726670099422,
+  "loaded_model_class": "mlx_lm.models.lfm2.Model",
+  "runtime": {
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.3.0",
+    "huggingface-hub": "1.7.2",
+    "psutil": "7.2.2"
+  },
+  "prompt_sha256": "4a3457cff99674edc2b3ec8702f12641721c2584268d30f3ce4319c187da0a69",
+  "cases_sha256": "1e7f2f1b976b41b7740d5f42558e82b9273f879a8d493bb17366e55bd0b99186",
+  "warmup_cases_sha256": null,
+  "native_thinking": true,
+  "temperature": 0.0,
+  "deadline_s": 90,
+  "reasoning_budget": 4096,
+  "budget_formula": "native reasoning budget",
+  "memory_limit_bytes": 4294967296,
+  "cache_limit_bytes": 134217728,
+  "summary": {},
+  "rows": [
+    {
+      "mode": "few_shot",
+      "id": "reported_sentence",
+      "is_warmup": false,
+      "raw_output": "The user wants me to clean up the transcript by removing speech disfluencies like \"um\", \"uh\", \"you know\", etc. They want me to preserve the intended wording, facts, names, numbers, negations, and their order. I should not summarize, translate, paraphrase, or add information. I should return only the cleaned transcript without any preface, explanation, or surrounding quotation marks.\n\nLet me analyze the input transcript:\n\"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nThe disfluencies to remove:\n- \"um\" (multiple occurrences)\n- \"uh\" (multiple occurrences)\n- \"yeah\" (this is a word being used, not a filler - but wait, \"yeah\" is a common affirmation, not a filler. However, the instruction says to remove \"speech disfluencies\" and \"accidental word stutters\". \"Yeah\" is typically a filler word in this context, but it could also be considered a word being discussed. Let me think about this more carefully.\n\nActually, looking at the transcript more carefully:\n- \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nThe words \"um\" and \"uh\" are clearly filler words/disfluencies. \"Yeah\" is being used as an affirmation/response, not as a filler. However, in some contexts, \"yeah\" could be considered a filler. But given the context \"remove all the um uh yeah, those things from the sentences\", it seems like the speaker is testing whether the system can remove filler words. \"Yeah\" here is likely functioning as a filler/affirmation.\n\nBut wait - the instruction says \"Remove empty hesitation fillers, accidental word stutters, and clearly abandoned short fragments.\" \"Yeah\" is not really an empty hesitation filler - it's a word that can carry meaning. However, in the context of \"remove all the um uh yeah\", it seems like the speaker is treating \"yeah\" as part of the filler to be removed.\n\nActually, I should be careful. The instruction says to preserve \"literal words being discussed, deliberate emphasis, meaningful words in other languages, quoted text, and code.\" \"Yeah\" is a word being used in the sentence. But in this specific context, it's being used as a filler/affirmation.\n\nLet me reconsider. The user wants me to clean up disfluencies. Common disfluencies include:\n- \"um\", \"uh\", \"you know\", \"like\", \"well\", \"so\", \"actually\", etc.\n- \"um\" and \"uh\" are definitely fillers\n\n\"Yeah\" is a bit ambiguous. In many transcript cleaning tasks, \"yeah\" is considered a filler word. But it could also be a genuine response. Given the context \"remove all the um uh yeah\", it seems like the speaker is explicitly asking to remove \"yeah\" as well.\n\nHowever, I should be careful not to over-clean. The instruction says \"preserve literal words being discussed\" - \"yeah\" is being discussed here as part of the sentence. But in this specific case, it's functioning as a filler.\n\nI think the safest approach is to remove \"um\" and \"uh\" as they are clear disfluencies, and keep \"yeah\" since it's functioning as a word in the sentence (even if it's a filler). But actually, looking at the pattern, the speaker seems to be testing the system's ability to remove fillers. \"Yeah\" is likely intended to be removed as well.\n\nLet me look at the first transcript again: \"I need the green notebook tomorrow.\" - This is already clean.\n\nThe second transcript: \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\" - This needs cleaning.\n\nI'll remove \"um\" and \"uh\" but keep \"yeah\" since it's a word being used in the sentence (even if it's a filler). Actually, wait - the instruction says \"Remove empty hesitation fillers\" - \"yeah\" could be considered an empty hesitation filler in this context. But it's also a word that could be meaningful.\n\nGiven the ambiguity, I'll err on the side of removing it since the speaker explicitly says \"remove all the um uh yeah\" - treating \"yeah\" as part of the fillers to be removed. But I should be careful - \"yeah\" is a common word that might be part of the actual message.\n\nActually, looking more carefully at the context: \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\" - The speaker is testing if the system can remove fillers. \"Yeah\" here is likely functioning as a filler/affirmation, similar to \"um\" and \"uh\". So I should remove it.\n\nBut I'm second-guessing myself. Let me think about what \"clean up speech disfluencies\" means. The goal is to produce a transcript that is more readable and professional, with filler words removed. \"Yeah\" is a common filler word. So I should remove it.\n\nHowever, I should also consider that \"yeah\" might be part of the actual content being communicated. In this case, the speaker is saying \"remove all the um uh yeah\" - meaning they want those words removed. So \"yeah\" should be removed.\n\nI'll produce: \"This is a test to see if this can remove all the things from the sentences.\"\n\nWait, but I need to be careful. The instruction says \"Preserve literal words being discussed, deliberate emphasis, meaningful words in other languages, quoted text, and code.\" \"Yeah\" is a word being discussed (it's part of the sentence). But in this specific case, it's functioning as a filler.\n\nI think the best approach is to remove \"um\" and \"uh\" but keep \"yeah\" because it's a word that could be meaningful in context. Actually, no - the speaker is explicitly asking to remove \"yeah\" as part of the fillers. The phrase \"remove all the um uh yeah\" suggests that \"yeah\" is considered a filler to be removed.\n\nLet me go with removing \"um\" and \"uh\" only, keeping \"yeah\" as it's a word being used in the sentence. But actually, looking at the pattern of the first two transcripts, the first one was already clean. The second one is the test case.\n\nI'll remove \"um\" and \"uh\" but keep \"yeah\" since it's a legitimate word in the sentence (even if it's a filler). The result would be: \"This is a test to see if this can remove all the things from the sentences.\"\n\nBut wait - I should also consider if \"those\" is a filler. \"Those things\" - \"those\" could be a demonstrative pronoun, not a filler. So I'll keep it.\n\nFinal decision: Remove \"um\" and \"uh\" only. Keep \"yeah\" and \"those\" as they are.\n\nActually, I'm overthinking this. Let me re-read the instruction: \"Clean up speech disfluencies in the transcript. Remove empty hesitation fillers, accidental word stutters, and clearly abandoned short fragments. Preserve intended wording, facts, names, numbers, negations, and their order.\"\n\n\"Yeah\" is not an empty hesitation filler - it's a word that can carry meaning. It's a common affirmation. So I should preserve it. The disfluencies to remove are \"um\" and \"uh\".\n\nSo the cleaned transcript should be: \"This is a test to see if this can remove all the things from the sentences.\"\n\nBut wait, there's also \"I need the green notebook tomorrow.\" which is already clean.\n\nThe user's last message was \"Please write um exactly as the label.\" which I already responded to with \"Please write um exactly as the label.\"\n\nNow I need to respond to the third transcript: \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nAfter cleaning: \"This is a test to see if this can remove all the things from the sentences.\"\n\nActually, I should double-check - is \"those\" a filler? \"Those things\" - \"those\" is a demonstrative pronoun, not a filler. So it stays.\n\nLet me produce the final cleaned transcript.</think>This is a test to see if this can remove all the things from the sentences.",
+      "final_output": "This is a test to see if this can remove all the things from the sentences.",
+      "completed": true,
+      "estimated_reasoning_tokens": 1808,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 37.93999254103983,
+      "generation_elapsed_s": 37.87146308302181,
+      "cpu_s": 16.077108,
+      "rss_before_bytes": 2123726848,
+      "rss_after_bytes": 1948631040,
+      "peak_rss_process_bytes": 2258862080,
+      "peak_metal_request_bytes": 2027371642,
+      "active_metal_after_bytes": 1583347720,
+      "generation_tokens": 1827,
+      "prompt_tokens": 259,
+      "budget": 4096,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": true,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um",
+            "uh",
+            "yeah,",
+            "those"
+          ],
+          "added": []
+        }
+      ]
+    }
+  ]
+}

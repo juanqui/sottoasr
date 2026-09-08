@@ -1,0 +1,694 @@
+{
+  "validator_sha256": "4a8bc2a49feb6b944e765ec238f7bdc381a65576907d1b8ddddf9a4b172b177b",
+  "profiles": 21,
+  "proposals": 1270,
+  "reconstruction_checks": 2540,
+  "python": "3.14.5",
+  "unicode": "16.0.0",
+  "language_bypass": false,
+  "all_data_is_revealed_development": true,
+  "v5_to_v6_changed_outputs": [
+    {
+      "profile": "revealed-release250",
+      "id": "release_010",
+      "source": "Uh, not yet.",
+      "raw": "Not yet.",
+      "v5": "Uh, not yet.",
+      "v6": "Not yet.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_057",
+      "source": "The technician will will arrive through the loading entrance.",
+      "raw": "The technician will arrive through the loading entrance.",
+      "v5": "The technician will will arrive through the loading entrance.",
+      "v6": "The technician will arrive through the loading entrance.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_063",
+      "source": "The worker stopped stopped responding after the third request.",
+      "raw": "The worker stopped responding after the third request.",
+      "v5": "The worker stopped stopped responding after the third request.",
+      "v6": "The worker stopped responding after the third request.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_064",
+      "source": "I opened opened the drawing in the read-only viewer.",
+      "raw": "I opened the drawing in the read-only viewer.",
+      "v5": "I opened opened the drawing in the read-only viewer.",
+      "v6": "I opened the drawing in the read-only viewer.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_078",
+      "source": "Before we start before we start, confirm that nobody is inside the enclosure.",
+      "raw": "Before we start, confirm that nobody is inside the enclosure.",
+      "v5": "Before we start before we start, confirm that nobody is inside the enclosure.",
+      "v6": "Before we start, confirm that nobody is inside the enclosure.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "revealed-release250",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_010",
+      "source": "Uh, not yet.",
+      "raw": "Not yet.",
+      "v5": "Uh, not yet.",
+      "v6": "Not yet.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D3",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_010",
+      "source": "Uh, not yet.",
+      "raw": "Not yet.",
+      "v5": "Uh, not yet.",
+      "v6": "Not yet.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D5",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D6",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D7",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D7",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D7",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D7",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-D7",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "restart_03",
+      "source": "We can label all the uh um these drawers before the shelves arrive.",
+      "raw": "We can label all these drawers before the shelves arrive.",
+      "v5": "We can label all the uh um these drawers before the shelves arrive.",
+      "v6": "We can label all these drawers before the shelves arrive.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in, um.",
+      "v5": "The sample tag ends in um.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_010",
+      "source": "Uh, not yet.",
+      "raw": "Not yet.",
+      "v5": "Uh, not yet.",
+      "v6": "Not yet.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-qwen4-D5",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "restart_03",
+      "source": "We can label all the uh um these drawers before the shelves arrive.",
+      "raw": "We can label all these drawers before the shelves arrive.",
+      "v5": "We can label all the uh um these drawers before the shelves arrive.",
+      "v6": "We can label all these drawers before the shelves arrive.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_010",
+      "source": "Uh, not yet.",
+      "raw": "Not yet.",
+      "v5": "Uh, not yet.",
+      "v6": "Not yet.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-spark4-D5",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_202",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "raw": "Dr. confirmed that the spare lens is available.",
+      "v5": "Dr. confirmed that the spare lens is available.",
+      "v6": "Dr. Um um confirmed that the spare lens is available.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_220",
+      "source": "The sample tag ends in uh, um.",
+      "raw": "The sample tag ends in.",
+      "v5": "The sample tag ends in.",
+      "v6": "The sample tag ends in uh, um.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_225",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "raw": "Set the request parameter to the value returned by unit_multiplier.",
+      "v5": "Set the request parameter to the value returned by unit_multiplier.",
+      "v6": "Set the request parameter um to the value returned by unit_multiplier.",
+      "v5_harm": true,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_055",
+      "source": "The return label should go on on the largest carton.",
+      "raw": "The return label should go on the largest carton.",
+      "v5": "The return label should go on on the largest carton.",
+      "v6": "The return label should go on the largest carton.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_056",
+      "source": "We can can finish the cable test before lunch.",
+      "raw": "We can finish the cable test before lunch.",
+      "v5": "We can can finish the cable test before lunch.",
+      "v6": "We can finish the cable test before lunch.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_062",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "raw": "Please bring the torque wrench back after the inspection.",
+      "v5": "Please bring bring the torque wrench back after the inspection.",
+      "v6": "Please bring the torque wrench back after the inspection.",
+      "v5_harm": false,
+      "v6_harm": false
+    },
+    {
+      "profile": "pilot-pollard-D5",
+      "id": "release_073",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "raw": "At the moment, the spare server is unavailable.",
+      "v5": "At the moment at the moment, the spare server is unavailable.",
+      "v6": "At the moment, the spare server is unavailable.",
+      "v5_harm": false,
+      "v6_harm": false
+    }
+  ],
+  "v5_to_v6_new_harms": [],
+  "v6_remaining_harms": {
+    "minicpm2000-common": [],
+    "pollard_mixed-common": [],
+    "spark4000-common": [],
+    "spark4000-best-dev": [],
+    "qwen4000-common": [],
+    "qwen4000-best-dev": [],
+    "liquid1200-common": [
+      "semantic_31"
+    ],
+    "liquid350-common": [
+      "semantic_31"
+    ],
+    "minicpm2000-D1": [],
+    "minicpm2000-D2": [],
+    "minicpm2000-D3": [],
+    "minicpm2000-D4": [],
+    "revealed-release250": [
+      "release_242"
+    ],
+    "revealed-restarts12": [],
+    "pilot-D3": [
+      "release_242"
+    ],
+    "pilot-D5": [
+      "release_242"
+    ],
+    "pilot-D6": [],
+    "pilot-D7": [
+      "release_242"
+    ],
+    "pilot-qwen4-D5": [
+      "release_242"
+    ],
+    "pilot-spark4-D5": [
+      "restart_11"
+    ],
+    "pilot-pollard-D5": [
+      "release_242"
+    ]
+  }
+}

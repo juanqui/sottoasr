@@ -1,0 +1,201 @@
+{
+  "created_at_utc": "2026-09-08T14:14:53.855362+00:00",
+  "all_inputs_revealed_development": true,
+  "qualification2_opened": false,
+  "profiles": [
+    {
+      "name": "minicpm2000-common",
+      "raw": "results/semantic60-minicpm2000-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "pollard_mixed-common",
+      "raw": "results/semantic60-pollard_mixed-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "spark4000-common",
+      "raw": "results/semantic60-spark4000-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "spark4000-best-dev",
+      "raw": "results/semantic60-spark4000-best-dev.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "qwen4000-common",
+      "raw": "results/semantic60-qwen4000-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "qwen4000-best-dev",
+      "raw": "results/semantic60-qwen4000-best-dev.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "liquid1200-common",
+      "raw": "results/semantic60-liquid1200-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "liquid350-common",
+      "raw": "results/semantic60-liquid350-common.json",
+      "gold": [
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "minicpm2000-D1",
+      "raw": "validation-prototype-v6/inputs/minicpm2000-D1.json",
+      "gold": [
+        "cases.json",
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "minicpm2000-D2",
+      "raw": "validation-prototype-v6/inputs/minicpm2000-D2.json",
+      "gold": [
+        "cases.json",
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "minicpm2000-D3",
+      "raw": "validation-prototype-v6/inputs/minicpm2000-D3.json",
+      "gold": [
+        "cases.json",
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "minicpm2000-D4",
+      "raw": "validation-prototype-v6/inputs/minicpm2000-D4.json",
+      "gold": [
+        "cases.json",
+        "semantic60.json"
+      ],
+      "protected": "semantic60-protected.json"
+    },
+    {
+      "name": "revealed-release250",
+      "raw": "qualification/results/qualification-release250.json",
+      "gold": [
+        "qualification/release250.json"
+      ]
+    },
+    {
+      "name": "revealed-restarts12",
+      "raw": "qualification/results/qualification-restarts12.json",
+      "gold": [
+        "qualification/release-restarts12.json"
+      ]
+    },
+    {
+      "name": "pilot-D3",
+      "raw": "validation-prototype-v6/inputs/pilot-D3.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-D5",
+      "raw": "validation-prototype-v6/inputs/pilot-D5.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-D6",
+      "raw": "validation-prototype-v6/inputs/pilot-D6.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-D7",
+      "raw": "validation-prototype-v6/inputs/pilot-D7.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-qwen4-D5",
+      "raw": "validation-prototype-v6/inputs/pilot-qwen4-D5.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-spark4-D5",
+      "raw": "validation-prototype-v6/inputs/pilot-spark4-D5.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    },
+    {
+      "name": "pilot-pollard-D5",
+      "raw": "validation-prototype-v6/inputs/pilot-pollard-D5.json",
+      "gold": [
+        "validation-prototype-v6/inputs/pilot36.json"
+      ]
+    }
+  ],
+  "files": {
+    "cases.json": "9be8136756daa7785e1b092df9320aa6df6e5a5616416ab6b806ce8614887e38",
+    "qualification/release-restarts12.json": "26885dfd4d0163125f09d680b543b961cce73f55368a1a3086c8d9417ab9edc4",
+    "qualification/release250.json": "7f31cbcc0b84c66b9a5a93147eb61d1d99e5a62da4e7e7dcaa547b18cd89db95",
+    "qualification/results/qualification-release250.json": "eded2c8f752e5deb8c7c0d856119b706e512929e4bb21f75ecbae437845b662b",
+    "qualification/results/qualification-restarts12.json": "39828aa1a3dbe297899d8a1fb24da06ee8003764bd7c0000090b3d9f972392bc",
+    "qualification/score_semantic.py": "5a0ad7f2da85839a1058f7c35011311e9b7d86d54f5dd719755af666e4927267",
+    "qualification/span_metrics.py": "0fd226992b2797bd28b1f68a6a86a4666634d5d8a9d11d2d2094b0a1ade174e5",
+    "results/semantic60-liquid1200-common.json": "2e531f0f2e986790a896e202a00d29a6cd985cc3e180e943847057639255151f",
+    "results/semantic60-liquid350-common.json": "b149b9f4cf9908351c33d91059dd44b1dac913a7051f84624fca4b13e5f54a2d",
+    "results/semantic60-minicpm2000-common.json": "7fdead1597a31d9db70662104b325e859b9d719e009b0b98803c403ae08a0f28",
+    "results/semantic60-pollard_mixed-common.json": "7d1582f5f56eb49fdee409ace20a963ad1489db350221beba3614866842c064b",
+    "results/semantic60-qwen4000-best-dev.json": "ca1cabc93cce8b34b9a870f9fc9b010956beb8b239c8e13ba4910a7a7c2e75ce",
+    "results/semantic60-qwen4000-common.json": "6cec7644f3af4056b2ee223c1606e7a5075cc20df17d6116119075aa354f3986",
+    "results/semantic60-spark4000-best-dev.json": "c80dd5b6494d416406f13782d64de40f5df13926d3a4f122ffa3f7b346d5ff6c",
+    "results/semantic60-spark4000-common.json": "9236d964ad3177715af7a3ef665046ef5a6e3f6cce65c9770f23528802b0c71e",
+    "semantic60-protected.json": "4bd7ec9b11d8d9614cc925d528d6a83ae7ea2befb81f8c23ae9245ae9042dbdb",
+    "semantic60.json": "cdbd7ca536f2eda6ead7f0a6ac2c5e70a8e8dc73ce32f5a6a0f6f1a06e1fab3e",
+    "validation-prototype-v6/inputs/minicpm2000-D1.json": "88ff6e842162e5462d44f63b54f6c5ee4d23b780e123cb22699fcedd840150c4",
+    "validation-prototype-v6/inputs/minicpm2000-D2.json": "850651b4f6317260018daf53c59279e76be1cb166a4da0ee3efbf52337feb1ca",
+    "validation-prototype-v6/inputs/minicpm2000-D3.json": "832015413946c8c74e558da277ac119f6c1b1880f859a812bfe2827907eecfa4",
+    "validation-prototype-v6/inputs/minicpm2000-D4.json": "2b0bb694ec8357a9343cb2b36b099492c78291e9b66f8c8182791f4e1a35799d",
+    "validation-prototype-v6/inputs/pilot-D3.json": "a45b700f37c0152ee587a522ec851ae885b780604c78d41a44da00689d206625",
+    "validation-prototype-v6/inputs/pilot-D5.json": "4ce2e4ef0b275b3f9f273e93a9c3a9378e7f489ce85e397c0b5cf7c13447f286",
+    "validation-prototype-v6/inputs/pilot-D6.json": "b305dcb5adc18d801c45175fef116b09cf1e087844cdb2072687ac09a8d95370",
+    "validation-prototype-v6/inputs/pilot-D7.json": "6aaa15ce4614f45ea58d586a38db8c0ff0bf1e3ea1212a8d5d5b3cd8e83bf152",
+    "validation-prototype-v6/inputs/pilot-pollard-D5.json": "cb9532a60ba9ce95305bd33948b4bbc8c1db3b054936235c7fada93396660263",
+    "validation-prototype-v6/inputs/pilot-qwen4-D5.json": "f12f3adea20fb8de44e57df2837e7dfdd04351313b39e4d1bfae900c29950a13",
+    "validation-prototype-v6/inputs/pilot-spark4-D5.json": "2a48de9d3e4360f4a5f5e5d33dc00583643cd933234d67961b1e08f3ab9cb23d",
+    "validation-prototype-v6/inputs/pilot36.json": "7fe75d5b27340c57d71ce329cabb868ca2a97417e3332ff9c53446b2d8067f9c"
+  }
+}

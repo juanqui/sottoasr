@@ -1,0 +1,17 @@
+{
+  "version": 6,
+  "frozen_at_utc": "2026-09-08T14:12:21.831918+00:00",
+  "validator_sha256": "4a8bc2a49feb6b944e765ec238f7bdc381a65576907d1b8ddddf9a4b172b177b",
+  "predecessor_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "policy_sha256": "8860544659001771994b45ba4ac1cfecdc27dac96e683dd148067d865c3f70df",
+  "status": "Experimental development only; previous qualification data is now revealed development, not fresh release evidence",
+  "policy_review": "Parent independently approved policy SHA before code; approved parser/protection constraints retained",
+  "authored_test_groups": 28,
+  "tests_passed_python": [
+    "3.11.14 Unicode14.0",
+    "3.14.5 Unicode16.0"
+  ],
+  "new_policy_after_freeze": false,
+  "language_bypass": "Absent; evaluated independently by parent",
+  "product_source_changes": false
+}

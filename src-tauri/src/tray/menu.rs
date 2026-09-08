@@ -5,7 +5,7 @@ use tauri::{
     AppHandle, Manager, WebviewUrl,
 };
 
-use std::io::{BufRead, BufReader};
+use std::io::{Read, Seek, SeekFrom};
 
 // Compile-time embedded tray icons (PNG template images).
 const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../../icons/tray-iconTemplate.png");
@@ -22,45 +22,47 @@ pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
 
 /// Single canonical tray refresh. Reads UpdateState directly.
 /// Call from anywhere — periodic loop, manual check, download complete.
-pub fn refresh_tray_from_state(app: &AppHandle) {
+pub async fn refresh_tray_from_state(app: &AppHandle) {
     let state = match app.try_state::<crate::updater::UpdateState>() {
-        Some(s) => s,
+        Some(state) => state,
         None => return,
     };
+    let (has_update, tray_state) = read_tray_state(&state).await;
+    let handle = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        set_tray_icon(&handle, has_update);
+        if let Err(error) = build_tray_menu(&handle, tray_state) {
+            log::error!("Failed to rebuild tray menu: {error}");
+        }
+    }) {
+        log::error!("Failed to dispatch tray refresh: {error}");
+    }
+}
 
+/// The updater calls this from async tasks. A blocking_lock here panics even
+/// when the mutex is uncontended, terminating the periodic update checker.
+async fn read_tray_state(state: &crate::updater::UpdateState) -> (bool, TrayState) {
+    let version = state.available_version.lock().await.clone();
     let app_update = state.update_available.load(std::sync::atomic::Ordering::SeqCst);
     let model_update = state.model_update_available.load(std::sync::atomic::Ordering::SeqCst);
     let restart = state.restart_pending.load(std::sync::atomic::Ordering::SeqCst);
-    let version = state.available_version.blocking_lock().clone();
-
-    // Icon: any update → show indicator.
-    let has_any_update = app_update || model_update || restart;
-    set_tray_icon(app, has_any_update);
-
-    // Menu priority: restart > app update > model update > normal.
     let tray_state = if restart {
         TrayState::RestartPending
-    } else if let Some(v) = version {
-        let label = if model_update {
-            format!("{} (+ model)", v)
-        } else {
-            v
-        };
-        TrayState::UpdateAvailable(label)
+    } else if let Some(version) = version {
+        TrayState::UpdateAvailable(if model_update { format!("{version} (+ model)") } else { version })
     } else if model_update {
         TrayState::ModelUpdateAvailable
     } else {
         TrayState::Normal
     };
-    if let Err(e) = build_tray_menu(app, tray_state) {
-        log::error!("Failed to rebuild tray menu: {}", e);
-    }
+    (app_update || model_update || restart, tray_state)
 }
 
 // ---------------------------------------------------------------------------
 // Internal: tray state enum
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, PartialEq)]
 enum TrayState {
     Normal,
     UpdateAvailable(String), // version string, may include " (+ model)" suffix
@@ -160,14 +162,13 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
                     let app = app.clone();
                     async move {
                         let state: tauri::State<'_, crate::state::AppState> = app.state();
-                        let last = state.last_transcription.lock().await;
-                        if let Some(t) = last.as_ref() {
-                            match crate::paste::copy_to_clipboard(&t.text) {
-                                Ok(()) => log::info!(
-                                    "Copied to clipboard: \"{}\"",
-                                    &t.text[..t.text.len().min(50)]
-                                ),
-                                Err(e) => log::error!("Failed to copy to clipboard: {}", e),
+                        let text = state.last_transcription.lock().await.as_ref().map(|item| item.text.clone());
+                        if let Some(text) = text {
+                            let length = text.chars().count();
+                            match tokio::task::spawn_blocking(move || crate::paste::copy_to_clipboard(&text)).await {
+                                Ok(Ok(())) => log::info!("Copied last transcription ({length} characters)"),
+                                Ok(Err(error)) => log::error!("Failed to copy to clipboard: {error}"),
+                                Err(error) => log::error!("Clipboard task failed: {error}"),
                             }
                         } else {
                             log::info!("No transcription to copy");
@@ -215,14 +216,17 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
             }
             "copy_diagnostics" => {
                 log::info!("Tray: Copy diagnostics");
-                let diagnostics = collect_diagnostics(app);
-                match crate::paste::copy_to_clipboard(&diagnostics) {
-                    Ok(()) => log::info!(
-                        "Diagnostics copied to clipboard ({} bytes)",
-                        diagnostics.len()
-                    ),
-                    Err(e) => log::error!("Failed to copy diagnostics to clipboard: {}", e),
-                }
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let diagnostics = collect_diagnostics(&app);
+                    match crate::paste::copy_to_clipboard(&diagnostics) {
+                        Ok(()) => log::info!(
+                            "Diagnostics copied to clipboard ({} bytes)",
+                            diagnostics.len()
+                        ),
+                        Err(e) => log::error!("Failed to copy diagnostics to clipboard: {}", e),
+                    }
+                });
             }
             "about" => {
                 log::info!("Tray: Opening about window");
@@ -289,10 +293,10 @@ fn collect_diagnostics(app: &AppHandle) -> String {
 
 /// Get macOS version string via `sw_vers`.
 fn get_macos_version() -> String {
-    match std::process::Command::new("sw_vers")
-        .arg("-productVersion")
-        .output()
-    {
+    match crate::process::bounded_command(
+        std::process::Command::new("/usr/bin/sw_vers").arg("-productVersion"),
+        std::time::Duration::from_secs(2),
+    ) {
         Ok(output) if output.status.success() => {
             String::from_utf8_lossy(&output.stdout).trim().to_string()
         }
@@ -326,15 +330,54 @@ fn read_log_tail(app: &AppHandle, n: usize) -> String {
     };
 
     match std::fs::File::open(&log_path) {
-        Ok(file) => {
-            let reader = BufReader::new(file);
-            let lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
-            let start = lines.len().saturating_sub(n);
-            lines[start..].join("\n")
-        }
+        Ok(mut file) => bounded_log_tail(&mut file, n)
+            .unwrap_or_else(|error| format!("[Could not read log tail: {error}]")),
         Err(e) => {
             format!("[Could not read log file {}: {}]", log_path.display(), e)
         }
+    }
+}
+
+/// Bound disk I/O and memory even when a log has grown for months. Skip the
+/// first partial line when seeking into the file; lossy decoding tolerates a
+/// trailing write in progress without exposing an incomplete leading line.
+fn bounded_log_tail(reader: &mut (impl Read + Seek), n: usize) -> std::io::Result<String> {
+    const MAX_BYTES: u64 = 64 * 1024;
+    let length = reader.seek(SeekFrom::End(0))?;
+    let offset = length.saturating_sub(MAX_BYTES);
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::with_capacity(length.min(MAX_BYTES) as usize);
+    reader.take(MAX_BYTES).read_to_end(&mut bytes)?;
+    let bytes = if offset > 0 {
+        bytes.iter().position(|byte| *byte == b'\n')
+            .map_or(&[][..], |newline| &bytes[newline + 1..])
+    } else {
+        &bytes[..]
+    };
+    let text = String::from_utf8_lossy(bytes);
+    let lines: Vec<_> = text.lines().collect();
+    Ok(lines[lines.len().saturating_sub(n)..].join("\n"))
+}
+
+#[cfg(test)]
+mod diagnostics_tests {
+    use super::bounded_log_tail;
+    use std::io::Cursor;
+
+    #[test]
+    fn large_log_tail_keeps_recent_unicode_lines_with_bounded_reads() {
+        let mut bytes = vec![b'x'; 1024 * 1024];
+        bytes.extend_from_slice("\nold\nready café\nlast line\n".as_bytes());
+        let mut reader = Cursor::new(bytes);
+        assert_eq!(bounded_log_tail(&mut reader, 2).unwrap(), "ready café\nlast line");
+        assert_eq!(bounded_log_tail(&mut reader, 0).unwrap(), "");
+        assert_eq!(bounded_log_tail(&mut Cursor::new(vec![b'x'; 100_000]), 100).unwrap(), "");
+    }
+
+    #[test]
+    fn short_and_empty_logs_do_not_lose_the_first_line() {
+        assert_eq!(bounded_log_tail(&mut Cursor::new(b"first\nsecond"), 100).unwrap(), "first\nsecond");
+        assert_eq!(bounded_log_tail(&mut Cursor::new(b""), 100).unwrap(), "");
     }
 }
 
@@ -343,8 +386,7 @@ fn read_log_tail(app: &AppHandle, n: usize) -> String {
 // ---------------------------------------------------------------------------
 
 /// Open a window by label, or focus it if already open.
-/// Switches to Regular activation policy so macOS shows the window.
-/// Reverts to Accessory when the window is closed (handled in lib.rs on_window_event).
+/// Accessory apps can show and focus windows without adding a Dock icon.
 pub fn open_or_focus_window(
     app: &AppHandle,
     label: &str,
@@ -353,10 +395,6 @@ pub fn open_or_focus_window(
     width: f64,
     height: f64,
 ) {
-    // Switch to Regular so macOS allows us to show windows and the window appears in front
-    #[cfg(target_os = "macos")]
-    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.unminimize();
@@ -381,5 +419,25 @@ pub fn open_or_focus_window(
             }
             Err(e) => log::error!("Failed to open {} window: {}", label, e),
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn tray_snapshot_waits_without_blocking_the_async_updater() {
+        let state = std::sync::Arc::new(crate::updater::UpdateState::new());
+        let mut version = state.available_version.lock().await;
+        let reader_state = state.clone();
+        let reader = tokio::spawn(async move { read_tray_state(&reader_state).await });
+        tokio::task::yield_now().await;
+        assert!(!reader.is_finished());
+        *version = Some("0.9.0".into());
+        state.update_available.store(true, std::sync::atomic::Ordering::SeqCst);
+        drop(version);
+        assert_eq!(reader.await.unwrap(), (true, TrayState::UpdateAvailable("0.9.0".into())));
     }
 }

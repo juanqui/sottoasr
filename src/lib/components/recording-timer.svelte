@@ -3,43 +3,21 @@
 
   interface Props {
     running: boolean;
+    startedAt?: number;
   }
 
-  let { running }: Props = $props();
+  let { running, startedAt }: Props = $props();
 
-  let elapsed: number = $state(0);
-  let frameId: number | null = $state(null);
-  // Captured internally when running becomes true — no external dependency
-  let internalStart: number | null = null;
-
-  function tick() {
-    if (internalStart != null) {
-      elapsed = Date.now() - internalStart;
-    }
-    frameId = requestAnimationFrame(tick);
-  }
+  let elapsed = $state(0);
 
   $effect(() => {
-    if (running) {
-      // Snapshot the start time the moment running becomes true
-      internalStart = Date.now();
-      elapsed = 0;
-      frameId = requestAnimationFrame(tick);
-    } else {
-      internalStart = null;
-      if (frameId != null) {
-        cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-      elapsed = 0;
-    }
-
-    return () => {
-      if (frameId != null) {
-        cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-    };
+    elapsed = 0;
+    if (!running) return;
+    const started = startedAt ?? Date.now();
+    elapsed = Math.max(0, Date.now() - started);
+    // The display has second precision. Wall-clock time avoids interval drift.
+    const interval = setInterval(() => { elapsed = Math.max(0, Date.now() - started); }, 250);
+    return () => clearInterval(interval);
   });
 
   let display: string = $derived(formatDuration(elapsed));

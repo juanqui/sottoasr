@@ -1,0 +1,431 @@
+[
+  {
+    "id": "reported_sentence",
+    "raw": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+    "expected": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+    "acceptable_outputs": [
+      "This is a test to see if this can remove all the yeah, those things from the sentences.",
+      "This is a test to see if this can remove all those things from the sentences."
+    ],
+    "group": "reported_sample",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "I I bought the the wrong charger, um, this morning.",
+    "expected": "I bought the wrong charger, this morning.",
+    "id": "dev_01",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "The token um, should remain because it is the literal name of this field.",
+    "expected": "The token um, should remain because it is the literal name of this field.",
+    "id": "dev_02",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "Please uh, type a a into the box without removing either letter.",
+    "expected": "Please type a a into the box without removing either letter.",
+    "id": "dev_03",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "Há um, e apenas um, sensor conectado ao computador.",
+    "expected": "Há um, e apenas um, sensor conectado ao computador.",
+    "id": "dev_04",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "We uh, need to to check the same result again.",
+    "expected": "We need to check the same result again.",
+    "id": "dev_05",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "Repeat the words and and as a literal sequence.",
+    "expected": "Repeat the words and and as a literal sequence.",
+    "id": "dev_06",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "The name Um, belongs to the customer in this ticket.",
+    "expected": "The name Um, belongs to the customer in this ticket.",
+    "id": "dev_07",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "raw": "I I wrote the word erm, in the glossary yesterday.",
+    "expected": "I wrote the word erm, in the glossary yesterday.",
+    "id": "dev_08",
+    "category": "development",
+    "group": "development",
+    "protected_annotations_available": false,
+    "protected_spans": []
+  },
+  {
+    "id": "restart_01",
+    "group": "restart_cleanup",
+    "raw": "Can you load the um uh those flight cases into the van?",
+    "expected": "Can you load those flight cases into the van?",
+    "reason": "The article is an abandoned grammatical start before the intended determiner those. Remove the article and both empty hesitations; retain the request, object and destination.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_02",
+    "group": "restart_cleanup",
+    "raw": "I need a erm um that slim adapter for the projector.",
+    "expected": "I need that slim adapter for the projector.",
+    "reason": "An abandoned indefinite article precedes the intended selection that slim adapter. Remove only that article and the hesitation run.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_03",
+    "group": "restart_cleanup",
+    "raw": "We can label all the uh um these drawers before the shelves arrive.",
+    "expected": "We can label all these drawers before the shelves arrive.",
+    "reason": "All remains meaningful; only the abandoned the and the empty hesitation run are removed before these drawers.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_04",
+    "group": "restart_cleanup",
+    "raw": "The repair needs an um uh this narrow seal behind the valve.",
+    "expected": "The repair needs this narrow seal behind the valve.",
+    "reason": "An is an abandoned article, not an additional item or quantity. Preserve the intended determiner, seal description and location.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_05",
+    "group": "restart_cleanup",
+    "raw": "Please forward the erm uh yeah, that revised invoice to accounts.",
+    "expected": "Please forward that revised invoice to accounts.",
+    "reason": "Within this uninterrupted request, the article and hesitation/restart sequence are abandoned before that revised invoice. Yeah does not answer a separate question or add an agreement proposition.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_06",
+    "group": "restart_cleanup",
+    "raw": "I was looking for a um erm, uh, those black retaining clips in the side drawer.",
+    "expected": "I was looking for those black retaining clips in the side drawer.",
+    "reason": "The singular article is abandoned before a plural intended object. Remove the article and all three hesitations, keeping every object and location detail.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_07",
+    "group": "restart_preserve",
+    "raw": "Yeah, those replacement pads are the ones we agreed to order.",
+    "expected": "Yeah, those replacement pads are the ones we agreed to order.",
+    "reason": "Yeah is meaningful agreement at the start of an affirmative statement, not an empty restart.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_08",
+    "group": "restart_preserve",
+    "raw": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+    "expected": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+    "reason": "The original request and different delivered item are both substantive facts. Actually clarifies the contrast.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_09",
+    "group": "restart_preserve",
+    "raw": "We ordered a short cable, no, a long cable for the overhead run.",
+    "expected": "We ordered a short cable, no, a long cable for the overhead run.",
+    "reason": "The speaker makes a substantive correction between two cable descriptions. Preserve both descriptions and the correction marker rather than treating them as an abandoned article.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_10",
+    "group": "restart_preserve",
+    "raw": "The note says “the um uh those,” and every word is part of the example.",
+    "expected": "The note says “the um uh those,” and every word is part of the example.",
+    "reason": "The exact apparent restart is quoted literal content, so its article, hesitation spellings and determiner must survive.",
+    "protected_spans": [
+      {
+        "text": "the um uh those,",
+        "start_byte": 17,
+        "end_byte": 33
+      }
+    ],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_11",
+    "group": "restart_preserve",
+    "raw": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+    "expected": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+    "reason": "This describes a sequence of spoken tokens rather than performing the restart. The unquoted word mentions are the facts being reported.",
+    "protected_spans": [
+      {
+        "text": "a, then um uh, and finally that",
+        "start_byte": 35,
+        "end_byte": 66
+      },
+      {
+        "text": "adapter",
+        "start_byte": 83,
+        "end_byte": 90
+      }
+    ],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "restart_12",
+    "group": "restart_preserve",
+    "raw": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+    "expected": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+    "reason": "Agreement and the two selection events are meaningful. The separated article and determiner do not form an empty grammatical restart.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_202",
+    "group": "adversarial_cleanup",
+    "raw": "Dr. Um um confirmed that the spare lens is available.",
+    "expected": "Dr. Um confirmed that the spare lens is available.",
+    "reason": "Surname followed by a real hesitation; delete only the second occurrence.",
+    "protected_spans": [
+      {
+        "text": "Dr. Um",
+        "start_byte": 0,
+        "end_byte": 6
+      }
+    ],
+    "category": "name_mixed",
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_220",
+    "group": "adversarial_cleanup",
+    "raw": "The sample tag ends in uh, um.",
+    "expected": "The sample tag ends in uh.",
+    "reason": "First uh is the literal suffix under discussion; final um is a produced hesitation.",
+    "protected_spans": [
+      {
+        "text": "uh",
+        "start_byte": 23,
+        "end_byte": 25
+      }
+    ],
+    "category": "word_mention_mixed",
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_225",
+    "group": "adversarial_preserve",
+    "raw": "Set the request parameter um to the value returned by unit_multiplier.",
+    "expected": "Set the request parameter um to the value returned by unit_multiplier.",
+    "reason": "Unquoted parameter name is literal code data.",
+    "protected_spans": [
+      {
+        "text": "um",
+        "start_byte": 26,
+        "end_byte": 28
+      },
+      {
+        "text": "unit_multiplier",
+        "start_byte": 54,
+        "end_byte": 69
+      }
+    ],
+    "category": "identifier",
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_242",
+    "group": "adversarial_preserve",
+    "raw": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+    "expected": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+    "reason": "Sentence-initial capitalized German Um is content.",
+    "protected_spans": [],
+    "category": "multilingual",
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_006",
+    "group": "ordinary_cleanup",
+    "raw": "We should, um, label the two power supplies separately.",
+    "expected": "We should label the two power supplies separately.",
+    "reason": "Remove bracketed hesitation and its disfluency commas.",
+    "protected_spans": [
+      {
+        "text": "two power supplies",
+        "start_byte": 25,
+        "end_byte": 43
+      }
+    ],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_010",
+    "group": "ordinary_cleanup",
+    "raw": "Uh, not yet.",
+    "expected": "Not yet.",
+    "reason": "Short negative answer; preserve the negation.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_055",
+    "group": "ordinary_cleanup",
+    "raw": "The return label should go on on the largest carton.",
+    "expected": "The return label should go on the largest carton.",
+    "reason": "Accidental preposition repetition.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_056",
+    "group": "ordinary_cleanup",
+    "raw": "We can can finish the cable test before lunch.",
+    "expected": "We can finish the cable test before lunch.",
+    "reason": "Accidental modal repetition; retain possibility and timing.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_062",
+    "group": "ordinary_cleanup",
+    "raw": "Please bring bring the torque wrench back after the inspection.",
+    "expected": "Please bring the torque wrench back after the inspection.",
+    "reason": "Immediate verb restart, not an emphatic instruction.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_073",
+    "group": "ordinary_cleanup",
+    "raw": "At the moment at the moment, the spare server is unavailable.",
+    "expected": "At the moment, the spare server is unavailable.",
+    "reason": "Repeated temporal lead-in, not two separate time claims.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_001",
+    "group": "ordinary_cleanup",
+    "raw": "Um, unlock the equipment cabinet when you arrive.",
+    "expected": "Unlock the equipment cabinet when you arrive.",
+    "reason": "Initial hesitation before a complete request.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_030",
+    "group": "ordinary_cleanup",
+    "raw": "The adapter uh supports 24 volts, and um the fuse is rated for 3 amps.",
+    "expected": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+    "reason": "Preserve both distinct electrical ratings.",
+    "protected_spans": [
+      {
+        "text": "24 volts",
+        "start_byte": 24,
+        "end_byte": 32
+      },
+      {
+        "text": "3 amps",
+        "start_byte": 63,
+        "end_byte": 69
+      }
+    ],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_165",
+    "group": "ordinary_preserve",
+    "raw": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+    "expected": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+    "reason": "Natural Spanish inventory statement with two distinct container roles.",
+    "protected_spans": [],
+    "protected_annotations_available": true
+  },
+  {
+    "id": "release_217",
+    "group": "adversarial_cleanup",
+    "raw": "The length is um twenty, sorry, thirty centimeters after trimming.",
+    "expected": "The length is twenty, sorry, thirty centimeters after trimming.",
+    "reason": "Remove um only; preserve the substantive spoken correction and apology.",
+    "protected_spans": [
+      {
+        "text": "twenty",
+        "start_byte": 17,
+        "end_byte": 23
+      },
+      {
+        "text": "thirty centimeters",
+        "start_byte": 32,
+        "end_byte": 50
+      }
+    ],
+    "category": "self_correction_mixed",
+    "protected_annotations_available": true
+  },
+  {
+    "id": "semantic_47",
+    "group": "ordinary_preserve",
+    "raw": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+    "expected": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+    "reason": "Already clean long operational note. Every inventory count, instruction, condition, and uncertainty is intentional.",
+    "protected_annotations_available": true,
+    "protected_spans": [
+      {
+        "text": "two cartons",
+        "kind": "numeric_fact",
+        "occurrence_in_source": 1,
+        "start_byte": 64,
+        "end_byte": 75
+      },
+      {
+        "text": "first shipment",
+        "kind": "numeric_fact",
+        "occurrence_in_source": 1,
+        "start_byte": 85,
+        "end_byte": 99
+      },
+      {
+        "text": "One carton",
+        "kind": "numeric_fact",
+        "occurrence_in_source": 1,
+        "start_byte": 186,
+        "end_byte": 196
+      },
+      {
+        "text": "eighteen units",
+        "kind": "numeric_fact",
+        "occurrence_in_source": 1,
+        "start_byte": 368,
+        "end_byte": 382
+      }
+    ]
+  }
+]

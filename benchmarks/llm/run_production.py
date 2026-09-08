@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Benchmark the SottoASR production MLX model using the EXACT production
-sidecar format and generation parameters.
+"""Archived benchmark for the former fine-tuned cleanup model.
+
+Current production uses sparse deletion IDs: use run_sparse.py instead.
+The legacy prompt, budget, and scores below reproduce historical experiments;
+they no longer match the production sidecar.
 
 This script mirrors src-tauri/sidecar/llm_cleanup.py:
   - Prompt format: "### Input:\n{text}\n\n### Output:\n"

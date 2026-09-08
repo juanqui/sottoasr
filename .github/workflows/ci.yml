@@ -1,0 +1,64 @@
+name: PR Build & Test
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: aarch64-apple-darwin
+          components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - run: npm ci
+      - name: Configuration assertions
+        run: bash scripts/ci-checks.sh
+      - name: Frontend build, checks and tests
+        run: |
+          npm run build
+          npm run check
+          npm test
+      - name: Default CoreML backend tests
+        working-directory: src-tauri
+        run: cargo test --locked
+      - name: Rust lint
+        working-directory: src-tauri
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Audit Rust dependencies
+        working-directory: src-tauri
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --quiet
+          cargo audit
+      - name: Python protocol tests
+        run: |
+          python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Full macOS packaging without release credentials
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: >-
+            --target aarch64-apple-darwin --bundles app,dmg
+            --config '{"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-macos-${{ github.sha }}
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7

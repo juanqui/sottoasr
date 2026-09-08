@@ -1,0 +1,20 @@
+{
+  "rust_adapter_response": "{\"candidates\":[{\"id\":0,\"kind\":\"hesitation\",\"text\":\"um\"},{\"id\":1,\"kind\":\"hesitation\",\"text\":\"um\"},{\"id\":2,\"kind\":\"hesitation\",\"text\":\"um\"},{\"id\":3,\"kind\":\"hesitation\",\"text\":\"uh\"}]}",
+  "rust_candidate_key_order": [
+    "id",
+    "kind",
+    "text"
+  ],
+  "actual_rust_baseline_selected_ids": [
+    0
+  ],
+  "earlier_manual_candidate_key_order": [
+    "id",
+    "text",
+    "kind"
+  ],
+  "earlier_manual_probe_selected_ids": [
+    3
+  ],
+  "explanation": "The earlier manual probe and actual Rust serialization expose different candidate property orders to the prompt. Production uses the actual Rust ordering; neither baseline removes all reported fillers."
+}

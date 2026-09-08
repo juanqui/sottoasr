@@ -1,5 +1,28 @@
 use crate::models::ModelStatus;
 
+#[cfg(any(feature = "asr-fluidaudio", feature = "asr-parakeet"))]
+use std::path::PathBuf;
+
+/// SDK 0.15.6 uses `Repo.folderName`, which differs from the remote repo slug.
+/// The legacy `-coreml` directory is left untouched; it is not this SDK's cache.
+#[cfg(feature = "asr-fluidaudio")]
+pub(crate) fn fluidaudio_model_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|dir| {
+        dir.join("FluidAudio/Models/parakeet-tdt-0.6b-v3")
+    })
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+fn fluidaudio_artifacts_available(directory: &std::path::Path) -> bool {
+    // Match AsrModels.modelsExist(version: .v3, encoderPrecision: .int8).
+    // Actual CoreML loading remains the authority for model validity.
+    ["Preprocessor.mlmodelc", "Encoder.mlmodelc", "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"]
+        .iter()
+        .all(|name| directory.join(name).is_dir())
+        && directory.join("parakeet_vocab.json").metadata()
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
+}
+
 /// Get the current ASR backend name at compile time.
 pub fn backend_name() -> &'static str {
     #[cfg(feature = "asr-fluidaudio")]
@@ -16,13 +39,7 @@ pub fn backend_name() -> &'static str {
 pub fn is_model_available() -> bool {
     #[cfg(feature = "asr-fluidaudio")]
     {
-        // FluidAudio stores models at ~/Library/Application Support/FluidAudio/Models/
-        let model_dir = dirs::data_dir()
-            .unwrap_or_default()
-            .join("FluidAudio")
-            .join("Models")
-            .join("parakeet-tdt-0.6b-v3-coreml");
-        model_dir.exists()
+        fluidaudio_model_dir().is_some_and(|dir| fluidaudio_artifacts_available(&dir))
     }
 
     #[cfg(all(feature = "asr-parakeet", not(feature = "asr-fluidaudio")))]
@@ -43,12 +60,7 @@ pub fn get_model_status() -> ModelStatus {
             downloaded: available,
             loaded: false,
             path: if available {
-                Some(dirs::data_dir()
-                    .unwrap_or_default()
-                    .join("FluidAudio")
-                    .join("Models")
-                    .to_string_lossy()
-                    .to_string())
+                fluidaudio_model_dir().map(|dir| dir.to_string_lossy().into_owned())
             } else {
                 None
             },
@@ -71,6 +83,43 @@ pub fn get_model_status() -> ModelStatus {
             name: "none".to_string(),
             size_bytes: None,
         }
+    }
+}
+
+#[cfg(all(test, feature = "asr-fluidaudio"))]
+mod tests {
+    use super::*;
+
+    fn populate(directory: &std::path::Path) {
+        for name in ["Preprocessor.mlmodelc", "Encoder.mlmodelc", "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"] {
+            std::fs::create_dir_all(directory.join(name)).unwrap();
+        }
+        std::fs::write(directory.join("parakeet_vocab.json"), b"{\"0\":\"test\"}").unwrap();
+    }
+
+    #[test]
+    fn readiness_uses_current_sdk_folder_and_preserves_legacy_artifacts() {
+        let temporary = tempfile::tempdir().unwrap();
+        let legacy = temporary.path().join("parakeet-tdt-0.6b-v3-coreml");
+        let current = temporary.path().join("parakeet-tdt-0.6b-v3");
+        populate(&legacy);
+        assert!(!fluidaudio_artifacts_available(&current));
+        populate(&current);
+        assert!(fluidaudio_artifacts_available(&current));
+        assert!(fluidaudio_artifacts_available(&legacy));
+        assert_eq!(fluidaudio_model_dir().unwrap().file_name().unwrap(), "parakeet-tdt-0.6b-v3");
+    }
+
+    #[test]
+    fn partial_cache_is_not_reported_as_downloaded() {
+        let temporary = tempfile::tempdir().unwrap();
+        assert!(!fluidaudio_artifacts_available(temporary.path()));
+        populate(temporary.path());
+        std::fs::write(temporary.path().join("parakeet_vocab.json"), b"").unwrap();
+        assert!(!fluidaudio_artifacts_available(temporary.path()));
+        std::fs::write(temporary.path().join("parakeet_vocab.json"), b"{}").unwrap();
+        std::fs::remove_dir(temporary.path().join("JointDecisionv3.mlmodelc")).unwrap();
+        assert!(!fluidaudio_artifacts_available(temporary.path()));
     }
 }
 
@@ -170,7 +219,6 @@ pub async fn download_parakeet_model(app: tauri::AppHandle) -> Result<(), String
             return Err(format!("HTTP {} for {}", response.status(), filename));
         }
 
-        let content_length = response.content_length().unwrap_or(*expected_size);
         let temp_path = file_path.with_extension("download");
         let mut file = tokio::fs::File::create(&temp_path).await
             .map_err(|e| format!("Failed to create {}: {}", filename, e))?;

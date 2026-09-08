@@ -1,0 +1,6 @@
+{
+  "frozen_at_utc": "2026-09-08T14:03:43.479023+00:00",
+  "policy_sha256": "8860544659001771994b45ba4ac1cfecdc27dac96e683dd148067d865c3f70df",
+  "predecessor_validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "note": "Frozen before v6 implementation; source policies explicitly reviewed with root. release250/restarts12 now development."
+}

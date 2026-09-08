@@ -233,6 +233,22 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
+# Check 7: Website release consistency and behavior
+# ─────────────────────────────────────────────────────────────
+echo -e "\n${BOLD}Check 7: Website release consistency${RESET}"
+BADGE_VERSION=$(sed -n 's/.*class="version-badge">v\([0-9][0-9.]*\)<.*/\1/p' "$REPO_ROOT/website/index.html")
+if [ "$BADGE_VERSION" = "$CANONICAL" ]; then
+  pass "Website source badge matches v$CANONICAL"
+else
+  fail "Website source badge is v$BADGE_VERSION (expected v$CANONICAL)"
+fi
+if node --test "$REPO_ROOT/scripts/test-website.mjs"; then
+  pass "Website published-release and fallback checks"
+else
+  fail "Website release checks failed"
+fi
+
+# ─────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────
 echo ""

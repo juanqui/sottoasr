@@ -1,0 +1,1902 @@
+{
+  "created_at": "2026-09-08T13:02:12.945744+00:00",
+  "validator_sha256": "4a7becf860f7062afd2831be8db3886ebb8830865158d4290aaedc5d2faa42a1",
+  "case_file": "cases.json",
+  "case_sha256": "9be8136756daa7785e1b092df9320aa6df6e5a5616416ab6b806ce8614887e38",
+  "scope": "Existing nine development cases only; no semantic60 labels or outputs read",
+  "results": [
+    {
+      "file": "minicpm2000.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "zero_shot",
+          "proposal": "This is a test to see if this can remove all the things from the sentences.",
+          "accepted": false,
+          "delivered": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "zero_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "zero_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "zero_shot",
+          "proposal": "a",
+          "accepted": false,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "zero_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "zero_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "zero_shot",
+          "proposal": "and and",
+          "accepted": false,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "zero_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "zero_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all the things from the sentences.",
+          "accepted": false,
+          "delivered": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please uh, type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "pollard_mixed.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "zero_shot",
+          "proposal": "This is a test to see if this can remove all the things from the sentences.",
+          "accepted": false,
+          "delivered": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "zero_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "zero_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "zero_shot",
+          "proposal": "a",
+          "accepted": false,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "zero_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "zero_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "zero_shot",
+          "proposal": "and",
+          "accepted": false,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "zero_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "zero_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all the things from the sentences.",
+          "accepted": false,
+          "delivered": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please uh, type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "spark4000.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "zero_shot",
+          "proposal": "This is a test to see if this can remove all the um, ah, yeah, those things from the sentences.",
+          "accepted": false,
+          "delivered": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "zero_shot",
+          "proposal": "I bought the wrong charger, this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "zero_shot",
+          "proposal": "The token should remain because it is the literal name of this field.",
+          "accepted": false,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "zero_shot",
+          "proposal": "Please type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please type a a into the box without removing either letter.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              7,
+              11
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "zero_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "zero_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "zero_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "zero_shot",
+          "proposal": "The name belongs to the customer in this ticket.",
+          "accepted": false,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "zero_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all the um uh yeah, those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all the um uh yeah, those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger, this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please uh, type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "qwen4000.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "zero_shot",
+          "proposal": "This is a test to see if this can remove all those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "bounded article restart",
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ],
+            [
+              51,
+              67
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "zero_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "zero_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "zero_shot",
+          "proposal": "Please type a into the box without removing either letter.",
+          "accepted": false,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "zero_shot",
+          "proposal": "H\u00e1 um sensor conectado ao computador.",
+          "accepted": false,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "zero_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "zero_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "zero_shot",
+          "proposal": "The name Um belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "zero_shot",
+          "proposal": "I wrote the word \"erm\" in the glossary yesterday.",
+          "accepted": false,
+          "delivered": "I I wrote the word erm, in the glossary yesterday.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ],
+            [
+              55,
+              61
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger, um, this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, um, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please uh, type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "minicpm2000-envelope.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "bounded article restart",
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ],
+            [
+              51,
+              67
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please type a a into the box without removing either letter.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              7,
+              11
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name Um, belongs to the customer in this ticket.",
+          "accepted": true,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "spark4000-envelope.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all the uh yeah, those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all the uh yeah, those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ],
+            [
+              55,
+              58
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger, um, this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, um, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token um, should remain because it is the literal name of this field.",
+          "accepted": true,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please uh, type a a into the box without removing either letter.",
+          "accepted": true,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name belongs to the customer in this ticket.",
+          "accepted": false,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    },
+    {
+      "file": "qwen4000-envelope.json",
+      "rows": [
+        {
+          "id": "reported_sentence",
+          "mode": "few_shot",
+          "proposal": "This is a test to see if this can remove all those things from the sentences.",
+          "accepted": true,
+          "delivered": "This is a test to see if this can remove all those things from the sentences.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "bounded article restart",
+            "hesitation"
+          ],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              22,
+              25
+            ],
+            [
+              37,
+              40
+            ],
+            [
+              51,
+              67
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_01",
+          "mode": "few_shot",
+          "proposal": "I bought the wrong charger this morning.",
+          "accepted": true,
+          "delivered": "I bought the wrong charger, this morning.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 4,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ],
+            [
+              15,
+              19
+            ],
+            [
+              34,
+              38
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_02",
+          "mode": "few_shot",
+          "proposal": "The token, should remain because it is the literal name of this field.",
+          "accepted": false,
+          "delivered": "The token um, should remain because it is the literal name of this field.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_03",
+          "mode": "few_shot",
+          "proposal": "Please type aa into the box without removing either letter.",
+          "accepted": false,
+          "delivered": "Please uh, type a a into the box without removing either letter.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": false,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_04",
+          "mode": "few_shot",
+          "proposal": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "accepted": true,
+          "delivered": "H\u00e1 um, e apenas um, sensor conectado ao computador.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_05",
+          "mode": "few_shot",
+          "proposal": "We need to check the same result again.",
+          "accepted": true,
+          "delivered": "We need to check the same result again.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span",
+            "hesitation"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              3,
+              7
+            ],
+            [
+              15,
+              18
+            ]
+          ],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_06",
+          "mode": "few_shot",
+          "proposal": "Repeat the words and and as a literal sequence.",
+          "accepted": true,
+          "delivered": "Repeat the words and and as a literal sequence.",
+          "reason": "No change",
+          "categories": [],
+          "equivalent_alignments": 1,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_07",
+          "mode": "few_shot",
+          "proposal": "The name belongs to the customer in this ticket.",
+          "accepted": false,
+          "delivered": "The name Um, belongs to the customer in this ticket.",
+          "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+          "categories": [],
+          "equivalent_alignments": 0,
+          "delivered_exact": true,
+          "proposal_exact": false,
+          "deletion_bytes": [],
+          "capitalization_bytes": []
+        },
+        {
+          "id": "dev_08",
+          "mode": "few_shot",
+          "proposal": "I wrote the word erm, in the glossary yesterday.",
+          "accepted": true,
+          "delivered": "I wrote the word erm, in the glossary yesterday.",
+          "reason": "Source-derived deletions accepted",
+          "categories": [
+            "adjacent repeated span"
+          ],
+          "equivalent_alignments": 2,
+          "delivered_exact": true,
+          "proposal_exact": true,
+          "deletion_bytes": [
+            [
+              2,
+              4
+            ]
+          ],
+          "capitalization_bytes": []
+        }
+      ]
+    }
+  ],
+  "version": 2
+}

@@ -73,7 +73,7 @@ impl AsrEngine for ParakeetEngine {
         // TranscriptionResult has no duration field; estimate from file
         let duration_secs = processing_time * 20.0; // rough estimate
 
-        Ok(AsrResult {
+        Ok(AsrResult { unboosted_text: None,
             text: result.text,
             duration_secs,
             processing_time_secs: processing_time,
@@ -105,7 +105,7 @@ impl AsrEngine for ParakeetEngine {
 
         let processing_time = start.elapsed().as_secs_f64();
 
-        Ok(AsrResult {
+        Ok(AsrResult { unboosted_text: None,
             text: result.text,
             duration_secs,
             processing_time_secs: processing_time,

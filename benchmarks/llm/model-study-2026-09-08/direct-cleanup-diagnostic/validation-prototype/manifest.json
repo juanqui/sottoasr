@@ -1,0 +1,21 @@
+{
+  "scope": "Frozen v2 exploratory pipeline results; no inference or qualification data",
+  "files": {
+    "pollard_mixed-common.json": "6511fad482ba4c547db1fb326ae45c8ddc1191c688ff0e8fc8429fc84b990699",
+    "summary.json": "fda854e09b8bda51adbd78cfc64bae1d080372463ad263ce9f03a295f1faafc7",
+    "qwen4000-best-dev.json": "8b02ee1119d4c5ae0ac76d49e40e5828479b8824c7fe03c181c0b03be2299476",
+    "spark4000-best-dev.json": "4d4568243917674d0d667cda08a11bd5b7394d88099590b2166b53d3cc55cb67",
+    "spark4000-common.json": "7e4ade94b0a94271cdfab05472441f8a968e08d113204be36cd3bee3df7c46fc",
+    "source_validation.py": "4a7becf860f7062afd2831be8db3886ebb8830865158d4290aaedc5d2faa42a1",
+    "README.md": "6937fa966887b301ffeeabaa43daecf8d1fc95d3d890ed8ca0b071bebf866c4e",
+    "source-validation-notes.md": "2a5db76baa34c53d761be6c5b62fee827e1cac59360df460fc6cee1c958e5891",
+    "minicpm2000-common.json": "7c34b2ae5e803b57fca1174770220c1cb31d64ec0c512c7ecf7667ee262f4785",
+    "archive-audit.json": "2fb4483a835214b1480d6c42651fc9864d57b0ee1962aaa7741a5d9c3f7a0c16",
+    "source-validation-tests-v2.txt": "28f38d555ab1f3092b8a95a55aef78a2611de604c2d1c427982c88b725ef8b77",
+    "qwen4000-common.json": "af49253e817ed17686364558a46d314fd2cbf8e73f6ab747bf6dbd8e6516bc20",
+    "evaluate.py": "991c97871a1104c6daa58e96cc71ad62c0a75302ecc1857f01331dc789088014",
+    "source-validation-utf8-v2.txt": "cb9b0857d919eb658972f4fedac8d68851942410b8434f607c5debe0d32d18b9",
+    "freeze.json": "91688be266866497b3c0a126aec5738f86a2913a18ca74d8619fb1d567f689f4",
+    "source-validation-development-v2.json": "a020066731c6d37ad5b63c84315b3179fe1ae94165935530cfddc15da917e60f"
+  }
+}

@@ -1,0 +1,115 @@
+[
+  {
+    "id": "restart_01",
+    "group": "restart_cleanup",
+    "raw": "Can you load the um uh those flight cases into the van?",
+    "expected": "Can you load those flight cases into the van?",
+    "reason": "The article is an abandoned grammatical start before the intended determiner those. Remove the article and both empty hesitations; retain the request, object and destination.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_02",
+    "group": "restart_cleanup",
+    "raw": "I need a erm um that slim adapter for the projector.",
+    "expected": "I need that slim adapter for the projector.",
+    "reason": "An abandoned indefinite article precedes the intended selection that slim adapter. Remove only that article and the hesitation run.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_03",
+    "group": "restart_cleanup",
+    "raw": "We can label all the uh um these drawers before the shelves arrive.",
+    "expected": "We can label all these drawers before the shelves arrive.",
+    "reason": "All remains meaningful; only the abandoned the and the empty hesitation run are removed before these drawers.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_04",
+    "group": "restart_cleanup",
+    "raw": "The repair needs an um uh this narrow seal behind the valve.",
+    "expected": "The repair needs this narrow seal behind the valve.",
+    "reason": "An is an abandoned article, not an additional item or quantity. Preserve the intended determiner, seal description and location.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_05",
+    "group": "restart_cleanup",
+    "raw": "Please forward the erm uh yeah, that revised invoice to accounts.",
+    "expected": "Please forward that revised invoice to accounts.",
+    "reason": "Within this uninterrupted request, the article and hesitation/restart sequence are abandoned before that revised invoice. Yeah does not answer a separate question or add an agreement proposition.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_06",
+    "group": "restart_cleanup",
+    "raw": "I was looking for a um erm, uh, those black retaining clips in the side drawer.",
+    "expected": "I was looking for those black retaining clips in the side drawer.",
+    "reason": "The singular article is abandoned before a plural intended object. Remove the article and all three hesitations, keeping every object and location detail.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_07",
+    "group": "restart_preserve",
+    "raw": "Yeah, those replacement pads are the ones we agreed to order.",
+    "expected": "Yeah, those replacement pads are the ones we agreed to order.",
+    "reason": "Yeah is meaningful agreement at the start of an affirmative statement, not an empty restart.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_08",
+    "group": "restart_preserve",
+    "raw": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+    "expected": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+    "reason": "The original request and different delivered item are both substantive facts. Actually clarifies the contrast.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_09",
+    "group": "restart_preserve",
+    "raw": "We ordered a short cable, no, a long cable for the overhead run.",
+    "expected": "We ordered a short cable, no, a long cable for the overhead run.",
+    "reason": "The speaker makes a substantive correction between two cable descriptions. Preserve both descriptions and the correction marker rather than treating them as an abandoned article.",
+    "protected_spans": []
+  },
+  {
+    "id": "restart_10",
+    "group": "restart_preserve",
+    "raw": "The note says “the um uh those,” and every word is part of the example.",
+    "expected": "The note says “the um uh those,” and every word is part of the example.",
+    "reason": "The exact apparent restart is quoted literal content, so its article, hesitation spellings and determiner must survive.",
+    "protected_spans": [
+      {
+        "text": "the um uh those,",
+        "start_byte": 17,
+        "end_byte": 33
+      }
+    ]
+  },
+  {
+    "id": "restart_11",
+    "group": "restart_preserve",
+    "raw": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+    "expected": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+    "reason": "This describes a sequence of spoken tokens rather than performing the restart. The unquoted word mentions are the facts being reported.",
+    "protected_spans": [
+      {
+        "text": "a, then um uh, and finally that",
+        "start_byte": 35,
+        "end_byte": 66
+      },
+      {
+        "text": "adapter",
+        "start_byte": 83,
+        "end_byte": 90
+      }
+    ]
+  },
+  {
+    "id": "restart_12",
+    "group": "restart_preserve",
+    "raw": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+    "expected": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+    "reason": "Agreement and the two selection events are meaningful. The separated article and determiner do not form an empty grammatical restart.",
+    "protected_spans": []
+  }
+]

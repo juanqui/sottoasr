@@ -1,87 +1,70 @@
 <script lang="ts">
-  import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-
   import { transcriptionStore } from '../stores/transcriptions.svelte';
-  import { exportTranscriptionsCsv } from '../utils/tauri';
+  import { exportTranscriptionsCsvFile } from '../utils/tauri';
+  import { createEventScope } from '../utils/event-scope';
   import HistoryItem from './history-item.svelte';
+  import ConfirmDialog from './confirm-dialog.svelte';
+  import type { TranscriptionEvent } from '../utils/tauri';
 
-  import type { Transcription } from '../utils/tauri';
+  const PAGE_SIZE = 50;
+  let searchQuery = $state('');
+  let page = $state(0);
+  let rowViews = $state<Record<string, { expanded: boolean; viewMode: 'cleaned' | 'raw' | 'diff' }>>({});
+  let error = $state('');
+  let feedback = $state('');
+  let deleting = $state(false);
+  let exporting = $state(false);
+  let deleteTarget = $state<string | null>(null);
+  let disposed = false;
+  let historyList: HTMLDivElement;
+  let query = $derived(searchQuery.trim().toLocaleLowerCase());
+  let filteredItems = $derived(query ? transcriptionStore.items.filter((item) =>
+    item.text.toLocaleLowerCase().includes(query) || (item.raw_text?.toLocaleLowerCase().includes(query) ?? false)) : transcriptionStore.items);
+  let pageCount = $derived(Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE)));
+  let currentPage = $derived(Math.min(page, pageCount - 1));
+  let visibleItems = $derived(filteredItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE));
 
-  let searchQuery: string = $state('');
-
-  let filteredItems = $derived(
-    searchQuery.trim()
-      ? transcriptionStore.items.filter((item) => {
-          const q = searchQuery.toLowerCase();
-          return item.text.toLowerCase().includes(q)
-            || (item.raw_text?.toLowerCase().includes(q) ?? false);
-        })
-      : transcriptionStore.items
-  );
-
-  let isEmpty = $derived(transcriptionStore.items.length === 0);
+  $effect(() => { query; currentPage; if (historyList) historyList.scrollTop = 0; });
 
   async function handleCopy(text: string) {
+    error = '';
+    try { await writeText(text); }
+    catch (err) { error = `Could not copy: ${String(err)}`; throw err; }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return;
+    deleting = true;
+    error = '';
     try {
-      await writeText(text);
-    } catch (err) {
-      console.error('Failed to copy text:', err);
-    }
+      if (deleteTarget === 'all') await transcriptionStore.clear();
+      else await transcriptionStore.delete(deleteTarget);
+      deleteTarget = null;
+    } catch (err) { error = `Could not delete history: ${String(err)}`; deleteTarget = null; }
+    finally { deleting = false; }
   }
-
-  async function handleDelete(id: string) {
-    await transcriptionStore.delete(id);
-  }
-
-  async function handleClearAll() {
-    if (transcriptionStore.items.length === 0) return;
-    await transcriptionStore.clear();
-  }
-
-  let exportFeedback = $state('');
 
   async function handleExport() {
+    if (exporting) return;
+    exporting = true;
+    error = '';
     try {
-      const csv = await exportTranscriptionsCsv();
-      // Create a blob and trigger download via data URI
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `sottoasr-transcriptions-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      exportFeedback = 'Exported!';
-      setTimeout(() => { exportFeedback = ''; }, 2000);
-    } catch (err) {
-      console.error('Export failed:', err);
-      // Fallback: copy CSV to clipboard
-      try {
-        const csv = await exportTranscriptionsCsv();
-        await writeText(csv);
-        exportFeedback = 'Copied to clipboard';
-        setTimeout(() => { exportFeedback = ''; }, 2000);
-      } catch {
-        exportFeedback = 'Export failed';
-        setTimeout(() => { exportFeedback = ''; }, 2000);
-      }
-    }
+      const path = await exportTranscriptionsCsvFile();
+      if (disposed) return;
+      feedback = `CSV saved: ${path}`;
+    } catch (err) { if (!disposed) error = `Could not export history: ${String(err)}`; }
+    finally { if (!disposed) exporting = false; }
   }
 
-  // Load transcriptions and listen for new ones
-  $effect(() => {
-    transcriptionStore.load();
-
-    const unlisteners: Array<() => void> = [];
-
-    listen<Transcription>('transcription-complete', (event) => {
-      transcriptionStore.add(event.payload);
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    return () => {
-      unlisteners.forEach((fn) => fn());
-    };
+  onMount(() => {
+    const scope = createEventScope((err) => { error = `Live history unavailable: ${String(err)}`; });
+    void Promise.all([
+      scope.listen<TranscriptionEvent>('transcription-complete', (event) => transcriptionStore.add(event.payload)),
+      scope.listen<string>('history-error', (event) => { error = event.payload; }),
+    ]).then(() => { if (!disposed) void transcriptionStore.load(); });
+    return () => { disposed = true; scope.dispose(); transcriptionStore.invalidateLoad(); };
   });
 </script>
 
@@ -89,71 +72,35 @@
   <header class="history-header">
     <h1>History</h1>
     <div class="header-actions">
-      <div class="search-wrapper">
-        <svg class="search-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5" />
-          <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-        <input
-          type="text"
-          class="search-input"
-          placeholder="Search transcriptions..."
-          aria-label="Search transcriptions"
-          bind:value={searchQuery}
-        />
-      </div>
-      <button
-        class="export-btn"
-        onclick={handleExport}
-        disabled={isEmpty}
-        type="button"
-      >
-        {exportFeedback || 'Export CSV'}
-      </button>
-      <button
-        class="clear-all-btn"
-        onclick={handleClearAll}
-        disabled={isEmpty}
-        type="button"
-      >
-        Clear All
-      </button>
+      <div class="search-wrapper"><input class="search-input" type="search" placeholder="Search all history…" aria-label="Search transcriptions" value={searchQuery} oninput={(event) => { searchQuery = event.currentTarget.value; page = 0; }} /></div>
+      <button class="export-btn" type="button" onclick={handleExport} disabled={!transcriptionStore.loaded || !transcriptionStore.items.length || exporting}>{exporting ? 'Exporting…' : 'Export CSV'}</button>
+      <button class="clear-all-btn" type="button" onclick={() => { deleteTarget = 'all'; }} disabled={!transcriptionStore.loaded || !transcriptionStore.items.length || deleting}>Clear All</button>
     </div>
   </header>
-
-  <div class="history-list">
-    {#if isEmpty}
-      <div class="empty-state">
-        <div class="empty-icon" aria-hidden="true">
-          <svg viewBox="0 0 48 48" fill="none">
-            <rect x="8" y="12" width="32" height="28" rx="4" stroke="currentColor" stroke-width="2" />
-            <path d="M16 22h16M16 28h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            <path d="M20 8v8M28 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          </svg>
-        </div>
-        <p class="empty-title">No transcriptions yet</p>
-        <p class="empty-subtitle">
-          Press your hotkey to start recording. Transcriptions will appear here.
-        </p>
-      </div>
-    {:else if filteredItems.length === 0}
-      <div class="empty-state">
-        <p class="empty-title">No results</p>
-        <p class="empty-subtitle">
-          No transcriptions match "{searchQuery}"
-        </p>
-      </div>
+  {#if error || transcriptionStore.error}
+    <div class="history-error" role="alert">{error || transcriptionStore.error}
+      {#if transcriptionStore.error}<button type="button" onclick={() => transcriptionStore.load()}>Retry</button>{:else}<button type="button" onclick={() => { error = ''; }}>Dismiss</button>{/if}
+    </div>
+  {/if}
+  {#if feedback}<p class="history-feedback" role="status">{feedback}</p>{/if}
+  <div class="history-list" bind:this={historyList}>
+    {#if transcriptionStore.loading}<div class="empty-state" role="status"><p>Loading history…</p></div>
+    {:else if !transcriptionStore.loaded}<div class="empty-state"><p class="empty-title">History is unavailable</p><p class="empty-subtitle">Your saved entries have not been changed.</p></div>
+    {:else if !transcriptionStore.items.length}<div class="empty-state"><p class="empty-title">No transcriptions yet</p><p class="empty-subtitle">Press your hotkey to start recording. Transcriptions will appear here.</p></div>
+    {:else if !filteredItems.length}<div class="empty-state"><p class="empty-title">No results</p><p class="empty-subtitle">No transcriptions match “{searchQuery}”</p></div>
     {:else}
-      {#each filteredItems as item (item.id)}
-        <HistoryItem
-          {item}
-          ondelete={handleDelete}
-          oncopy={handleCopy}
-        />
-      {/each}
+      {#each visibleItems as item (item.id)}<HistoryItem {item} expanded={rowViews[item.id]?.expanded ?? false} viewMode={rowViews[item.id]?.viewMode ?? 'cleaned'} onviewchange={(state) => { rowViews[item.id] = state; }} ondelete={(id) => { deleteTarget = id; }} oncopy={handleCopy} />{/each}
     {/if}
   </div>
+  {#if transcriptionStore.loaded && filteredItems.length}
+    <nav class="history-pagination" aria-label="History pages">
+      <span>{currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredItems.length)} of {filteredItems.length}{query ? ' matches' : ' entries'}</span>
+      <button type="button" disabled={currentPage === 0} onclick={() => { page = currentPage - 1; }}>Previous</button>
+      <button type="button" disabled={currentPage + 1 >= pageCount} onclick={() => { page = currentPage + 1; }}>Next</button>
+    </nav>
+  {/if}
 </div>
+<ConfirmDialog open={deleteTarget !== null} title={deleteTarget === 'all' ? 'Clear all history?' : 'Delete this transcription?'} message={deleteTarget === 'all' ? 'This permanently removes every saved transcription, including entries hidden by your search. Export a CSV first if you want a copy.' : 'This permanently removes the selected transcription from history.'} confirmLabel={deleteTarget === 'all' ? 'Clear all history' : 'Delete'} busy={deleting} onconfirm={confirmDelete} oncancel={() => { deleteTarget = null; }} />
 
 <style>
   .history-window {
@@ -190,18 +137,9 @@
     align-items: center;
   }
 
-  .search-icon {
-    position: absolute;
-    left: 10px;
-    width: 14px;
-    height: 14px;
-    color: var(--text-dim);
-    pointer-events: none;
-  }
-
   .search-input {
     width: 100%;
-    padding: 8px 12px 8px 32px;
+    padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--input-bg);
@@ -223,7 +161,7 @@
 
   .export-btn {
     flex-shrink: 0;
-    padding: 8px 14px;
+    padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: none;
@@ -247,7 +185,7 @@
 
   .clear-all-btn {
     flex-shrink: 0;
-    padding: 8px 14px;
+    padding: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: none;
@@ -288,14 +226,6 @@
     flex: 1;
   }
 
-  .empty-icon {
-    width: 48px;
-    height: 48px;
-    color: var(--text-dim);
-    opacity: 0.4;
-    margin-bottom: 16px;
-  }
-
   .empty-title {
     font-size: 15px;
     font-weight: 500;
@@ -310,4 +240,11 @@
     max-width: 260px;
     line-height: 1.5;
   }
+  .history-pagination { display:flex; align-items:center; gap:8px; padding:12px 20px; border-top:1px solid var(--border); font-size:12px; flex:none; }
+  .history-pagination span { flex:1; color:var(--text-dim); }
+  .history-pagination button, .history-error button { padding:6px 9px; background:var(--card-bg); color:var(--text); border:1px solid var(--border-hover); border-radius:6px; font:inherit; font-size:12px; cursor:pointer; }
+  .history-pagination button:disabled { opacity:.4; cursor:default; }
+  .history-error { margin:12px 20px 0; padding:10px; border-radius:8px; background:#ef444410; color:#fca5a5; font-size:12px; overflow-wrap:anywhere; }
+  .history-error button { margin-left:8px; }
+  .history-feedback { overflow-wrap:anywhere; color:var(--text-dim); font-size:12px; margin:10px 20px 0; }
 </style>

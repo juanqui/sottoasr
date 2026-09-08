@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings-close",
+  "description": "Allow the Settings close-request handler to finish closing its window.",
+  "windows": ["settings"],
+  "permissions": ["core:window:allow-destroy"]
+}

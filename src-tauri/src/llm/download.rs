@@ -1,63 +1,47 @@
+use crate::state::AppState;
+use std::sync::atomic::Ordering;
 use tauri::AppHandle;
-use tauri::Emitter;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::llm::engine;
-use crate::llm::engine::LlmBackend;
-use crate::state::AppState;
 
 /// Download the SottoASR cleanup model via the sidecar process.
 pub async fn download_model(app: &AppHandle) -> Result<(), String> {
     let config = engine::model_config();
+    let state = app.state::<AppState>();
+    state.llm_downloading.store(true, Ordering::SeqCst);
 
-    let _ = app.emit("llm-download-started", serde_json::json!({
-        "total_bytes": config.download_size_mb * 1_000_000,
-        "file_count": 1u32,
-    }));
+    let _ = app.emit(
+        "llm-download-started",
+        serde_json::json!({
+            "total_bytes": config.download_size_mb * 1_000_000,
+            "file_count": 1u32,
+        }),
+    );
 
     log::info!("Starting model download via sidecar: {}...", config.id);
 
     let result = tokio::task::spawn_blocking(move || {
+        if !engine::is_venv_ready() {
+            engine::setup_venv()?;
+        }
         let mut sidecar = engine::LlmEngine::spawn()?;
         let result = sidecar.download_model();
         sidecar.quit();
         result
-    }).await.map_err(|e| format!("Download task panicked: {}", e))?;
+    })
+    .await
+    .map_err(|e| format!("Download task panicked: {}", e))
+    .and_then(|result| result);
+    state.llm_downloading.store(false, Ordering::SeqCst);
 
     match result {
         Ok(()) => {
             log::info!("Model download complete");
             let _ = app.emit("llm-download-complete", ());
 
-            // Pre-load the model so it's warm for the first cleanup request
-            let preload_app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                log::info!("Pre-loading LLM sidecar after download...");
-                match tokio::task::spawn_blocking(|| {
-                    let mut e = engine::LlmEngine::spawn()?;
-                    e.load_model()?;
-                    Ok::<_, String>(e)
-                }).await {
-                    Ok(Ok(engine)) => {
-                        let state = preload_app.state::<AppState>();
-                        let mut guard = state.llm_engine.lock().await;
-                        // Shut down existing sidecar before replacing to avoid
-                        // two MLX processes competing for unified memory.
-                        if let Some(mut old) = guard.take() {
-                            log::info!("Shutting down old LLM sidecar before replacing");
-                            old.shutdown();
-                        }
-                        *guard = Some(Box::new(engine) as Box<dyn LlmBackend>);
-                        log::info!("LLM sidecar pre-loaded after download");
-                    }
-                    Ok(Err(e)) => {
-                        log::warn!("LLM pre-load after download failed: {}", e);
-                    }
-                    Err(e) => {
-                        log::error!("LLM pre-load after download panicked: {}", e);
-                    }
-                }
-            });
+            // Loading is explicit/on first enabled cleanup. A download must not
+            // start a Metal process while correction is disabled.
 
             Ok(())
         }

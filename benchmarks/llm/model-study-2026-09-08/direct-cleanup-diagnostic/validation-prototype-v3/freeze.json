@@ -1,0 +1,14 @@
+{
+  "frozen_at_utc": "2026-09-08T13:21:47.615509+00:00",
+  "validator_sha256": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e",
+  "predecessor_sha256": "4a7becf860f7062afd2831be8db3886ebb8830865158d4290aaedc5d2faa42a1",
+  "provenance": "V3 development explicitly informed by semantic60 errors. Not blind or release qualification. release250 and restart12 not opened. Policies frozen after 19 authored test groups and before this v3 scoring pass.",
+  "tests": "19 groups passed in 0.036 s; no model inference or product imports. Lightweight stdlib checks may overlap peer development inference; no claim machine otherwise idle.",
+  "validation_inputs": "Only source, proposed output, completion status and empty user dictionary. Gold references/protected annotations are scorer-only.",
+  "files": {
+    "source_validation.py": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e",
+    "unit-tests.txt": "ca059fc2584e150c93a69a06f68c98308cee1afc205317e642e44cdca3b90035",
+    "inputs/minicpm2000-D3.json": "832015413946c8c74e558da277ac119f6c1b1880f859a812bfe2827907eecfa4",
+    "inputs/minicpm2000-D1.json": "88ff6e842162e5462d44f63b54f6c5ee4d23b780e123cb22699fcedd840150c4"
+  }
+}

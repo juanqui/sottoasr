@@ -103,7 +103,7 @@ pub fn start_update_checker(app: &AppHandle) {
 
         loop {
             // Respect the user's auto-check setting (default: true).
-            let auto_check = read_auto_check_setting(&handle).unwrap_or(true);
+            let auto_check = read_auto_check_setting(&handle).await.unwrap_or(false);
             if auto_check {
                 // Panic isolation: wrap each check in tokio::spawn so a panic
                 // in one check doesn't kill the entire loop.
@@ -124,7 +124,7 @@ pub fn start_update_checker(app: &AppHandle) {
                 }
 
                 // Refresh tray from canonical state (reads UpdateState directly).
-                crate::tray::menu::refresh_tray_from_state(&handle);
+                crate::tray::menu::refresh_tray_from_state(&handle).await;
             } else {
                 log::debug!("Auto-update check disabled by user setting");
             }
@@ -135,11 +135,14 @@ pub fn start_update_checker(app: &AppHandle) {
 }
 
 /// Read the `auto_check_updates` preference from the app settings.
-fn read_auto_check_setting(app: &AppHandle) -> Option<bool> {
+async fn read_auto_check_setting(app: &AppHandle) -> Option<bool> {
     let state = app.try_state::<crate::state::AppState>()?;
-    // settings is a TokioMutex — use try_lock to avoid blocking the async runtime.
-    let settings = state.settings.try_lock().ok()?;
-    Some(settings.auto_check_updates)
+    // A contended preference must never become permission to access the network.
+    Some(auto_checks_enabled(&state.settings, state.settings_load_error.is_none()).await)
+}
+
+async fn auto_checks_enabled(settings: &Mutex<crate::models::Settings>, settings_loaded: bool) -> bool {
+    settings_loaded && settings.lock().await.auto_check_updates
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +219,7 @@ async fn check_for_model_update(
         return Ok(());
     }
 
-    // Runtime settings guard — use try_lock to match read_auto_check_setting() pattern.
+    // Runtime settings guard — skip this optional model check on contention.
     let state = app
         .try_state::<crate::state::AppState>()
         .ok_or("AppState not available")?;
@@ -291,10 +294,9 @@ pub async fn perform_app_update(app: AppHandle) -> Result<String, String> {
     let state = app.state::<UpdateState>();
 
     // Prevent concurrent downloads.
-    if state.downloading.load(Ordering::SeqCst) {
+    if state.downloading.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
         return Err("Download already in progress".into());
     }
-    state.downloading.store(true, Ordering::SeqCst);
 
     let result = do_download_and_install(&app).await;
 
@@ -306,7 +308,7 @@ pub async fn perform_app_update(app: AppHandle) -> Result<String, String> {
             state.restart_pending.store(true, Ordering::SeqCst);
 
             // Refresh tray from canonical state.
-            crate::tray::menu::refresh_tray_from_state(&app);
+            crate::tray::menu::refresh_tray_from_state(&app).await;
 
             Ok(version)
         }
@@ -381,4 +383,37 @@ async fn do_download_and_install(app: &AppHandle) -> Result<String, String> {
 
     log::info!("Update v{} installed successfully — restart pending", version);
     Ok(version)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn contended_preferences_do_not_enable_network_checks() {
+        let settings = std::sync::Arc::new(Mutex::new(crate::models::Settings {
+            auto_check_updates: false, ..Default::default()
+        }));
+        let guard = settings.lock().await;
+        let reader = settings.clone();
+        let check = tokio::spawn(async move { auto_checks_enabled(&reader, true).await });
+        tokio::task::yield_now().await;
+        assert!(!check.is_finished());
+        drop(guard);
+        assert!(!check.await.unwrap());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn unreadable_preferences_never_authorize_automatic_network_checks() {
+        let settings = Mutex::new(crate::models::Settings::default());
+        // Even default-on preferences and a held lock cannot authorize a check
+        // when the persisted file failed to load.
+        let _guard = settings.lock().await;
+        let allowed = tokio::time::timeout(
+            Duration::from_millis(100),
+            auto_checks_enabled(&settings, false),
+        ).await.unwrap();
+        assert!(!allowed);
+    }
 }

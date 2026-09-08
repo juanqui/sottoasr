@@ -1,0 +1,52 @@
+{
+  "validator_sha256": "4a8bc2a49feb6b944e765ec238f7bdc381a65576907d1b8ddddf9a4b172b177b",
+  "profiles": 21,
+  "proposals": 1270,
+  "reconstruction_checks": 2540,
+  "python": "3.14.5",
+  "unicode": "16.0.0",
+  "language_bypass": false,
+  "all_data_is_revealed_development": true,
+  "v5_to_v6_new_harms": [],
+  "v6_remaining_harms": {
+    "minicpm2000-common": [],
+    "pollard_mixed-common": [],
+    "spark4000-common": [],
+    "spark4000-best-dev": [],
+    "qwen4000-common": [],
+    "qwen4000-best-dev": [],
+    "liquid1200-common": [
+      "semantic_31"
+    ],
+    "liquid350-common": [
+      "semantic_31"
+    ],
+    "minicpm2000-D1": [],
+    "minicpm2000-D2": [],
+    "minicpm2000-D3": [],
+    "minicpm2000-D4": [],
+    "revealed-release250": [
+      "release_242"
+    ],
+    "revealed-restarts12": [],
+    "pilot-D3": [
+      "release_242"
+    ],
+    "pilot-D5": [
+      "release_242"
+    ],
+    "pilot-D6": [],
+    "pilot-D7": [
+      "release_242"
+    ],
+    "pilot-qwen4-D5": [
+      "release_242"
+    ],
+    "pilot-spark4-D5": [
+      "restart_11"
+    ],
+    "pilot-pollard-D5": [
+      "release_242"
+    ]
+  }
+}

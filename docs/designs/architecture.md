@@ -1,7 +1,7 @@
 # SottoASR — Architecture & Design Document
 
-- **Version**: 2.0
-- **Date**: 2026-03-21
+- **Version**: 2.2
+- **Date**: 2026-09-08
 - **Status**: Implemented
 - **Author**: juanqui + Claude
 
@@ -34,7 +34,11 @@
 
 ## 1. Summary
 
-SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. Users press a system-wide hotkey to activate dictation, speak naturally, and transcribed text is automatically pasted wherever their cursor is positioned. All processing happens on-device using NVIDIA Parakeet models via ONNX Runtime — no audio data ever leaves the machine.
+SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. Users press a system-wide hotkey to activate dictation, speak naturally, and transcribed text is automatically pasted wherever their cursor is positioned. The default backend runs NVIDIA Parakeet TDT v3 through FluidAudio on CoreML/ANE; ONNX Runtime remains an optional backend. No audio data leaves the machine.
+
+The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) is the current implementation source, together with the [five-pass audit](../audit/2026-09-08-five-pass-review.md). It supersedes older illustrative snippets below. A blocking worker owns microphone shutdown, final callback drain and private checked WAV serialization; shared background inference runs TDT v3 plus optional acoustic vocabulary. Exact replacements modify ordinary output once. Experimental cleanup stays off by default and stores a separate deletion-only suggestion requiring explicit Copy in History; it never changes automatic delivery. Original ASR provenance remains separate.
+
+Settings/history use atomic private writes and preserve unreadable or failed-save data. Overlay state is retained natively with recording generations and revisions; only explicit dismissal/new capture clears recovery errors. Fifty-row history pages avoids mounting all stored rows. Four Settings sections own draft/setup state through cancellation and save acknowledgements. Current cache loading preserves existing models on CoreML errors, and accepted exit cannot cross a new recording. See the linked spec for precise interfaces, compatibility and tests.
 
 The application lives exclusively in the macOS menu bar (no Dock icon, no main window) and provides two dictation modes: **press-and-hold** (hold hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop and transcribe). A floating pill overlay with an audio waveform animation provides visual feedback during recording.
 
@@ -42,16 +46,14 @@ The application lives exclusively in the macOS menu bar (no Dock icon, no main w
 
 ## 2. Problem Statement
 
-### Current State
+### Design constraints
 
-macOS includes a built-in dictation feature, but it:
-- Routes audio through Apple's cloud servers (privacy concern)
-- Provides limited accuracy compared to modern ASR models
-- Offers no transcription history
-- Has minimal visual feedback during recording
-- Cannot be customized (hotkeys, output formatting)
-
-Third-party alternatives like Superwhisper and Wispr Flow either require cloud processing, charge monthly subscriptions, or lack the polish needed for daily use.
+Dictation products differ in local/cloud execution, vocabulary mechanisms, history,
+customization and cost. Earlier blanket comparisons in this document are obsolete.
+Sotto's requirements are local speech processing, explicit model setup, predictable
+cursor delivery, recoverable history and a menu-bar interface. Current competitor
+vocabulary mechanisms and Apple's supported contextual APIs are documented with
+primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 
 ### Goals
 

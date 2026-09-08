@@ -1,0 +1,34 @@
+[
+  {
+    "raw": "I I bought the the wrong charger, um, this morning.",
+    "expected": "I bought the wrong charger, this morning."
+  },
+  {
+    "raw": "The token um, should remain because it is the literal name of this field.",
+    "expected": "The token um, should remain because it is the literal name of this field."
+  },
+  {
+    "raw": "Please uh, type a a into the box without removing either letter.",
+    "expected": "Please type a a into the box without removing either letter."
+  },
+  {
+    "raw": "Há um, e apenas um, sensor conectado ao computador.",
+    "expected": "Há um, e apenas um, sensor conectado ao computador."
+  },
+  {
+    "raw": "We uh, need to to check the same result again.",
+    "expected": "We need to check the same result again."
+  },
+  {
+    "raw": "Repeat the words and and as a literal sequence.",
+    "expected": "Repeat the words and and as a literal sequence."
+  },
+  {
+    "raw": "The name Um, belongs to the customer in this ticket.",
+    "expected": "The name Um, belongs to the customer in this ticket."
+  },
+  {
+    "raw": "I I wrote the word erm, in the glossary yesterday.",
+    "expected": "I wrote the word erm, in the glossary yesterday."
+  }
+]

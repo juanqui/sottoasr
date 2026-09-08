@@ -1,0 +1,12 @@
+{
+  "frozen_at_utc": "2026-09-08T13:36:47.548073+00:00",
+  "validator_sha256": "5f871555c86441d581650e280da676c9396a3d23f27b754c6cfd5d4e61fda6d9",
+  "predecessor_sha256": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e",
+  "scope": "Quote/code parser correctness only. Source-review reproductions: escaped ASCII delimiters, backslash parity, multiline/unterminated quoted/code payloads. V3 literal/cleanup/reconstruction policies unchanged.",
+  "provenance": "22 authored unit groups passed before v4 development rescoring. No release250 or restart12 accessed. No model inference. Prior development data only.",
+  "tests": "22 groups passed in 0.016 s; includes contractions, escaped inner payloads, quote-style fidelity and valid outside-filler removal.",
+  "files": {
+    "source_validation.py": "5f871555c86441d581650e280da676c9396a3d23f27b754c6cfd5d4e61fda6d9",
+    "unit-tests.txt": "74ce173401c3ce53151e08f5f81669e8e8db76706bb672802e6b5c3aa68b9c66"
+  }
+}

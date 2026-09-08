@@ -1,163 +1,243 @@
 use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, Manager, State};
-use crate::state::AppState;
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::llm::{download, engine};
 use crate::models::LlmStatus;
-use crate::llm::{engine, download};
-use crate::llm::engine::LlmBackend;
+use crate::state::AppState;
 use crate::tray::menu;
 
-/// Get the current LLM model status.
+/// Status reads are offline and never import Python/MLX or begin setup.
 #[tauri::command]
 pub async fn get_llm_status(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<LlmStatus, String> {
-    let compiled = engine::is_feature_compiled();
-    let supported = if compiled {
-        tokio::task::spawn_blocking(engine::is_platform_supported)
-            .await.unwrap_or(false)
+    current_status(&app, &state).await
+}
+
+async fn current_status(app: &AppHandle, state: &AppState) -> Result<LlmStatus, String> {
+    let available = engine::is_feature_compiled() && engine::is_platform_supported();
+    let downloaded = if available {
+        tokio::task::spawn_blocking(engine::is_model_downloaded)
+            .await
+            .unwrap_or(false)
     } else {
         false
     };
-    let available = compiled && supported;
-
-    let unavailable_reason = if !compiled {
-        Some("LLM feature not included in this build".into())
-    } else if !supported {
-        Some("Requires Apple Silicon (M1 or later) with Python 3".into())
-    } else {
-        None
-    };
-
     let config = engine::model_config();
-
-    // Check if sidecar is running (model loaded)
-    let loaded = {
-        let engine_guard = state.llm_engine.lock().await;
-        engine_guard.is_some()
-    };
-
-    // Check if model is downloaded by looking at HuggingFace cache
-    let downloaded = if available && engine::is_venv_ready() {
-        let model_id = config.id;
-        let cache_dir = dirs::home_dir()
-            .map(|h| h.join(".cache/huggingface/hub"))
-            .unwrap_or_default();
-        let cache_name = format!("models--{}", model_id.replace('/', "--"));
-        let model_cache = cache_dir.join(&cache_name);
-        model_cache.join("snapshots").is_dir()
-    } else {
-        false
-    };
-
-    let last_cleanup_status = state.llm_last_status.lock().await.clone();
-
-    // Read model update availability from UpdateState (single source of truth)
-    let model_update_available = app
-        .try_state::<crate::updater::UpdateState>()
-        .map(|u| u.model_update_available.load(Ordering::SeqCst))
-        .unwrap_or(false);
-
     Ok(LlmStatus {
         available,
-        unavailable_reason,
+        unavailable_reason: (!available)
+            .then(|| "Requires the cleanup feature on an Apple Silicon Mac".into()),
         downloaded,
-        downloading: false,
-        loaded,
+        downloading: state.llm_downloading.load(Ordering::SeqCst),
+        preparing: state.llm_preparing.load(Ordering::SeqCst),
+        setup_error: state.llm_setup_error.lock().await.clone(),
+        loaded: state.llm_loaded.load(Ordering::SeqCst) && state.llm_pid.load(Ordering::SeqCst) > 0,
         model_name: config.display_name.to_string(),
+        model_url: format!("https://huggingface.co/{}", config.id),
+        download_size_mb: config.download_size_mb,
         model_path: None,
-        update_available: model_update_available,
-        last_cleanup_status,
+        update_available: app
+            .try_state::<crate::updater::UpdateState>()
+            .map(|u| u.model_update_available.load(Ordering::SeqCst))
+            .unwrap_or(false),
+        last_cleanup_status: state.llm_last_status.lock().await.clone(),
     })
 }
 
-/// Check if a model update is available on HuggingFace.
-/// Delegates to engine::check_model_update() which handles the two-path
-/// sidecar strategy (reuse existing or spawn temporary).
+/// Explicit enable intent: install the runtime, download if missing, and verify
+/// loading. Concurrent windows join this preparation instead of duplicating it.
+#[tauri::command]
+pub async fn prepare_llm_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<LlmStatus, String> {
+    if !engine::is_feature_compiled() || !engine::is_platform_supported() {
+        return Err("Local cleanup requires an Apple Silicon Mac".into());
+    }
+    if !claim_preparation(&state).await {
+        if let Some(error) = state.llm_setup_error.lock().await.clone() {
+            return Err(error);
+        }
+        return current_status(&app, &state).await;
+    }
+    *state.llm_setup_error.lock().await = None;
+    let _ = app.emit("llm-preparation-changed", ());
+    let result = async {
+        let _operation = state.llm_operation.lock().await;
+        let ready = tokio::task::spawn_blocking(|| {
+            engine::is_venv_ready() && engine::is_model_downloaded()
+        })
+        .await
+        .map_err(|e| format!("Cleanup readiness check failed: {e}"))?;
+        if !ready {
+            download::download_model(&app).await?;
+        }
+        load_locked(&state).await
+    }
+    .await;
+    *state.llm_setup_error.lock().await = result.as_ref().err().cloned();
+    state.llm_preparing.store(false, Ordering::SeqCst);
+    state.llm_preparation_finished.notify_waiters();
+    let _ = app.emit("llm-preparation-changed", ());
+    result?;
+    current_status(&app, &state).await
+}
+
+/// Returns true only to the owner; other callers join the current preparation.
+async fn claim_preparation(state: &AppState) -> bool {
+    if state
+        .llm_preparing
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        return true;
+    }
+    loop {
+        let notified = state.llm_preparation_finished.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if !state.llm_preparing.load(Ordering::SeqCst) {
+            return false;
+        }
+        notified.await;
+    }
+}
+
+async fn load_locked(state: &AppState) -> Result<(), String> {
+    let mut sidecar = engine::ensure_running(state).await?;
+    // A resident process may have died since its last use. Validate it too.
+    let result = tokio::task::spawn_blocking(move || {
+        let result = sidecar.request_raw(&serde_json::json!({"action": "load"}));
+        (sidecar, result)
+    })
+    .await
+    .map_err(|e| format!("Cleanup load task failed: {e}"))?;
+    let (sidecar, response) = result;
+    let response = response?;
+    engine::validate_loaded_model(&response)?;
+    state.llm_loaded.store(true, Ordering::SeqCst);
+    *state.llm_engine.lock().await = Some(sidecar);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_llm_update(app: AppHandle) -> Result<bool, String> {
     engine::check_model_update(&app).await
 }
 
-/// Start downloading (or updating) the LLM model.
 #[tauri::command]
-pub async fn download_llm_model(
-    app: tauri::AppHandle,
-    _state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn download_llm_model(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let _operation = state.llm_operation.lock().await;
     download::download_model(&app).await
 }
 
-/// Update the LLM model: shut down sidecar, re-download, ready for reload.
 #[tauri::command]
-pub async fn update_llm_model(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    // Shut down running sidecar so it picks up new model on next use
-    {
-        let mut engine_guard = state.llm_engine.lock().await;
-        if let Some(mut e) = engine_guard.take() {
-            e.shutdown();
-        }
-    }
-
-    // Re-download (huggingface_hub will fetch the latest revision)
+pub async fn update_llm_model(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let _operation = state.llm_operation.lock().await;
+    unload_locked(&state).await;
     download::download_model(&app).await?;
-
-    // Clear the model update flag now that the model is current
     if let Some(updater) = app.try_state::<crate::updater::UpdateState>() {
-        updater.model_update_available.store(false, Ordering::SeqCst);
-        updater.model_update_consecutive_errors.store(0, Ordering::SeqCst);
+        updater
+            .model_update_available
+            .store(false, Ordering::SeqCst);
+        updater
+            .model_update_consecutive_errors
+            .store(0, Ordering::SeqCst);
     }
-    // Refresh tray to remove indicator
-    menu::refresh_tray_from_state(&app);
+    menu::refresh_tray_from_state(&app).await;
     Ok(())
 }
 
-/// Cancel an in-progress LLM model download.
 #[tauri::command]
 pub fn cancel_llm_download() -> Result<(), String> {
-    log::warn!("LLM download cancellation not implemented");
-    Ok(())
+    Err(
+        "Model setup continues in the background; cancelling activation keeps cleanup disabled"
+            .into(),
+    )
 }
 
-/// Delete the downloaded LLM model to free disk space.
 #[tauri::command]
 pub async fn delete_llm_model(state: State<'_, AppState>) -> Result<(), String> {
-    {
-        let mut engine_guard = state.llm_engine.lock().await;
-        if let Some(mut e) = engine_guard.take() {
-            e.shutdown();
-        }
-    }
-
-    download::delete_model()
+    let _operation = state.llm_operation.lock().await;
+    unload_locked(&state).await;
+    tokio::task::spawn_blocking(download::delete_model)
+        .await
+        .map_err(|e| format!("Model removal failed: {e}"))?
 }
 
-/// Load the LLM model (spawn sidecar and load model into memory).
 #[tauri::command]
 pub async fn load_llm_model(state: State<'_, AppState>) -> Result<(), String> {
-    let sidecar = tokio::task::spawn_blocking(move || {
-        let mut e = engine::LlmEngine::spawn()?;
-        e.load_model()?;
-        Ok::<_, String>(e)
-    }).await.map_err(|e| format!("Load task panicked: {}", e))??;
+    let _operation = state.llm_operation.lock().await;
+    load_locked(&state).await
+}
 
-    let mut guard = state.llm_engine.lock().await;
-    *guard = Some(Box::new(sidecar) as Box<dyn LlmBackend>);
-    log::info!("LLM sidecar running and model loaded");
+async fn unload_locked(state: &AppState) {
+    let sidecar = state.llm_engine.lock().await.take();
+    if let Some(mut sidecar) = sidecar {
+        let _ = tokio::task::spawn_blocking(move || sidecar.shutdown()).await;
+    }
+    state.llm_pid.store(0, Ordering::SeqCst);
+    state.llm_loaded.store(false, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub async fn unload_llm_model(state: State<'_, AppState>) -> Result<(), String> {
+    let _operation = state.llm_operation.lock().await;
+    unload_locked(&state).await;
     Ok(())
 }
 
-/// Unload the LLM model (shut down sidecar).
-#[tauri::command]
-pub async fn unload_llm_model(state: State<'_, AppState>) -> Result<(), String> {
-    let mut guard = state.llm_engine.lock().await;
-    if let Some(mut e) = guard.take() {
-        e.shutdown();
+/// Persistence acknowledgements must not wait for inference or setup to finish.
+/// A later saved-on preference wins over an earlier queued unload request.
+pub fn notify_on_cleanup_preference_saved(app: &AppHandle, enabled: bool) {
+    if enabled {
+        return;
     }
-    log::info!("LLM sidecar shut down");
-    Ok(())
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let _operation = state.llm_operation.lock().await;
+        if !state.settings.lock().await.llm_cleanup_enabled {
+            unload_locked(&state).await;
+            let _ = app.emit("llm-preparation-changed", ());
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Settings;
+    use crate::test_support::{MockAsrEngine, MockAudioCapture, MockPasteBackend};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn preparation_callers_join_one_owner_and_observe_its_error() {
+        let state = Arc::new(AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            None,
+            Box::new(MockPasteBackend::new()),
+            Settings::default(),
+        ));
+        assert!(claim_preparation(&state).await);
+        let waiting_state = state.clone();
+        let waiter = tokio::spawn(async move {
+            let owner = claim_preparation(&waiting_state).await;
+            let error = waiting_state.llm_setup_error.lock().await.clone();
+            (owner, error)
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiter.is_finished());
+        *state.llm_setup_error.lock().await = Some("offline".into());
+        state.llm_preparing.store(false, Ordering::SeqCst);
+        state.llm_preparation_finished.notify_waiters();
+        let (owner, error) = waiter.await.unwrap();
+        assert!(!owner);
+        assert_eq!(error.as_deref(), Some("offline"));
+        assert!(claim_preparation(&state).await); // Explicit retry owns a new flight.
+    }
 }
