@@ -54,6 +54,7 @@ jobs:
         uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: ${{ matrix.target }}
+          components: clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
