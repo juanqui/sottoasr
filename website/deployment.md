@@ -1,73 +1,51 @@
-# Sotto Website — Cloudflare Pages Deployment
+# SottoASR website deployment
 
-## Overview
+- **Version:** 1.1
+- **Date:** 2026-09-08
+- **Status:** In Review
 
-The Sotto website is a static site (plain HTML/CSS) hosted on **Cloudflare Pages** using a custom domain purchased through Cloudflare. Total cost: **$0** on the free tier.
+## Contents
 
-## What's in the Free Tier
+1. Hosting · 2. Release synchronization · 3. Verification
 
-| Resource              | Limit         |
-|-----------------------|---------------|
-| Bandwidth             | Unlimited     |
-| Static asset requests | Unlimited     |
-| Projects              | Unlimited     |
-| Builds per month      | 500           |
-| Concurrent builds     | 1             |
-| Files per deployment  | 20,000        |
-| Max file size         | 25 MB         |
-| Custom domains        | 100/project   |
-| SSL/TLS               | Automatic     |
+## 1. Hosting
 
-## Setup Steps
+The existing Cloudflare Pages project is **sottoasr**, connected to
+**juanqui/sottoasr**, serving **https://sottoasr.app** and
+**https://sottoasr.pages.dev**. Production branch: `main`. Build command: empty.
+Build output: `website`. This plain HTML/CSS/JavaScript site is separate from the
+Tauri frontend; `npm run build` does not deploy it.
 
-### 1. Create the Pages Project
+The dashboard confirms automatic production deployments are enabled. On
+September 8 it also reported that the Git account was disconnected. Restoring
+that connection requires GitHub account verification and access to this existing
+repository. Do not assume a pushed change deployed: check Cloudflare's deployment
+status and the served page. Keep the current domain and main-branch routing.
 
-1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com/)
-2. Go to **Workers & Pages** > **Create** > **Pages** > **Connect to Git**
-3. Select the **sotto** repository from GitHub
-4. Configure the build settings:
-   - **Production branch:** `main`
-   - **Build command:** *(leave empty — no build step needed)*
-   - **Build output directory:** `website`
-5. Click **Save and Deploy**
+## 2. Release synchronization
 
-### 2. Connect the Custom Domain
+Cloudflare deploys site content when changes merge to main. Application builds
+create a **draft** GitHub release; publication remains a separate action.
 
-1. Go to **Workers & Pages** > your project > **Custom domains**
-2. Click **Set up a domain**
-3. Enter your domain (e.g., `sotto.app`)
-4. Since the domain is already on Cloudflare, DNS records are created automatically
-5. SSL is provisioned automatically — no manual certificate setup
+`release.js` reads GitHub's latest public release once per page load. It reveals
+the version and updates both download links only for a stable published release
+with a matching uploaded Apple Silicon DMG. Publishing a new release therefore
+updates the displayed version on subsequent page loads without another website
+deployment. The request has a five-second timeout, sends no credentials or
+referrer, and stores no persistent browser cache.
 
-To also serve from `www`:
-- Add `www.sotto.app` as a second custom domain
-- Optionally set up a redirect rule to canonicalize to one or the other
+Until that check succeeds, visitors see generic latest-release links and no
+unverified version number. Disabled JavaScript, rate limits and network failures
+leave downloading usable. The hidden source badge still tracks the app manifest
+and is checked by CI, preserving the normal release version-bump process.
 
-### 3. Verify
+## 3. Verification
 
-- Visit your domain over HTTPS and confirm the site loads
-- Push a change to `main` and confirm Cloudflare auto-deploys it
+Run `bash scripts/ci-checks.sh` for version consistency and website behavior tests.
+After pushing, inspect the Cloudflare preview check for the exact commit. After
+merging and publishing, inspect `sottoasr.app/#download` and follow its release
+link to confirm the matching DMG is available. No production deployment or public
+app release is implied by a successful local build.
 
-## How Deployments Work
-
-- Every push to `main` triggers a **production deployment** automatically
-- Every push to any other branch creates a **preview deployment** with a unique URL
-- Preview URLs are posted on pull requests for easy review
-- No GitHub Actions or CI configuration is needed — Cloudflare handles everything
-
-## Project Structure
-
-```
-website/
-├── index.html      # Landing page
-├── style.css       # Styles
-├── assets/
-│   └── logo.png    # Logo
-└── deployment.md   # This file
-```
-
-## Notes
-
-- The website is completely separate from the Tauri app build (`npm run build` does not touch `website/`)
-- Cloudflare is gradually merging Pages into Workers with Static Assets, but Pages remains fully supported — no action needed unless Cloudflare announces a migration timeline
-- If the site ever needs a build step (e.g., adding a framework), just update the build command in the Pages dashboard
+References: [Cloudflare Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/)
+and [GitHub latest-release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release).

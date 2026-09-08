@@ -59,6 +59,7 @@
                 <div class="hero-actions">
                     <a
                         href="https://github.com/juanqui/sottoasr/releases/latest"
+                        data-release-link
                         class="btn btn-primary"
                     >
                         <svg
@@ -171,7 +172,7 @@
                         </div>
                         <h3>Blazing Fast</h3>
                         <p>
-                            ~44x real-time transcription on Apple Silicon.
+                            Fast local transcription on Apple Silicon.
                             Powered by CoreML and the Apple Neural Engine for
                             hardware-accelerated inference.
                         </p>
@@ -228,9 +229,10 @@
                         </div>
                         <h3>AI Transcript Cleanup</h3>
                         <p>
-                            On-device LLM automatically removes filler words,
-                            fixes punctuation, and polishes your transcriptions
-                            — all locally with a custom fine-tuned model.
+                            Optional MiniCPM cleanup removes clear fillers and
+                            accidental repeats, with checks to preserve your
+                            wording. Off by default, prewarmed when enabled,
+                            and original transcriptions stay in History.
                         </p>
                     </div>
 
@@ -370,7 +372,7 @@
                         </div>
                         <h3>Lightweight</h3>
                         <p>
-                            Just 14 MB app bundle. Models are downloaded once on
+                            Models are downloaded once on
                             first launch (~500 MB) and cached locally. Minimal
                             resource usage when idle.
                         </p>
@@ -389,15 +391,17 @@
                 <div class="download-card">
                     <div class="download-info">
                         <div class="download-version">
-                            <span class="version-badge">v0.8.3</span>
+                            <span data-release-version hidden>
+                                <span class="version-badge">v0.8.3</span>
+                            </span>
                             <span class="version-label">Latest Release</span>
                         </div>
                         <div class="download-reqs">
                             <h4>Requirements</h4>
                             <ul>
                                 <li>macOS 14 Sonoma or later</li>
-                                <li>Apple Silicon (M1, M2, M3, M4)</li>
-                                <li>~500 MB disk space for models</li>
+                                <li>Apple Silicon (M1 or later)</li>
+                                <li>~500 MB for ASR; ~1.4 GB more for optional AI cleanup</li>
                                 <li>
                                     Accessibility permission (for
                                     paste-at-cursor)
@@ -408,6 +412,7 @@
                     <div class="download-action">
                         <a
                             href="https://github.com/juanqui/sottoasr/releases/latest"
+                        data-release-link
                             class="btn btn-primary btn-lg"
                         >
                             <svg
@@ -585,11 +590,11 @@
                     <div class="ack-group">
                         <h3 class="ack-group-title">AI Transcript Cleanup</h3>
                         <div class="ack-item">
-                            <div class="ack-name">LiquidAI LFM2.5-350M</div>
+                            <div class="ack-name">OpenBMB MiniCPM5 2B</div>
                             <div class="ack-desc">
-                                Base model for fine-tuned transcript cleanup
+                                Stock 4-bit model for conservative transcript cleanup
                             </div>
-                            <span class="ack-license">LFM-1.0</span>
+                            <span class="ack-license">Apache-2.0</span>
                         </div>
                         <div class="ack-item">
                             <div class="ack-name">Apple MLX</div>
@@ -743,5 +748,6 @@
                 </div>
             </div>
         </footer>
+        <script type="module" src="release.js"></script>
     </body>
 </html>
