@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-08",
+  "phase": "Addendum frozen before experimenter opens independent semantic60",
+  "parent_freeze_sha256": "4a7b00661f84c16fe4f0afff7e5cc71aa39b3440bb50f5ad12953dec6b3b8860",
+  "additional_secondary_profile": {
+    "label": "qwen4000-best-dev",
+    "model": "qwen4000",
+    "prompt": "prompt.json",
+    "prompt_sha256": "bf5247024f5b7b886180da66773123957b01c2105dfc0293cb92a67f326a999a",
+    "mode": "few_shot",
+    "selection_reason": "Original few-shot6/8 exact with0 required-word-loss cases versus common envelope4/8 exact with3 losses on known development8. Same frozen native no-thinking/temp0/budget/deadline as main comparison."
+  },
+  "approval": "Root explicitly approved before labels opened; release includes addendum."
+}

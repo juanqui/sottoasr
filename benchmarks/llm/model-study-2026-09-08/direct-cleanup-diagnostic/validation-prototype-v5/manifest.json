@@ -1,0 +1,26 @@
+{
+  "files": {
+    "README.md": "960565ce49f36250493fd9faef2c7467da78f56cdc4d5e7de10a6a787d2a57a3",
+    "evaluate.py": "8210cfc2a4894854d2351b2aa8a2213fc1f0f06ce75ed7ee0e06f4516211ad3c",
+    "freeze.json": "7e8b49aa784c7b46d6818cd7996bfdb22592889984d1871e3493d1d564d74b6b",
+    "minicpm2000-D1.json": "768031da28b4d3cc5a3dc31221ef8dfa55c486a5d9b0dc97f2c5e5a4d37da249",
+    "minicpm2000-D3.json": "891f8b3a47102383dce17b75b358a72d8fc9f8cad3dd19e2d05cc637a4d59a3f",
+    "minicpm2000-D4.json": "ecfa6ccea49a91e96429c44f892b9f76ca2b0c9420060539199f4ae862287930",
+    "minicpm2000-common.json": "21387b25d8bc89c856643266f7fb707a244b33499eb2ab24c55bf0524519a631",
+    "pollard_mixed-common.json": "824eec7f68f1897ae4d76e9293617542160137dc0127aa726217afa0ad93f449",
+    "qwen4000-best-dev.json": "5672e1e1208b89c3372a3dc4e3b2dec0c85ea1fa928b65832581d7954c7f668f",
+    "qwen4000-common.json": "960d7fbc0938dd6c91b9f77068f351f2a8f7bd10876ab9d9e61d11cfd282f857",
+    "review.json": "d805f2d7afd0aaa1c8dc1f6678e2a34707a5dca23e8ce6718cf99e828ee77545",
+    "rust-port-plan.md": "11233dc9b4ea4f16b7e882b8211ad448f981912e911069afaaf825c8b2f0c06d",
+    "source_validation.py": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+    "spark4000-best-dev.json": "0bb47e09c525bda2552b2daaeaac6ae4969e043d0ec870fadb9a80a94c732d72",
+    "spark4000-common.json": "674fced1a70e2fc254d2ac777f19a80f8603a8f10cbb3d793ba4d1c74c14ad09",
+    "summary.json": "43439a6f71069282016394e63740077ba2ef88fb49cc6f8f6162ad53c37b2a36",
+    "unit-tests.txt": "cc1b85a73d7ee4a99766b876919e213b4fc98c5f075c9a718ecf3297ea5d4b29",
+    "v4-to-v5.patch": "e5ef41c01d6e9fad22b556d912d3e85edfedcde4d999142623ddc98e83a909d2"
+  },
+  "exclude": [
+    "**/__pycache__/**",
+    "**/*.pyc"
+  ]
+}

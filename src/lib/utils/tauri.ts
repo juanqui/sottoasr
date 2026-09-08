@@ -8,6 +8,9 @@ import { invoke } from "@tauri-apps/api/core";
  */
 export type LlmCleanupStatus =
 	| { kind: "applied"; detail: { elapsed_ms: number } }
+	| { kind: "suggested"; detail: { elapsed_ms: number } }
+	| { kind: "no_changes" }
+	| { kind: "skipped_no_candidates" }
 	| { kind: "skipped_too_short" }
 	| { kind: "disabled" }
 	| { kind: "unavailable"; detail: { reason: string } }
@@ -22,10 +25,15 @@ export interface Transcription {
 	created_at: string;
 	word_count: number;
 	cancelled?: boolean;
+	capture_error?: string | null;
 	raw_text?: string;
 	llm_applied?: boolean;
+	cleanup_suggestion?: string | null;
 	llm_cleanup_status?: LlmCleanupStatus;
 }
+
+/** Native eviction acknowledgements are present only after a durable save. */
+export type TranscriptionEvent = Transcription & { removed_ids?: string[] };
 
 export type AppStateEnum =
 	| "Idle"
@@ -34,6 +42,23 @@ export type AppStateEnum =
 	| "CleaningUp"
 	| "Pasting";
 
+export interface OverlaySnapshot {
+	revision: number;
+	generation: number;
+	state: AppStateEnum;
+	started_at_ms: number | null;
+	error: { event: string; payload: DictationError } | null;
+}
+
+export function getOverlaySnapshot(): Promise<OverlaySnapshot> {
+	return invoke("get_overlay_snapshot");
+}
+
+export interface DictionaryEntry {
+	heard: string;
+	replacement: string;
+}
+
 export interface Settings {
 	push_to_talk_shortcut: string;
 	push_to_talk_shortcut_alt?: string | null;
@@ -41,6 +66,7 @@ export interface Settings {
 	toggle_shortcut_alt?: string | null;
 	cancel_shortcut: string;
 	cancel_shortcut_alt?: string | null;
+	open_settings_shortcut: string;
 	show_overlay: boolean;
 	auto_paste: boolean;
 	restore_clipboard: boolean;
@@ -50,6 +76,8 @@ export interface Settings {
 	max_history: number;
 	launch_at_login: boolean;
 	llm_cleanup_enabled: boolean;
+	dictionary: DictionaryEntry[];
+	vocabulary: string[];
 	auto_check_updates: boolean;
 }
 
@@ -89,8 +117,12 @@ export function deleteTranscription(id: string): Promise<void> {
 	return invoke("delete_transcription", { id });
 }
 
-export function clearTranscriptions(): Promise<void> {
+export function clearTranscriptions(): Promise<string[]> {
 	return invoke("clear_transcriptions");
+}
+
+export function exportTranscriptionsCsvFile(): Promise<string> {
+	return invoke("export_transcriptions_csv_file");
 }
 
 export function exportTranscriptionsCsv(): Promise<string> {
@@ -103,8 +135,41 @@ export function getSettings(): Promise<Settings> {
 	return invoke("get_settings");
 }
 
-export function updateSettings(newSettings: Settings): Promise<void> {
+export interface UpdateSettingsResult {
+	settings: Settings;
+	warnings: string[];
+}
+
+export function updateSettings(newSettings: Settings): Promise<UpdateSettingsResult> {
 	return invoke("update_settings", { newSettings });
+}
+
+export interface VocabularyStatus {
+	supported: boolean;
+	downloaded: boolean;
+	loaded: boolean;
+	preparing: boolean;
+	download_size_mb: number;
+	error: string | null;
+}
+
+export function getVocabularyStatus(): Promise<VocabularyStatus> {
+	return invoke("get_vocabulary_status");
+}
+
+export function prepareVocabularyModel(): Promise<VocabularyStatus> {
+	return invoke("prepare_vocabulary_model");
+}
+
+export function openUrl(url: string): Promise<void> {
+	return invoke("open_url", { url });
+}
+
+export interface DictationError {
+	error: string;
+	generation?: number;
+	audio_path?: string;
+	clipboard_available?: boolean;
 }
 
 // ---- Permission types and commands ----
@@ -195,7 +260,11 @@ export interface LlmStatus {
 	downloaded: boolean;
 	downloading: boolean;
 	loaded: boolean;
+	preparing: boolean;
+	setup_error: string | null;
 	model_name: string;
+	model_url: string;
+	download_size_mb: number;
 	model_path: string | null;
 	update_available: boolean;
 	last_cleanup_status: LlmCleanupStatus;
@@ -203,6 +272,10 @@ export interface LlmStatus {
 
 export function getLlmStatus(): Promise<LlmStatus> {
 	return invoke("get_llm_status");
+}
+
+export function prepareLlmModel(): Promise<LlmStatus> {
+	return invoke("prepare_llm_model");
 }
 
 export function checkLlmUpdate(): Promise<boolean> {

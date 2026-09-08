@@ -1,0 +1,23 @@
+    Updating crates.io index
+     Locking 16 packages to latest compatible versions
+ Downloading crates ...
+  Downloaded foldhash v0.1.5
+  Downloaded zmij v1.0.23
+  Downloaded serde_core v1.0.229
+  Downloaded allocator-api2 v0.2.21
+  Downloaded whatlang v0.18.0
+  Downloaded memchr v2.8.3
+  Downloaded serde_json v1.0.151
+  Downloaded hashbrown v0.15.5
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.151
+   Compiling equivalent v1.0.2
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.1.5
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling hashbrown v0.15.5
+   Compiling whatlang v0.18.0
+   Compiling sotto-language-guard-probe v0.1.0 (/private/tmp/experiments/sotto-language-guard)
+    Finished `release` profile [optimized] target(s) in 4.03s

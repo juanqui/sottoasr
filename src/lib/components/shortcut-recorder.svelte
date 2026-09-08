@@ -13,7 +13,7 @@
    */
   import { onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { createEventScope } from '../utils/event-scope';
 
   interface Props {
     value: string;
@@ -25,6 +25,7 @@
     /** Called when this recorder exits recording mode */
     onrecordend?: () => void;
     placeholder?: string;
+    label?: string;
   }
 
   let {
@@ -34,6 +35,7 @@
     onrecordstart,
     onrecordend,
     placeholder = 'Click to set',
+    label = 'Shortcut recorder',
   }: Props = $props();
 
   let recording = $state(false);
@@ -171,8 +173,9 @@
 
   // ---- Key capture via Rust CGEventTap + JS fallback ----
 
-  let keyCaptureUnlisten: UnlistenFn | null = null;
-  let modifierUnlisten: UnlistenFn | null = null;
+  let captureScope: ReturnType<typeof createEventScope> | null = null;
+  let captureGeneration = 0;
+  let disposed = false;
 
   function handleCapturedKey(payload: { code: string; key: string; source: string; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; ctrlKey?: boolean }) {
     if (!recording) return;
@@ -308,69 +311,52 @@
   }
 
   async function startRecording() {
-    if (disabled) return;
+    if (disabled || recording || disposed) return;
+    const generation = ++captureGeneration;
     recording = true;
     currentModifiers = new Set();
     pendingShortcut = '';
     clearCommitTimeout();
     onrecordstart?.();
-
-    // Start Rust-side CGEventTap for full key capture
-    try {
-      await invoke('start_key_capture');
-      keyCaptureUnlisten = await listen<any>('key-captured', (event) => {
-        handleCapturedKey(event.payload);
-      });
-      modifierUnlisten = await listen<any>('key-modifier', (event) => {
-        handleModifierUpdate(event.payload);
-      });
-    } catch (e) {
-      console.warn('CGEventTap not available, using JS fallback:', e);
-    }
-
-    // JS fallback (always active as backup)
+    const scope = createEventScope();
+    captureScope = scope;
+    // Install the JS fallback immediately, so Escape/outside clicks work even
+    // while native event registration is still pending.
     document.addEventListener('keydown', handleDocKeyDown, true);
     document.addEventListener('keyup', handleDocKeyUp, true);
     document.addEventListener('mousedown', handleDocMouseDown, true);
+    window.addEventListener('blur', stopRecording);
+    await Promise.all([
+      scope.listen<Parameters<typeof handleCapturedKey>[0]>('key-captured', (event) => handleCapturedKey(event.payload)),
+      scope.listen<Parameters<typeof handleModifierUpdate>[0]>('key-modifier', (event) => handleModifierUpdate(event.payload)),
+    ]);
+    if (!recording || disposed || generation !== captureGeneration) return;
+    try { await invoke('start_key_capture'); }
+    catch (error) { console.warn('Native key capture unavailable, using keyboard fallback:', error); }
   }
 
-  async function stopRecording() {
+  function stopRecording() {
     if (!recording) return;
+    ++captureGeneration;
     recording = false;
     currentModifiers = new Set();
     pendingShortcut = '';
     clearCommitTimeout();
-
-    // Stop Rust-side capture
-    try {
-      await invoke('stop_key_capture');
-    } catch {}
-    keyCaptureUnlisten?.();
-    keyCaptureUnlisten = null;
-    modifierUnlisten?.();
-    modifierUnlisten = null;
-
-    // Remove JS listeners
+    captureScope?.dispose();
+    captureScope = null;
     document.removeEventListener('keydown', handleDocKeyDown, true);
     document.removeEventListener('keyup', handleDocKeyUp, true);
     document.removeEventListener('mousedown', handleDocMouseDown, true);
+    window.removeEventListener('blur', stopRecording);
     onrecordend?.();
+    void invoke('stop_key_capture').catch(() => {});
   }
 
   onDestroy(() => {
-    // Explicitly clear timeout to prevent memory leak
-    if (commitTimeoutId !== null) {
-      clearTimeout(commitTimeoutId);
-      commitTimeoutId = null;
-    }
-    if (recording) {
-      invoke('stop_key_capture').catch(() => {});
-    }
-    keyCaptureUnlisten?.();
-    modifierUnlisten?.();
-    document.removeEventListener('keydown', handleDocKeyDown, true);
-    document.removeEventListener('keyup', handleDocKeyUp, true);
-    document.removeEventListener('mousedown', handleDocMouseDown, true);
+    disposed = true;
+    stopRecording();
+    clearCommitTimeout();
+    captureScope?.dispose();
   });
 
   let displayText = $derived(
@@ -382,36 +368,44 @@
   );
 </script>
 
-<button
-  bind:this={buttonEl}
-  class="shortcut-recorder"
-  class:recording
-  class:disabled
-  class:empty={!value && !recording}
-  onclick={() => { if (!recording && !disabled) startRecording(); }}
-  type="button"
-  role="textbox"
-  aria-label="Shortcut recorder"
->
-  <span class="shortcut-display">{displayText}</span>
+<div class="shortcut-control">
+  <button
+    bind:this={buttonEl}
+    class="shortcut-recorder"
+    class:recording
+    class:disabled
+    class:empty={!value && !recording}
+    onclick={() => { if (!recording && !disabled) startRecording(); }}
+    type="button"
+    {disabled}
+    aria-label={label}
+  >
+    <span class="shortcut-display">{displayText}</span>
+  </button>
   {#if value && !recording}
     <button
       class="clear-btn"
-      onclick={(e) => { e.stopPropagation(); onchange(''); }}
+      onclick={() => onchange('')}
       type="button"
-      aria-label="Clear shortcut"
-      tabindex={-1}
+      aria-label={`Clear ${label.toLowerCase()}`}
+      {disabled}
     >×</button>
   {/if}
-</button>
+</div>
 
 <style>
+  .shortcut-control {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+
   .shortcut-recorder {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 8px 12px;
+    padding: 8px 38px 8px 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--input-bg);
@@ -466,6 +460,10 @@
   }
 
   .clear-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     justify-content: center;

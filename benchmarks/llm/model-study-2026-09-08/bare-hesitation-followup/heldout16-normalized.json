@@ -1,0 +1,114 @@
+[
+  {
+    "id": "fresh16_h01",
+    "text": "um I saved the revised diagram in the project folder.",
+    "expected": "I saved the revised diagram in the project folder.",
+    "preserve": false,
+    "raw": "um I saved the revised diagram in the project folder."
+  },
+  {
+    "id": "fresh16_h02",
+    "text": "Uh, I left the adapter beside the monitor.",
+    "expected": "I left the adapter beside the monitor.",
+    "preserve": false,
+    "raw": "Uh, I left the adapter beside the monitor."
+  },
+  {
+    "id": "fresh16_h03",
+    "text": "I uh checked the serial number twice.",
+    "expected": "I checked the serial number twice.",
+    "preserve": false,
+    "raw": "I uh checked the serial number twice."
+  },
+  {
+    "id": "fresh16_h04",
+    "text": "The delivery should arrive um before sunset.",
+    "expected": "The delivery should arrive before sunset.",
+    "preserve": false,
+    "raw": "The delivery should arrive um before sunset."
+  },
+  {
+    "id": "fresh16_h05",
+    "text": "Please schedule the inspection for, uh, next Wednesday.",
+    "expected": "Please schedule the inspection for next Wednesday.",
+    "preserve": false,
+    "raw": "Please schedule the inspection for, uh, next Wednesday."
+  },
+  {
+    "id": "fresh16_h06",
+    "text": "I packed the the spare batteries before sunrise.",
+    "expected": "I packed the spare batteries before sunrise.",
+    "preserve": false,
+    "raw": "I packed the the spare batteries before sunrise."
+  },
+  {
+    "id": "fresh16_h07",
+    "text": "Send the parcel to to the west entrance.",
+    "expected": "Send the parcel to the west entrance.",
+    "preserve": false,
+    "raw": "Send the parcel to to the west entrance."
+  },
+  {
+    "id": "fresh16_h08",
+    "text": "The estimate is is ready for approval.",
+    "expected": "The estimate is ready for approval.",
+    "preserve": false,
+    "raw": "The estimate is is ready for approval."
+  },
+  {
+    "id": "fresh16_p01",
+    "text": "The syllable uh is printed beneath the pronunciation guide.",
+    "expected": "The syllable uh is printed beneath the pronunciation guide.",
+    "preserve": true,
+    "raw": "The syllable uh is printed beneath the pronunciation guide."
+  },
+  {
+    "id": "fresh16_p02",
+    "text": "She wrote \"um, uh\" in the margin as examples of hesitation.",
+    "expected": "She wrote \"um, uh\" in the margin as examples of hesitation.",
+    "preserve": true,
+    "raw": "She wrote \"um, uh\" in the margin as examples of hesitation."
+  },
+  {
+    "id": "fresh16_p03",
+    "text": "Dr. Um Hye-jin will present the microscopy results on Friday.",
+    "expected": "Dr. Um Hye-jin will present the microscopy results on Friday.",
+    "preserve": true,
+    "raw": "Dr. Um Hye-jin will present the microscopy results on Friday."
+  },
+  {
+    "id": "fresh16_p04",
+    "text": "Use the identifier um for the unit multiplier in this function.",
+    "expected": "Use the identifier um for the unit multiplier in this function.",
+    "preserve": true,
+    "raw": "Use the identifier um for the unit multiplier in this function."
+  },
+  {
+    "id": "fresh16_p05",
+    "text": "Eu preciso de um mapa para encontrar a entrada principal.",
+    "expected": "Eu preciso de um mapa para encontrar a entrada principal.",
+    "preserve": true,
+    "raw": "Eu preciso de um mapa para encontrar a entrada principal."
+  },
+  {
+    "id": "fresh16_p06",
+    "text": "Wir treffen uns um neun Uhr vor dem alten Rathaus.",
+    "expected": "Wir treffen uns um neun Uhr vor dem alten Rathaus.",
+    "preserve": true,
+    "raw": "Wir treffen uns um neun Uhr vor dem alten Rathaus."
+  },
+  {
+    "id": "fresh16_p07",
+    "text": "That was a long, long, long drive through the mountains.",
+    "expected": "That was a long, long, long drive through the mountains.",
+    "preserve": true,
+    "raw": "That was a long, long, long drive through the mountains."
+  },
+  {
+    "id": "fresh16_p08",
+    "text": "Write uh exactly as shown in the answer field.",
+    "expected": "Write uh exactly as shown in the answer field.",
+    "preserve": true,
+    "raw": "Write uh exactly as shown in the answer field."
+  }
+]

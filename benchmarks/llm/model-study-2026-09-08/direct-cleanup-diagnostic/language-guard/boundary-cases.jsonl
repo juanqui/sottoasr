@@ -1,0 +1,24 @@
+{"id": "probe_01", "source": "Um, call José.", "expected": "Um, call José.", "group": "english"}
+{"id": "probe_02", "source": "Um, send it.", "expected": "Um, send it.", "group": "english"}
+{"id": "probe_03", "source": "Uh, not yet.", "expected": "Uh, not yet.", "group": "english"}
+{"id": "probe_04", "source": "Um, contact Lena.", "expected": "Um, contact Lena.", "group": "english"}
+{"id": "probe_05", "source": "Er, ask Anna.", "expected": "Er, ask Anna.", "group": "english"}
+{"id": "probe_06", "source": "Um, call Maria.", "expected": "Um, call Maria.", "group": "english"}
+{"id": "probe_07", "source": "Um, ping Qwen.", "expected": "Um, ping Qwen.", "group": "english"}
+{"id": "probe_08", "source": "Uh, launch MiniCPM5.", "expected": "Uh, launch MiniCPM5.", "group": "english"}
+{"id": "probe_09", "source": "Um, please insert the phrase Wir kommen um acht into the message.", "expected": "Um, please insert the phrase Wir kommen um acht into the message.", "group": "english"}
+{"id": "probe_10", "source": "“Um acht.” uh is what Alex said.", "expected": "“Um acht.” uh is what Alex said.", "group": "english"}
+{"id": "probe_11", "source": "Um, uh, yeah.", "expected": "Um, uh, yeah.", "group": "english"}
+{"id": "probe_12", "source": "Um, revise the invoice.", "expected": "Um, revise the invoice.", "group": "english"}
+{"id": "probe_13", "source": "Um acht kommt er.", "expected": "Um acht kommt er.", "group": "german"}
+{"id": "probe_14", "source": "Es geht um Geld.", "expected": "Es geht um Geld.", "group": "german"}
+{"id": "probe_15", "source": "Há um sensor e um cabo.", "expected": "Há um sensor e um cabo.", "group": "portuguese"}
+{"id": "probe_16", "source": "Preciso de um cabo.", "expected": "Preciso de um cabo.", "group": "portuguese"}
+{"id": "probe_17", "source": "Um Himmels willen!", "expected": "Um Himmels willen!", "group": "german"}
+{"id": "probe_18", "source": "Send um José a memo.", "expected": "Send um José a memo.", "group": "english"}
+{"id": "probe_19", "source": "Er, create a preview.", "expected": "Er, create a preview.", "group": "english"}
+{"id": "probe_20", "source": "Uh, enable ASR.", "expected": "Uh, enable ASR.", "group": "english"}
+{"id": "probe_21", "source": "Um, ship NVIDIA GPUs.", "expected": "Um, ship NVIDIA GPUs.", "group": "english"}
+{"id": "probe_22", "source": "Um, label the café samples.", "expected": "Um, label the café samples.", "group": "english"}
+{"id": "probe_23", "source": "Um, very very good.", "expected": "Um, very very good.", "group": "english"}
+{"id": "probe_24", "source": "We we need more screws.", "expected": "We we need more screws.", "group": "english"}

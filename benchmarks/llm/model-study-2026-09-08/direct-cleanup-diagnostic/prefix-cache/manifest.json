@@ -1,0 +1,9 @@
+{
+  "status": "Prepared; no inference executed",
+  "driver_sha256": "c5be56f8b9236e524651011995f997c90daa5ce9e4bc158a3531b4e18e2260c5",
+  "prompt_sha256": "ffe72a3812d42fb9f455e428f62ff300d232ace46acdf668e6d012425e7d48e5",
+  "model": "openbmb/MiniCPM5-2B-MLX",
+  "measured_revision": "32f8dd5df1188512a20413f1297083238306634c",
+  "qualification_runner_sha256": "31713c2262119e4a65dfa9279aa097dd7f1de7bb7e808dd10c24ab319e4fa0f6",
+  "pure_source_check": "Passed; no mlx module imported"
+}

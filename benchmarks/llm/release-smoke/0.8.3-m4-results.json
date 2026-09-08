@@ -1,0 +1,472 @@
+{
+  "kind": "revealed_release_smoke_not_qualification",
+  "bundle": "/Users/juanqui/Git/sotto/src-tauri/target/release/bundle/macos/SottoASR.app",
+  "sidecar_sha256": "3d715d0daa61ae2d0d84e7c44974bd014b0dd428727c3f63bfc1a9e2874ca921",
+  "python": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/bin/python3.14",
+  "pure_checks": {
+    "model_id": "openbmb/MiniCPM5-2B-MLX",
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f",
+    "empty_completed_output_supported": true,
+    "rejected_cases": [
+      "incomplete_generation",
+      "incomplete_generation",
+      "incomplete_generation",
+      "text_limit",
+      "invalid_text"
+    ],
+    "runtime_pins": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    }
+  },
+  "cases_sha256": "ac438dd428b29bdbc53c775d5d006f87c5425e43d9aa169b1a9baa0697e14f23",
+  "validator_source_sha256": "ce65944b7b13dafdfce89b78f0c5f7f629a9156e93f339e4dbb9d06c0b131c9c",
+  "cases": [
+    {
+      "id": "reported_sentence",
+      "raw": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+      "expected": "This is a test to see if this can remove all those things from the sentences.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "This is a test to see if this can remove all those things from the sentences.",
+        "finish_reason": "stop",
+        "elapsed_ms": 987
+      },
+      "latency_s": 0.9878703749855049,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "This is a test to see if this can remove all those things from the sentences."
+      },
+      "delivered": "This is a test to see if this can remove all those things from the sentences.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "dev_02",
+      "raw": "The token um, should remain because it is the literal name of this field.",
+      "expected": "The token um, should remain because it is the literal name of this field.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The token um, should remain because it is the literal name of this field.",
+        "finish_reason": "stop",
+        "elapsed_ms": 982
+      },
+      "latency_s": 0.9833021669765003,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "The token um, should remain because it is the literal name of this field."
+      },
+      "delivered": "The token um, should remain because it is the literal name of this field.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "dev_03",
+      "raw": "Please uh, type a a into the box without removing either letter.",
+      "expected": "Please type a a into the box without removing either letter.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "Please type a a into the box without removing either letter.",
+        "finish_reason": "stop",
+        "elapsed_ms": 909
+      },
+      "latency_s": 0.9102180000045337,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "Please type a a into the box without removing either letter."
+      },
+      "delivered": "Please type a a into the box without removing either letter.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "dev_07",
+      "raw": "The name Um, belongs to the customer in this ticket.",
+      "expected": "The name Um, belongs to the customer in this ticket.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The name Um, belongs to the customer in this ticket.",
+        "finish_reason": "stop",
+        "elapsed_ms": 911
+      },
+      "latency_s": 0.9117847910383716,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "The name Um, belongs to the customer in this ticket."
+      },
+      "delivered": "The name Um, belongs to the customer in this ticket.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "dev_08",
+      "raw": "I I wrote the word erm, in the glossary yesterday.",
+      "expected": "I wrote the word erm, in the glossary yesterday.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "I wrote the word erm, in the glossary yesterday.",
+        "finish_reason": "stop",
+        "elapsed_ms": 876
+      },
+      "latency_s": 0.8773810830316506,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "I wrote the word erm, in the glossary yesterday."
+      },
+      "delivered": "I wrote the word erm, in the glossary yesterday.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_202",
+      "raw": "Dr. Um um confirmed that the spare lens is available.",
+      "expected": "Dr. Um confirmed that the spare lens is available.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "Dr. Um confirmed that the spare lens is available.",
+        "finish_reason": "stop",
+        "elapsed_ms": 898
+      },
+      "latency_s": 0.8993511659791693,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "Dr. Um confirmed that the spare lens is available."
+      },
+      "delivered": "Dr. Um confirmed that the spare lens is available.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_220",
+      "raw": "The sample tag ends in uh, um.",
+      "expected": "The sample tag ends in uh.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The sample tag ends in.",
+        "finish_reason": "stop",
+        "elapsed_ms": 816
+      },
+      "latency_s": 0.8172877499600872,
+      "completed": true,
+      "validation": {
+        "accepted": false,
+        "language_skip": false,
+        "output": "The sample tag ends in uh, um.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes"
+      },
+      "delivered": "The sample tag ends in uh, um.",
+      "accepted": false,
+      "exact_target": false,
+      "lexical_target": false,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_225",
+      "raw": "Set the request parameter um to the value returned by unit_multiplier.",
+      "expected": "Set the request parameter um to the value returned by unit_multiplier.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "Set the request parameter um to the value returned by unit_multiplier.",
+        "finish_reason": "stop",
+        "elapsed_ms": 946
+      },
+      "latency_s": 0.9473323329584673,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "Set the request parameter um to the value returned by unit_multiplier."
+      },
+      "delivered": "Set the request parameter um to the value returned by unit_multiplier.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_242",
+      "raw": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "expected": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "language_skip": true,
+      "response": null,
+      "latency_s": 0,
+      "delivered": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "accepted": false,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_030",
+      "raw": "The adapter uh supports 24 volts, and um the fuse is rated for 3 amps.",
+      "expected": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+        "finish_reason": "stop",
+        "elapsed_ms": 984
+      },
+      "latency_s": 0.9851582499686629,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "The adapter supports 24 volts, and the fuse is rated for 3 amps."
+      },
+      "delivered": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "release_217",
+      "raw": "The length is um twenty, sorry, thirty centimeters after trimming.",
+      "expected": "The length is twenty, sorry, thirty centimeters after trimming.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The length is thirty centimeters after trimming.",
+        "finish_reason": "stop",
+        "elapsed_ms": 863
+      },
+      "latency_s": 0.8636512079974636,
+      "completed": true,
+      "validation": {
+        "accepted": false,
+        "language_skip": false,
+        "output": "The length is um twenty, sorry, thirty centimeters after trimming.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes"
+      },
+      "delivered": "The length is um twenty, sorry, thirty centimeters after trimming.",
+      "accepted": false,
+      "exact_target": false,
+      "lexical_target": false,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "semantic_47",
+      "raw": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "expected": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+        "finish_reason": "stop",
+        "elapsed_ms": 3008
+      },
+      "latency_s": 3.0088602080359124,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned."
+      },
+      "delivered": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "authored_quote",
+      "raw": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+      "expected": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+        "finish_reason": "stop",
+        "elapsed_ms": 990
+      },
+      "latency_s": 0.9911114170099609,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "The exact text is \"say \\\"um, uh\\\" now\" on screen."
+      },
+      "delivered": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "authored_code",
+      "raw": "Keep ``um uh`` intact.",
+      "expected": "Keep ``um uh`` intact.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "Keep ``um uh`` intact.",
+        "finish_reason": "stop",
+        "elapsed_ms": 795
+      },
+      "latency_s": 0.7958095419453457,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "Keep ``um uh`` intact."
+      },
+      "delivered": "Keep ``um uh`` intact.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": true,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    },
+    {
+      "id": "authored_negation",
+      "raw": "Please do not um enable automatic deletion for archived projects.",
+      "expected": "Please do not enable automatic deletion for archived projects.",
+      "language_skip": false,
+      "response": {
+        "ok": true,
+        "text": "Please do not enable automatic deletion for archived projects.",
+        "finish_reason": "stop",
+        "elapsed_ms": 903
+      },
+      "latency_s": 0.9041066669742577,
+      "completed": true,
+      "validation": {
+        "accepted": true,
+        "language_skip": false,
+        "output": "Please do not enable automatic deletion for archived projects."
+      },
+      "delivered": "Please do not enable automatic deletion for archived projects.",
+      "accepted": true,
+      "exact_target": true,
+      "lexical_target": true,
+      "full_source_fallback": false,
+      "protected_payloads_preserved": true,
+      "smoke_pass": true
+    }
+  ],
+  "limitations": "Does not exercise live capture, clipboard, focus or paste. Source validator is structural, not a semantic guarantee. Prior qualification failed.",
+  "runtime": {
+    "python": "3.14.5 (main, May 10 2026, 10:21:34) [Clang 17.0.0 (clang-1700.6.4.2)]",
+    "packages": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    }
+  },
+  "status_latency_s": 0.2038109169807285,
+  "status": {
+    "ok": true,
+    "status": "downloaded",
+    "downloaded": true,
+    "loaded": false,
+    "warmed": false,
+    "model_name": "MiniCPM5 2B (official, 4-bit)",
+    "model_id": "openbmb/MiniCPM5-2B-MLX",
+    "local_revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f"
+  },
+  "cold_load_and_warm_latency_s": 2.9504927920061164,
+  "load": {
+    "ok": true,
+    "model_id": "openbmb/MiniCPM5-2B-MLX",
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f",
+    "warmed": true,
+    "did_warm": true
+  },
+  "warm_status_latency_s": 0.00038583303103223443,
+  "warm_status": {
+    "ok": true,
+    "status": "ready",
+    "downloaded": true,
+    "loaded": true,
+    "warmed": true,
+    "model_name": "MiniCPM5 2B (official, 4-bit)",
+    "model_id": "openbmb/MiniCPM5-2B-MLX",
+    "local_revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f"
+  },
+  "repeat_load_latency_s": 6.554200081154704e-05,
+  "repeat_load": {
+    "ok": true,
+    "model_id": "openbmb/MiniCPM5-2B-MLX",
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f",
+    "warmed": true,
+    "did_warm": false
+  },
+  "first_user_request_latency_s": 0.9878703749855049,
+  "child_exit_code": 0,
+  "summary": {
+    "completed_cases": 15,
+    "smoke_passes": 15,
+    "exact_targets": 13,
+    "lexical_targets": 13,
+    "source_fallbacks": 9,
+    "language_skips": 1
+  }
+}

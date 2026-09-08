@@ -22,11 +22,9 @@ pub struct PermissionStatus {
 pub async fn check_microphone_permission() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
-        tokio::task::spawn_blocking(|| {
-            Ok(check_mic_status() == "authorized")
-        })
-        .await
-        .map_err(|e| format!("Task join error: {}", e))?
+        tokio::task::spawn_blocking(|| Ok(check_mic_status() == "authorized"))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -69,11 +67,9 @@ pub async fn request_accessibility_permission() -> Result<(), String> {
 pub async fn request_microphone_permission() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
-        tokio::task::spawn_blocking(|| {
-            request_mic_access()
-        })
-        .await
-        .map_err(|e| format!("Task join error: {}", e))?
+        tokio::task::spawn_blocking(request_mic_access)
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -98,14 +94,19 @@ pub async fn check_all_permissions() -> Result<PermissionStatus, String> {
                 false
             };
             let needs_restart = accessibility_api && !accessibility_functional;
-            log::info!("Permission check: accessibility_api={}, functional={}", accessibility_api, accessibility_functional);
+            log::info!(
+                "Permission check: accessibility_api={}, functional={}",
+                accessibility_api,
+                accessibility_functional
+            );
 
             // Check Input Monitoring via IOHIDCheckAccess
             let input_monitoring = unsafe {
                 extern "C" {
                     fn IOHIDCheckAccess(request_type: u32) -> u32;
                 }
-                match IOHIDCheckAccess(1) { // kIOHIDRequestTypeListenEvent = 1
+                match IOHIDCheckAccess(1) {
+                    // kIOHIDRequestTypeListenEvent = 1
                     0 => "granted".to_string(),
                     1 => "denied".to_string(),
                     _ => "undetermined".to_string(),
@@ -160,22 +161,42 @@ pub async fn fix_accessibility_permission() -> Result<(), String> {
         tokio::task::spawn_blocking(|| {
             // Reset the stale TCC entry
             log::info!("Resetting Accessibility TCC entry for com.sottoasr.app...");
-            let _ = std::process::Command::new("tccutil")
-                .args(["reset", "Accessibility", "com.sottoasr.app"])
-                .output();
-
-            // Small delay for TCC database to update
-            std::thread::sleep(std::time::Duration::from_millis(500));
-
-            // Re-trigger the system prompt — this adds the current binary with the correct csreq
-            log::info!("Re-requesting Accessibility permission...");
-            prompt_accessibility();
-
-            Ok::<(), String>(())
+            reset_accessibility_with(
+                || {
+                    crate::process::bounded_command(
+                        std::process::Command::new("tccutil").args([
+                            "reset",
+                            "Accessibility",
+                            "com.sottoasr.app",
+                        ]),
+                        std::time::Duration::from_secs(3),
+                    )
+                },
+                || {
+                    // Let TCC settle before requesting the current signature.
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    log::info!("Re-requesting Accessibility permission...");
+                    prompt_accessibility();
+                },
+            )
         })
         .await
         .map_err(|e| format!("Task join error: {}", e))??;
     }
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", all(test, unix)))]
+fn reset_accessibility_with(
+    reset: impl FnOnce() -> Result<std::process::Output, String>,
+    prompt: impl FnOnce(),
+) -> Result<(), String> {
+    let output =
+        reset().map_err(|error| format!("Could not reset Accessibility permission: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("Could not reset Accessibility permission ({}). Open System Settings to remove and re-add SottoASR.", output.status));
+    }
+    prompt();
     Ok(())
 }
 
@@ -240,9 +261,7 @@ pub fn prompt_accessibility() {
                 key_callbacks: *const std::ffi::c_void,
                 value_callbacks: *const std::ffi::c_void,
             ) -> *const std::ffi::c_void;
-            fn AXIsProcessTrustedWithOptions(
-                options: *const std::ffi::c_void,
-            ) -> bool;
+            fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
             fn CFRelease(cf: *const std::ffi::c_void);
 
             static kCFBooleanTrue: *const std::ffi::c_void;
@@ -344,7 +363,7 @@ fn request_mic_access() -> Result<bool, String> {
     // Status is "not_determined" — trigger the native prompt by attempting
     // to access the default input device. cpal's device enumeration triggers
     // the macOS TCC microphone prompt automatically.
-    use cpal::traits::{HostTrait, DeviceTrait};
+    use cpal::traits::{DeviceTrait, HostTrait};
     let host = cpal::default_host();
     if let Some(device) = host.default_input_device() {
         // Attempting to get the config triggers the TCC prompt
@@ -356,4 +375,41 @@ fn request_mic_access() -> Result<bool, String> {
 
     // Re-check status
     Ok(check_mic_status() == "authorized")
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::reset_accessibility_with;
+    use std::cell::Cell;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{ExitStatus, Output};
+
+    fn output(code: i32) -> Output {
+        Output {
+            status: ExitStatus::from_raw(code << 8),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn reset_failure_never_prompts_for_accessibility() {
+        let prompts = Cell::new(0);
+        let timed_out = reset_accessibility_with(
+            || Err("Command timed out".into()),
+            || prompts.set(prompts.get() + 1),
+        );
+        assert!(timed_out.unwrap_err().contains("timed out"));
+        let rejected =
+            reset_accessibility_with(|| Ok(output(1)), || prompts.set(prompts.get() + 1));
+        assert!(rejected.unwrap_err().contains("System Settings"));
+        assert_eq!(prompts.get(), 0);
+    }
+
+    #[test]
+    fn successful_reset_prompts_once() {
+        let prompts = Cell::new(0);
+        reset_accessibility_with(|| Ok(output(0)), || prompts.set(prompts.get() + 1)).unwrap();
+        assert_eq!(prompts.get(), 1);
+    }
 }

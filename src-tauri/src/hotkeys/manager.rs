@@ -1,17 +1,17 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::{tauri_panel, ManagerExt, WebviewWindowExt as _};
 use crate::llm::cleanup::run_cleanup;
 use crate::models::{AppStateEnum, LlmCleanupStatus};
 use crate::state::{AppState, OverlaySession};
 
-// Define a non-activating NSPanel class for the overlay.
-// can_become_key_window: false ensures it never steals focus from the user's app.
+// Ordinary recording stays non-activating. Recovery controls can temporarily
+// accept keyboard focus without turning the app into a regular Dock app.
+pub(crate) static OVERLAY_ACCEPTS_KEY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 tauri_panel! {
     panel!(OverlayPanel {
         config: {
-            can_become_key_window: false,
+            can_become_key_window: crate::hotkeys::manager::OVERLAY_ACCEPTS_KEY.load(std::sync::atomic::Ordering::SeqCst),
             is_floating_panel: true
         }
     })
@@ -24,16 +24,45 @@ tauri_panel! {
 const MAX_RECORDING_SECS: u64 = 20 * 60;
 /// Seconds before max duration to show a warning (1 minute before).
 const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
-/// Maximum sample rate we expect to handle (96kHz for high-quality audio).
-const MAX_EXPECTED_SAMPLE_RATE_HZ: usize = 96_000;
-/// Maximum audio buffer size (MAX_RECORDING_SECS at max expected sample rate).
-/// Prevents memory exhaustion from unbounded recordings.
-/// At 96kHz: 20 minutes * 60 seconds * 96,000 samples = 115.2M samples ≈ 460MB
-const MAX_AUDIO_BUFFER_SAMPLES: usize = MAX_EXPECTED_SAMPLE_RATE_HZ * MAX_RECORDING_SECS as usize;
+
+/// Resolve parser aliases to the same physical key used for release polling.
+/// Unsupported keys must fail validation before a recording can become stuck.
+pub(crate) fn ptt_virtual_key(shortcut: &str) -> Result<u16, String> {
+    let parsed = shortcut.parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .map_err(|error| format!("Push-to-talk shortcut is invalid: {error}"))?;
+    crate::commands::keycapture::tauri_key_to_vk(&parsed.key.to_string())
+        .ok_or_else(|| format!("Push-to-talk does not support the {} key on this Mac", parsed.key))
+}
+
+#[cfg(test)]
+mod ptt_tests {
+    use super::ptt_virtual_key;
+
+    #[test]
+    fn parsed_aliases_share_the_physical_release_key_and_unsupported_keys_fail() {
+        for shortcut in ["Ctrl+A", "Control+KeyA", "ctrl+a"] {
+            assert_eq!(ptt_virtual_key(shortcut).unwrap(), 0x00);
+        }
+        assert_eq!(ptt_virtual_key("Ctrl+Space").unwrap(), 0x31);
+        assert!(ptt_virtual_key("Ctrl+F24").is_err());
+        let settings = crate::models::Settings {
+            push_to_talk_shortcut: "Ctrl+F24".into(), ..Default::default()
+        };
+        assert!(settings.validate().is_err());
+    }
+}
 
 pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
-    let settings = crate::commands::settings::load_persisted_settings();
-    register_shortcuts(app, &settings)
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let settings = crate::commands::settings::load_persisted_settings_checked()?;
+    settings.validate()?;
+    let result = register_shortcuts(app, &settings);
+    if result.is_err() {
+        if let Err(error) = app.global_shortcut().unregister_all() {
+            log::warn!("Could not clear partially registered shortcuts: {error}");
+        }
+    }
+    result
 }
 
 /// Re-register all shortcuts. Called at startup and when settings change.
@@ -53,7 +82,8 @@ pub fn register_shortcuts(
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
     // Unregister all existing shortcuts first
-    let _ = app.global_shortcut().unregister_all();
+    app.global_shortcut().unregister_all()
+        .map_err(|error| format!("Failed to unregister existing shortcuts: {error}"))?;
 
     // Store the cancel shortcuts for dynamic registration during recording
     {
@@ -69,25 +99,25 @@ pub fn register_shortcuts(
         use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
         let app_handle = app.clone();
-        let ptt_main_key = shortcut.split('+').next_back().unwrap_or("Space").to_string();
+        let ptt_vk = ptt_virtual_key(shortcut)?;
 
         app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
             if event.state != ShortcutState::Pressed {
                 return;
             }
             let app = app_handle.clone();
-            let main_key = ptt_main_key.clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<'_, AppState> = app.state();
                 if state.get_state() != AppStateEnum::Idle {
                     return;
                 }
-                handle_start_recording(&app);
+                let Ok(generation) = handle_start_recording(&app) else { return; };
 
                 // Poll for key release via CGEventSourceKeyState
                 #[cfg(target_os = "macos")]
                 {
-                    if let Some(vk) = crate::commands::keycapture::tauri_key_to_vk(&main_key) {
+                    {
+                        let vk = ptt_vk;
                         let app_for_release = app.clone();
                         std::thread::spawn(move || {
                             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -95,11 +125,16 @@ pub fn register_shortcuts(
                                 extern "C" {
                                     fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
                                 }
-                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(12 * 60 + 30);
+                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(MAX_RECORDING_SECS);
                                 loop {
                                     std::thread::sleep(std::time::Duration::from_millis(33));
+                                    let state: tauri::State<'_, AppState> = app_for_release.state();
+                                    if state.recording_generation.load(Ordering::SeqCst) != generation
+                                        || state.get_state() != AppStateEnum::Recording {
+                                        return;
+                                    }
                                     if std::time::Instant::now() > deadline {
-                                        log::warn!("PTT key release polling timed out after {}s", 12 * 60 + 30);
+                                        log::warn!("PTT key release polling reached the {}s recording limit", MAX_RECORDING_SECS);
                                         break;
                                     }
                                     let still_pressed = CGEventSourceKeyState(0, vk);
@@ -111,7 +146,7 @@ pub fn register_shortcuts(
                             let state: tauri::State<'_, AppState> = app_for_release.state();
                             if state.get_state() == AppStateEnum::Recording {
                                 tauri::async_runtime::spawn(async move {
-                                    handle_stop_recording(&app_for_release).await;
+                                    stop_recording_for_generation(&app_for_release, Some(generation)).await;
                                 });
                             }
                         });
@@ -134,7 +169,7 @@ pub fn register_shortcuts(
                     let current = state.get_state();
                     match current {
                         AppStateEnum::Idle => {
-                            handle_start_recording(&app);
+                            let _ = handle_start_recording(&app);
                         }
                         AppStateEnum::Recording => {
                             handle_stop_recording(&app).await;
@@ -154,14 +189,10 @@ pub fn register_shortcuts(
 
     // Register alt shortcuts (if set and non-empty)
     if let Some(alt) = ptt_shortcut_alt.filter(|s| !s.is_empty()) {
-        if let Err(e) = register_ptt(app, alt) {
-            log::warn!("Failed to register alt push-to-talk shortcut: {}", e);
-        }
+        register_ptt(app, alt)?;
     }
     if let Some(alt) = toggle_shortcut_alt.filter(|s| !s.is_empty()) {
-        if let Err(e) = register_toggle(app, alt) {
-            log::warn!("Failed to register alt toggle shortcut: {}", e);
-        }
+        register_toggle(app, alt)?;
     }
 
     // Register open-settings shortcut
@@ -255,53 +286,20 @@ pub fn unregister_cancel_shortcut(app: &AppHandle) {
 }
 
 /// Start recording: open microphone, set state, emit events.
-fn handle_start_recording(app: &AppHandle) {
+pub fn handle_start_recording(app: &AppHandle) -> Result<u64, String> {
     let state: tauri::State<'_, AppState> = app.state();
-    let current = state.get_state();
-
-    if current != AppStateEnum::Idle {
-        log::warn!("Cannot start recording: currently in {:?} state", current);
-        return;
-    }
-
-    // Drain any leftover samples from previous recording
-    if let Ok(rx) = state.audio_receiver.lock() {
-        while rx.try_recv().is_ok() {}
-    }
-
-    // Start audio capture
-    let sender = {
-        let s = state.audio_sender.lock().unwrap_or_else(|e| e.into_inner());
-        s.clone()
-    };
-    let is_recording = Arc::new(AtomicBool::new(true));
-    state.is_recording.store(true, Ordering::SeqCst);
-
-    let is_recording_clone = is_recording.clone();
     let app_clone = app.clone();
-
-    let start_result = {
-        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
-        capture.start(
-            sender,
-            is_recording_clone,
-            Box::new(move |level| {
-                let _ = app_clone.emit("audio-level", serde_json::json!({ "level": level }));
-            }),
-        )
-    };
+    let (error_sender, mut error_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let start_result = crate::audio::capture::start_recording_capture_with_errors(&state, Box::new(move |level| {
+        let _ = app_clone.emit("audio-level", serde_json::json!({ "level": level }));
+    }), Box::new(move |generation, _error| {
+        let _ = error_sender.send(generation);
+    }));
 
     match start_result {
-        Ok(()) => {
-            // Capture the frontmost app PID before showing the overlay.
-            // This is the app that should receive the paste when transcription completes.
-            let target_pid = state.paste_backend.get_frontmost_pid();
-            state.target_pid.store(target_pid, Ordering::SeqCst);
-            log::info!("Captured frontmost app PID: {}", target_pid);
-
-            state.set_state(AppStateEnum::Recording);
-            let _ = app.emit("recording-started", ());
-            let _ = app.emit("state-changed", &AppStateEnum::Recording);
+        Ok(generation) => {
+            let _ = app.emit("recording-started", serde_json::json!({ "generation": generation }));
+            crate::commands::overlay::publish_state(app, AppStateEnum::Recording);
 
             // Register cancel shortcut (only active while recording)
             register_cancel_shortcut(app);
@@ -309,10 +307,19 @@ fn handle_start_recording(app: &AppHandle) {
             // Show the overlay window
             show_overlay(app);
 
+            // Publish the start events before consuming an early device error.
+            // The callback only enqueues once; dropping the stream closes this
+            // channel so ordinary recordings do not leave a waiting task.
+            let app_for_error = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(generation) = error_receiver.recv().await {
+                    stop_recording_for_generation(&app_for_error, Some(generation)).await;
+                }
+            });
+
             // Spawn auto-stop timer: warn at (MAX - WARNING) seconds, stop at MAX seconds.
             // Capture the recording generation so this timer can detect if a new
             // recording session has started (making this timer stale).
-            let generation = state.recording_generation.fetch_add(1, Ordering::SeqCst) + 1;
             let app_for_timer = app.clone();
             tokio::spawn(async move {
                 let warning_at = MAX_RECORDING_SECS - WARNING_BEFORE_LIMIT_SECS;
@@ -339,129 +346,66 @@ fn handle_start_recording(app: &AppHandle) {
                 }
                 if state.get_state() == AppStateEnum::Recording {
                     log::info!("Max recording duration ({}s) reached — auto-stopping", MAX_RECORDING_SECS);
-                    handle_stop_recording(&app_for_timer).await;
+                    stop_recording_for_generation(&app_for_timer, Some(generation)).await;
                 }
             });
 
             log::info!("Recording started — microphone active");
+            Ok(generation)
         }
         Err(e) => {
             log::error!("Failed to start audio capture: {}", e);
-            state.is_recording.store(false, Ordering::SeqCst);
-            let _ = app.emit("recording-error", serde_json::json!({ "error": e }));
+            if state.get_state() == AppStateEnum::Idle {
+                show_recording_error(app, "recording-error", state.recording_generation.load(Ordering::SeqCst),
+                    serde_json::json!({ "error": &e }));
+            }
+            Err(e)
         }
     }
 }
 
 /// Stop recording: close microphone, collect samples, transcribe, paste.
 pub async fn handle_stop_recording(app: &AppHandle) {
+    stop_recording_for_generation(app, None).await;
+}
+
+async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>) {
     let state: tauri::State<'_, AppState> = app.state();
-    let current = state.get_state();
-
-    if current != AppStateEnum::Recording {
-        log::warn!("Cannot stop recording: currently in {:?} state", current);
+    if !state.claim_recording_end(generation) {
+        log::warn!("Cannot stop recording: currently in {:?} state", state.get_state());
         return;
     }
 
-    // Stop audio capture — drop the stream first so all in-flight callbacks
-    // finish sending their samples before we clear the recording flag.
-    {
-        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
-        capture.stop();
-    }
-    state.is_recording.store(false, Ordering::SeqCst);
+    let recording_generation = state.recording_generation.load(Ordering::SeqCst);
 
-    // Unregister cancel shortcut so it doesn't block the key globally
     unregister_cancel_shortcut(app);
-
-    // Keep overlay visible through transcription and LLM cleanup.
-    // It will be hidden after paste/clipboard write completes.
-
-    state.set_state(AppStateEnum::Transcribing);
     let _ = app.emit("recording-stopped", ());
-    let _ = app.emit("state-changed", &AppStateEnum::Transcribing);
+    crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
 
-    // Collect all audio samples from the channel
-    // Check buffer limit to prevent memory exhaustion
-    let samples = {
-        let rx = state.audio_receiver.lock().unwrap_or_else(|e| e.into_inner());
-        let mut all = Vec::new();
-        while let Ok(chunk) = rx.try_recv() {
-            // Check if adding this chunk would exceed the buffer limit
-            if all.len().saturating_add(chunk.len()) > MAX_AUDIO_BUFFER_SAMPLES {
-                log::error!(
-                    "Audio buffer limit ({}) exceeded after {} samples - recording too long",
-                    MAX_AUDIO_BUFFER_SAMPLES,
-                    all.len()
-                );
-                // Hide overlay before returning
-                hide_overlay(app);
-                let _ = app.emit("recording-error", serde_json::json!({
-                    "error": format!("Recording too long: maximum {} minutes of audio allowed", MAX_AUDIO_BUFFER_SAMPLES / 48_000 / 60)
-                }));
-                state.set_state(AppStateEnum::Idle);
-                let _ = app.emit("state-changed", &AppStateEnum::Idle);
-                return;
-            }
-            all.extend(chunk);
-        }
-        all
-    };
-
-    log::info!("Collected {} audio samples ({:.1}s at estimated rate)",
-        samples.len(),
-        samples.len() as f64 / 48000.0 // approximate — actual rate may vary
-    );
-
-    if samples.len() < 4000 {
-        log::warn!("Recording too short ({} samples), discarding", samples.len());
-        state.set_state(AppStateEnum::Idle);
-        let _ = app.emit("state-changed", &AppStateEnum::Idle);
-        return;
-    }
-
-    // Write samples to a temp WAV file for FluidAudio (which requires file-based input)
-    let temp_path = std::env::temp_dir().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
-
-    // We captured at the device's native rate (likely 48kHz mono after downmix).
-    // FluidAudio handles resampling internally, so just write at the capture rate.
-    let sample_rate = {
-        let capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
-        capture.sample_rate()
-    };
-
-    let wav_spec = hound::WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
-
-    match hound::WavWriter::create(&temp_path, wav_spec) {
-        Ok(mut writer) => {
-            for &sample in &samples {
-                let _ = writer.write_sample(sample);
-            }
-            // Append trailing silence so the ASR model fully processes the final
-            // audio chunk. FluidAudio's chunked Parakeet TDT decoder may not emit
-            // tokens for the last few words when speech extends to the very end of
-            // the audio without a silence boundary.
-            let silence_pad_ms: usize = 750;
-            let silence_samples = sample_rate as usize * silence_pad_ms / 1000;
-            for _ in 0..silence_samples {
-                let _ = writer.write_sample(0.0f32);
-            }
-            let _ = writer.finalize();
-            log::info!("Wrote temp WAV: {:?} ({} + {} pad samples, {} Hz)",
-                temp_path, samples.len(), silence_samples, sample_rate);
-        }
-        Err(e) => {
-            log::error!("Failed to write temp WAV: {}", e);
+    let finished = match crate::audio::capture::finish_recording_capture(&state).await {
+        Ok(finished) => finished,
+        Err(error) => {
             state.set_state(AppStateEnum::Idle);
-            let _ = app.emit("state-changed", &AppStateEnum::Idle);
-            let _ = app.emit("transcription-error", serde_json::json!({ "error": format!("WAV write failed: {}", e) }));
+            crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
+            show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
             return;
         }
+    };
+    let capture_error = finished.capture_error;
+    let duration_ms = finished.duration_ms;
+    let Some(temp_path) = finished.audio_path else {
+        log::info!("Recording too short ({} samples)", finished.sample_count);
+        hide_overlay(app);
+        state.set_state(AppStateEnum::Idle);
+        crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
+        return;
+    };
+    log::info!("Captured {} samples at {} Hz ({:.3}s)", finished.sample_count, finished.sample_rate, duration_ms as f64 / 1000.0);
+    if let Some(error) = &capture_error {
+        show_recording_error(app, "recording-error", recording_generation, serde_json::json!({
+            "error": format!("{error}. Only the captured portion was saved; nothing will be pasted."),
+            "audio_path": temp_path.to_string_lossy()
+        }));
     }
 
     // Transcribe
@@ -470,35 +414,29 @@ pub async fn handle_stop_recording(app: &AppHandle) {
 
     // Assign a job ID for stale-result prevention
     let job_id = state.new_job();
+    let vocabulary = state.recording_vocabulary.lock().unwrap_or_else(|error| error.into_inner()).clone();
 
     tokio::spawn(async move {
         let state: tauri::State<'_, AppState> = app_clone.state();
-        let mut engine = state.asr_engine.lock().await;
-
         log::info!("Starting transcription...");
-
-        let result = engine.transcribe_file(&temp_path_str);
-        drop(engine); // Release ASR engine lock
-
-        // Clean up temp file
-        let _ = std::fs::remove_file(&temp_path);
+        let result = crate::asr::engine::with_engine(&state.asr_engine, move |engine| {
+            engine.transcribe_file_with_vocabulary(&temp_path_str, &vocabulary)
+        }).await;
 
         match result {
             Ok(asr_result) => {
-                log::info!("Transcription result: \"{}\" (RTF: {:.1}x)", &asr_result.text, asr_result.rtfx);
+                let mut paste_failed = capture_error.is_some();
+                log::info!("Transcription complete (RTF: {:.1}x)", asr_result.rtfx);
 
                 // Check if this job is still current (user may have started a new recording)
-                if !state.is_current_job(job_id) {
+                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation {
                     log::info!("Job {} is stale, discarding transcription", job_id);
-                    state.set_state(AppStateEnum::Idle);
-                    let _ = app_clone.emit("state-changed", &AppStateEnum::Idle);
-                    hide_overlay(&app_clone);
                     return;
                 }
 
-                let raw_asr_text = asr_result.text.clone();
+                let raw_asr_text = asr_result.unboosted_text.clone().unwrap_or_else(|| asr_result.text.clone());
                 let mut final_text = asr_result.text.clone();
-                let mut llm_was_applied = false;
+                let cleanup_suggestion = None;
                 let cleanup_status: LlmCleanupStatus;
 
                 // LLM cleanup (if enabled).
@@ -507,27 +445,40 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                 let auto_paste = settings.auto_paste;
                 let restore_clipboard = settings.restore_clipboard;
                 let restore_focus_before_paste = settings.restore_focus_before_paste;
+                let dictionary = settings.dictionary.clone();
+                let protected_terms: Vec<String> = settings.vocabulary.iter().cloned()
+                    .chain(dictionary.iter().map(|entry| entry.replacement.clone())).collect();
                 drop(settings);
+
+                if capture_error.is_none() {
+                    final_text = crate::dictionary::apply(&final_text, &dictionary);
+                }
 
                 let show_overlay_setting = {
                     let s = state.settings.lock().await;
                     s.show_overlay
                 };
 
-                if llm_enabled {
+                if llm_enabled && capture_error.is_none() {
                     // Transition overlay to "Cleaning up..." state so the
                     // user sees the pipeline moved on from transcription.
                     state.set_state(AppStateEnum::CleaningUp);
-                    let _ = app_clone.emit("state-changed", &AppStateEnum::CleaningUp);
+                    crate::commands::overlay::publish_state(&app_clone, AppStateEnum::CleaningUp);
 
-                    let (cleaned, status) = run_cleanup(&state, &final_text).await;
+                    let (cleaned, status) = run_cleanup(&state, &final_text, &protected_terms).await;
                     cleanup_status = status;
                     if matches!(cleanup_status, LlmCleanupStatus::Applied { .. }) {
                         final_text = cleaned;
-                        llm_was_applied = true;
                     }
                 } else {
                     cleanup_status = LlmCleanupStatus::Disabled;
+                }
+
+
+                // Check again if this job is still current
+                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation {
+                    log::info!("Job {} is stale after cleanup, discarding", job_id);
+                    return;
                 }
 
                 // Update cached last-status and emit to the UI so the overlay
@@ -548,8 +499,10 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     0
                 } else {
                     match cleanup_status {
-                        LlmCleanupStatus::Applied { .. } => 800,
+                        LlmCleanupStatus::Suggested { .. } | LlmCleanupStatus::Applied { .. } => 800,
                         LlmCleanupStatus::SkippedTooShort
+                        | LlmCleanupStatus::SkippedNoCandidates
+                        | LlmCleanupStatus::NoChanges
                         | LlmCleanupStatus::Disabled
                         | LlmCleanupStatus::Idle => 0,
                         LlmCleanupStatus::Unavailable { .. }
@@ -558,24 +511,17 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     }
                 };
 
-                // Check again if this job is still current
-                if !state.is_current_job(job_id) {
-                    log::info!("Job {} is stale after cleanup, discarding", job_id);
-                    state.set_state(AppStateEnum::Idle);
-                    let _ = app_clone.emit("state-changed", &AppStateEnum::Idle);
-                    hide_overlay(&app_clone);
-                    return;
-                }
-
                 let transcription = crate::models::Transcription {
                     id: uuid::Uuid::new_v4().to_string(),
                     text: final_text.clone(),
-                    duration_ms: (asr_result.duration_secs * 1000.0) as u64,
+                    duration_ms,
                     created_at: chrono::Utc::now(),
                     word_count: final_text.split_whitespace().count(),
                     cancelled: false,
-                    raw_text: if llm_was_applied { Some(raw_asr_text.clone()) } else { None },
-                    llm_applied: llm_was_applied,
+                    capture_error: capture_error.clone(),
+                    raw_text: (final_text != raw_asr_text).then_some(raw_asr_text),
+                    cleanup_suggestion,
+                    llm_applied: matches!(cleanup_status, LlmCleanupStatus::Applied { .. }),
                     llm_cleanup_status: cleanup_status.clone(),
                 };
 
@@ -584,12 +530,18 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                     let mut last = state.last_transcription.lock().await;
                     *last = Some(transcription.clone());
                 }
-                crate::commands::transcription::add_transcription(transcription.clone()).await;
+                let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
+                let history_error = saved.as_ref().err().cloned();
+                if let Some(error) = &history_error {
+                    log::error!("History save failed: {error}");
+                    let _ = app_clone.emit("history-error", error);
+                }
+                crate::audio::wav::finish_after_history(&temp_path, capture_error.is_some(), saved.is_ok());
 
-                let _ = app_clone.emit("transcription-complete", &transcription);
+                crate::commands::transcription::emit_transcription(&app_clone, &transcription, &saved);
 
                 // Paste at cursor (if auto_paste is enabled), then hide overlay
-                if !final_text.trim().is_empty() {
+                if capture_error.is_none() && !final_text.trim().is_empty() {
                     if auto_paste {
                         let target_pid = if restore_focus_before_paste {
                             let start_pid = state.target_pid.load(Ordering::SeqCst);
@@ -607,11 +559,10 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                         } else {
                             0
                         };
-                        let paste_result = if restore_clipboard {
-                            state.paste_backend.paste_text_and_restore(&final_text, target_pid)
-                        } else {
-                            state.paste_backend.paste_text(&final_text, target_pid)
-                        };
+                        let paste_result = crate::paste::backend::write_text(
+                            &state.paste_backend, &final_text,
+                            crate::paste::backend::ClipboardAction::Paste { target_pid, restore: restore_clipboard },
+                        ).await;
 
                         match paste_result {
                             Ok(()) => {
@@ -620,48 +571,72 @@ pub async fn handle_stop_recording(app: &AppHandle) {
                             }
                             Err(e) => {
                                 log::error!("Paste failed: {}", e);
-                                let _ = app_clone.emit("paste-error", serde_json::json!({
-                                    "error": &e,
-                                    "text": &final_text,
-                                    "needs_restart": e.contains("restart"),
-                                    "needs_permission": e.contains("permission not granted"),
-                                }));
-                                let _ = state.paste_backend.copy_to_clipboard(&final_text);
-                                log::info!("Text copied to clipboard as fallback");
+                                paste_failed = true;
+                                let copy = crate::paste::backend::write_text(&state.paste_backend, &final_text, crate::paste::backend::ClipboardAction::Copy).await;
+                                let clipboard_available = copy.is_ok();
+                                let mut error = match copy {
+                                    Ok(()) => { log::info!("Text copied to clipboard as fallback"); e }
+                                    Err(copy_error) => format!("{e}. Clipboard copy also failed: {copy_error}"),
+                                };
+                                if let Some(history_error) = &history_error { error.push_str(&format!(". History also could not be saved: {history_error}")); }
+                                show_recording_error(&app_clone, "paste-error", recording_generation,
+                                    serde_json::json!({ "error": error, "clipboard_available": clipboard_available,
+                                        "audio_path": history_error.as_ref().map(|_| temp_path.to_string_lossy()) }));
                             }
                         }
                     } else {
-                        match state.paste_backend.copy_to_clipboard(&final_text) {
+                        match crate::paste::backend::write_text(&state.paste_backend, &final_text, crate::paste::backend::ClipboardAction::Copy).await {
                             Ok(()) => {
                                 log::info!("Text copied to clipboard (auto_paste disabled)");
                                 let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id, "clipboard_only": true }));
                             }
                             Err(e) => {
                                 log::error!("Clipboard copy failed: {}", e);
-                                let _ = app_clone.emit("paste-error", serde_json::json!({ "error": e }));
+                                paste_failed = true;
+                                let error = history_error.as_ref().map(|history| format!("{e}. History also could not be saved: {history}")).unwrap_or(e);
+                                show_recording_error(&app_clone, "paste-error", recording_generation,
+                                    serde_json::json!({ "error": error, "clipboard_available": false,
+                                        "audio_path": history_error.as_ref().map(|_| temp_path.to_string_lossy()) }));
                             }
                         }
+                    }
+                }
+                // A storage warning must not take focus until paste finishes.
+                if let Some(error) = history_error {
+                    if let Some(interruption) = &capture_error {
+                        show_recording_error(&app_clone, "recording-error", recording_generation,
+                            serde_json::json!({ "error": format!("{interruption}. History also could not be saved: {error}. Audio was retained; nothing was pasted."),
+                                "audio_path": temp_path.to_string_lossy() }));
+                    } else if !paste_failed {
+                        paste_failed = true;
+                        show_recording_error(&app_clone, "history-save-error", recording_generation,
+                            serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
                     }
                 }
                 // Linger briefly so the cleanup-status badge is visible to the
                 // user before the overlay hides. The paste already happened,
                 // so this only delays the hide animation, not the user-visible
                 // text appearing at the cursor.
-                if badge_dwell_ms > 0 {
+                if !paste_failed && badge_dwell_ms > 0 {
                     tokio::time::sleep(std::time::Duration::from_millis(badge_dwell_ms)).await;
                 }
                 // Hide overlay after paste/copy completes
-                hide_overlay(&app_clone);
+                if !paste_failed && state.recording_generation.load(Ordering::SeqCst) == recording_generation {
+                    hide_overlay(&app_clone);
+                }
             }
             Err(e) => {
+                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation { return; }
                 log::error!("Transcription failed: {}", e);
-                let _ = app_clone.emit("transcription-error", serde_json::json!({ "error": e }));
-                hide_overlay(&app_clone);
+                show_recording_error(&app_clone, "transcription-error", recording_generation,
+                    serde_json::json!({ "error": e, "audio_path": temp_path.to_string_lossy() }));
             }
         }
 
-        state.set_state(AppStateEnum::Idle);
-        let _ = app_clone.emit("state-changed", &AppStateEnum::Idle);
+        if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
+            state.set_state(AppStateEnum::Idle);
+            crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
+        }
     });
 
     log::info!("Recording stopped, transcription queued");
@@ -670,110 +645,105 @@ pub async fn handle_stop_recording(app: &AppHandle) {
 /// Cancel recording: stop mic, transcribe what we have, save as cancelled, don't paste.
 pub async fn handle_cancel_recording(app: &AppHandle) {
     let state: tauri::State<'_, AppState> = app.state();
-    let current = state.get_state();
-
-    if current != AppStateEnum::Recording {
-        log::warn!("Cannot cancel recording: currently in {:?} state", current);
+    if !state.try_transition(AppStateEnum::Recording, AppStateEnum::Transcribing) {
+        log::warn!("Cannot cancel recording: currently in {:?} state", state.get_state());
         return;
     }
 
-    // Stop audio capture — drop the stream first so all in-flight callbacks
-    // finish sending their samples before we clear the recording flag.
-    {
-        let mut capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
-        capture.stop();
-    }
-    state.is_recording.store(false, Ordering::SeqCst);
+    let recording_generation = state.recording_generation.load(Ordering::SeqCst);
 
-    // Unregister cancel shortcut so it doesn't block the key globally
     unregister_cancel_shortcut(app);
-
-    // Hide the overlay
     hide_overlay(app);
-
     let _ = app.emit("recording-cancelled", ());
-    let _ = app.emit("state-changed", &AppStateEnum::Idle);
+    crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
 
-    // Collect audio samples
-    let samples = {
-        let rx = state.audio_receiver.lock().unwrap_or_else(|e| e.into_inner());
-        let mut all = Vec::new();
-        while let Ok(chunk) = rx.try_recv() {
-            all.extend(chunk);
-        }
-        all
-    };
-
-    let sample_count = samples.len();
-    log::info!("Recording cancelled — {} samples collected", sample_count);
-
-    // If we have enough audio, transcribe it and save as cancelled
-    if sample_count >= 4000 {
-        let app_clone = app.clone();
-        let temp_path = std::env::temp_dir().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
-
-        let sample_rate = {
-            let capture = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
-            capture.sample_rate()
-        };
-
-        let wav_spec = hound::WavSpec {
-            channels: 1,
-            sample_rate,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        };
-
-        if let Ok(mut writer) = hound::WavWriter::create(&temp_path, wav_spec) {
-            for &sample in &samples {
-                let _ = writer.write_sample(sample);
-            }
-            let _ = writer.finalize();
-
-            let temp_path_str = temp_path.to_string_lossy().to_string();
-            tokio::spawn(async move {
-                let state: tauri::State<'_, AppState> = app_clone.state();
-                let mut engine = state.asr_engine.lock().await;
-                let result = engine.transcribe_file(&temp_path_str);
-                let _ = std::fs::remove_file(&temp_path);
-
-                if let Ok(asr_result) = result {
-                    let transcription = crate::models::Transcription {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        text: asr_result.text.clone(),
-                        duration_ms: (asr_result.duration_secs * 1000.0) as u64,
-                        created_at: chrono::Utc::now(),
-                        word_count: asr_result.text.split_whitespace().count(),
-                        cancelled: true,
-                        raw_text: None,
-                        llm_applied: false,
-                        llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
-                    };
-                    crate::commands::transcription::add_transcription(transcription.clone()).await;
-                    let _ = app_clone.emit("transcription-complete", &transcription);
-                    log::info!("Cancelled transcription saved: \"{}\"", &asr_result.text[..asr_result.text.len().min(50)]);
-                }
-
-                state.set_state(AppStateEnum::Idle);
-            });
-        } else {
+    let finished = match crate::audio::capture::finish_recording_capture(&state).await {
+        Ok(finished) => finished,
+        Err(error) => {
             state.set_state(AppStateEnum::Idle);
+            crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
+            show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
+            return;
         }
+    };
+    let capture_error = finished.capture_error;
+    let duration_ms = finished.duration_ms;
+    log::info!("Recording cancelled — {} samples collected", finished.sample_count);
+    if let Some(temp_path) = finished.audio_path {
+        let app_clone = app.clone();
+        if let Some(error) = &capture_error {
+            show_recording_error(app, "recording-error", recording_generation, serde_json::json!({
+                "error": format!("{error}. Only the captured portion was saved; nothing will be pasted."),
+                "audio_path": temp_path.to_string_lossy()
+            }));
+        }
+        let temp_path_str = temp_path.to_string_lossy().to_string();
+        let vocabulary = state.recording_vocabulary.lock().unwrap_or_else(|error| error.into_inner()).clone();
+        tokio::spawn(async move {
+            let state: tauri::State<'_, AppState> = app_clone.state();
+            let result = crate::asr::engine::with_engine(&state.asr_engine, move |engine| {
+                engine.transcribe_file_with_vocabulary(&temp_path_str, &vocabulary)
+            }).await;
+            if let Err(error) = &result {
+                show_recording_error(&app_clone, "transcription-error", recording_generation,
+                    serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
+            }
+            if let Ok(asr_result) = result {
+                let transcription = crate::models::Transcription {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    text: asr_result.text.clone(),
+                    duration_ms,
+                    created_at: chrono::Utc::now(),
+                    word_count: asr_result.text.split_whitespace().count(),
+                    cancelled: true,
+                    capture_error: capture_error.clone(),
+                    raw_text: asr_result.unboosted_text.clone(),
+                    cleanup_suggestion: None,
+                    llm_applied: false,
+                    llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
+                };
+                let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
+                crate::audio::wav::finish_after_history(&temp_path, capture_error.is_some(), saved.is_ok());
+                if let Err(error) = &saved {
+                    log::error!("History save failed: {error}");
+                    let _ = app_clone.emit("history-error", &error);
+                    show_recording_error(&app_clone, "history-save-error", recording_generation,
+                        serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
+                }
+                crate::commands::transcription::emit_transcription(&app_clone, &transcription, &saved);
+                log::info!("Cancelled transcription saved");
+            }
+
+            if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
+                state.set_state(AppStateEnum::Idle);
+                crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
+            }
+        });
     } else {
         // Too short to transcribe — just save a placeholder
         let transcription = crate::models::Transcription {
             id: uuid::Uuid::new_v4().to_string(),
             text: String::new(),
-            duration_ms: (sample_count as u64 * 1000) / 48000,
+            duration_ms,
             created_at: chrono::Utc::now(),
             word_count: 0,
             cancelled: true,
+            capture_error: None,
             raw_text: None,
+            cleanup_suggestion: None,
             llm_applied: false,
             llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
         };
-        crate::commands::transcription::add_transcription(transcription).await;
+        let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
+        crate::commands::transcription::emit_transcription(app, &transcription, &saved);
+        if let Err(error) = &saved {
+            log::error!("History save failed: {error}");
+            let _ = app.emit("history-error", &error);
+            show_recording_error(app, "history-save-error", recording_generation,
+                serde_json::json!({ "error": error }));
+        }
         state.set_state(AppStateEnum::Idle);
+        crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
     }
 
     log::info!("Recording cancelled");
@@ -874,8 +844,29 @@ pub fn precreate_overlay(app: &AppHandle) {
 /// Defect C. If the panel is already visible (second and later
 /// recordings) we `orderOut:` it first, so the transport is invisible.
 fn show_overlay(app: &AppHandle) {
+    let show = app.state::<AppState>().settings.try_lock().map(|settings| settings.show_overlay).unwrap_or(false);
+    if show { show_overlay_panel(app, false); } else { hide_overlay(app); }
+}
+
+fn show_recording_error(app: &AppHandle, event: &str, generation: u64, payload: serde_json::Value) {
+    if crate::commands::overlay::publish_error(app, event, generation, payload) {
+        show_error_overlay(app);
+    }
+}
+
+/// Failures must remain accessible even when the normal recording pill is disabled.
+pub fn show_error_overlay(app: &AppHandle) {
+    show_overlay_panel(app, true);
+}
+
+fn show_overlay_panel(app: &AppHandle, interactive: bool) {
+    let generation = app.state::<AppState>().recording_generation.load(Ordering::SeqCst);
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
+        let state = app.state::<AppState>();
+        if state.recording_generation.load(Ordering::SeqCst) != generation { return; }
+        if interactive && state.overlay_snapshot.lock().unwrap_or_else(|error| error.into_inner()).error.is_none() { return; }
+        OVERLAY_ACCEPTS_KEY.store(interactive, Ordering::SeqCst);
         // Determine which screen to show the overlay on.
         // Uses the focused app's window first, then mouse cursor, then primary.
         let state = app.state::<AppState>();
@@ -884,6 +875,7 @@ fn show_overlay(app: &AppHandle) {
 
         // Try to show an existing panel first
         if let Ok(panel) = app.get_webview_panel("overlay") {
+            if !interactive { panel.resign_key_window(); }
             // 1. Hide first if currently visible so that setFrameOrigin
             //    does not have to perform a cross-display transport on a
             //    visible window.
@@ -913,6 +905,7 @@ fn show_overlay(app: &AppHandle) {
             panel.set_level(PanelLevel::Floating.into());
             panel.set_floating_panel(true);
             panel.order_front_regardless();
+            if interactive { panel.make_key_window(); }
 
             // 5. Verify the panel actually landed on the target screen;
             //    re-apply once if the window server moved it.
@@ -934,6 +927,7 @@ fn show_overlay(app: &AppHandle) {
         // conversion failed in the past and we have a plain window instead).
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.show();
+            if interactive { let _ = window.set_focus(); }
             // Best-effort positioning via Tauri for non-panel fallback
             log::info!("Overlay shown (existing window fallback)");
             return;
@@ -987,6 +981,7 @@ fn show_overlay(app: &AppHandle) {
                 }
 
                 panel.show();
+                if interactive { panel.make_key_window(); }
 
                 // Verify post-show placement.
                 if let Some(ref screen) = target_screen {
@@ -1004,6 +999,7 @@ fn show_overlay(app: &AppHandle) {
             Err(e) => {
                 log::error!("Failed to convert overlay to panel: {}, showing as window", e);
                 let _ = window.show();
+                if interactive { let _ = window.set_focus(); }
             }
         }
     });
@@ -1018,16 +1014,18 @@ fn show_overlay(app: &AppHandle) {
 /// the next show and the stored absolute coordinate would then correspond
 /// to the wrong visual spot on the display it was keyed against.
 /// See docs/specs/2026-04-11-overlay-positioning-multi-monitor-fix.md §5.7.
-fn hide_overlay(app: &AppHandle) {
+pub(crate) fn hide_overlay(app: &AppHandle) {
+    hide_overlay_if_revision(app, None);
+}
+
+pub(crate) fn hide_overlay_if_revision(app: &AppHandle, revision: Option<u64>) {
+    let generation = app.state::<AppState>().recording_generation.load(Ordering::SeqCst);
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
-        // Reset overlay state (timer, waveform, isRecording) so the next
-        // recording starts fresh with a false→true transition.
-        if let Some(window) = app.get_webview_window("overlay") {
-            let _ = window.eval("window.__resetOverlay && window.__resetOverlay()");
-        }
-
+        if !crate::commands::overlay::clear_overlay(&app, generation, revision) { return; }
+        OVERLAY_ACCEPTS_KEY.store(false, Ordering::SeqCst);
         if let Ok(panel) = app.get_webview_panel("overlay") {
+            panel.resign_key_window();
             let panel_ref = panel.as_panel();
             let frame: tauri_nspanel::objc2_foundation::NSRect = unsafe {
                 tauri_nspanel::objc2::msg_send![panel_ref, frame]

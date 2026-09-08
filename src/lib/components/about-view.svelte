@@ -18,9 +18,9 @@
       ],
     },
     {
-      title: 'AI Transcript Cleanup',
+      title: 'Experimental AI Suggestions',
       items: [
-        { name: 'SottoASR Cleanup (LFM2.5-350M)', desc: 'Fine-tuned transcript cleanup model based on LiquidAI LFM2.5', license: 'LFM-1.0' },
+        { name: 'OpenBMB MiniCPM5-2B', desc: 'Local transcript cleanup with MLX (4-bit)', license: 'Apache-2.0' },
         { name: 'Apple MLX', desc: 'Metal-native ML framework', license: 'MIT' },
         { name: 'mlx-lm', desc: 'MLX language model inference', license: 'MIT' },
         { name: 'huggingface_hub', desc: 'Model download and caching', license: 'Apache-2.0' },
@@ -78,9 +78,8 @@
   <div class="footer">
     <p>SottoASR is open source under the <strong>MIT License</strong></p>
     <p class="footer-note">
-      All 660+ dependencies use permissive or weak-copyleft licenses
-      (MIT, Apache-2.0, BSD, MPL-2.0, Unicode-3.0, ISC, Zlib, CC-BY-4.0).
-      See THIRD_PARTY_LICENSES for the full list.
+      Dependencies and models have their own licenses, listed above.
+      See THIRD_PARTY_LICENSES for dependency license details.
     </p>
     <p class="footer-copy">&copy; 2026 Juan Villa</p>
   </div>

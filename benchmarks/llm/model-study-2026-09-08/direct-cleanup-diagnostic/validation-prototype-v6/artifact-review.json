@@ -1,0 +1,26 @@
+{
+  "reviewed_at_utc": "2026-09-08T14:18:26.696771+00:00",
+  "prior_frozen_manifests": {
+    "validation-prototype": {
+      "files": 16,
+      "mismatches": []
+    },
+    "validation-prototype-v3": {
+      "files": 19,
+      "mismatches": []
+    },
+    "validation-prototype-v4": {
+      "files": 17,
+      "mismatches": []
+    },
+    "validation-prototype-v5": {
+      "files": 18,
+      "mismatches": []
+    }
+  },
+  "complete_cleanup_regressions": [],
+  "new_harms": [],
+  "policy_hash_matches_freeze": true,
+  "source_hash_matches_freeze": true,
+  "qualification2_contents_opened": false
+}

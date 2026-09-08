@@ -1,0 +1,135 @@
+[
+  {
+    "label": "liquid350",
+    "repo": "LiquidAI/LFM2.5-350M-MLX-4bit",
+    "revision": "f6cb4e006bb7a2d8a6afa14ec0a53e0586f65a5b",
+    "size_bytes": 226574917
+  },
+  {
+    "label": "qwen800",
+    "repo": "mlx-community/Qwen3.5-0.8B-4bit",
+    "revision": "da28692b5f139cb0ec58a356b437486b7dac7462",
+    "size_bytes": 652029391
+  },
+  {
+    "label": "minicpm1000",
+    "repo": "openbmb/MiniCPM5-1B-MLX",
+    "download_elapsed_s": 118.60621862503467,
+    "revision": "9879b18bf2928355fcdf4287635388a3665a40cb",
+    "size_bytes": 617994322
+  },
+  {
+    "label": "minicpm2000",
+    "repo": "openbmb/MiniCPM5-2B-MLX",
+    "download_elapsed_s": 23.878413625003304,
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "size_bytes": 1426119249,
+    "equivalent_publisher_revision": {
+      "revision": "014e7591ff4b1b6330cda7f45803b27f46288261",
+      "evidence": "Root verified identical weight SHA256 and config/template/tokenizer/generation/index Git blob IDs via public Hub API on2026-09-08; cached revision remains the measured artifact.",
+      "weight_sha256": "c207798696a4a454e7ac211b25227625466c693335941cee8904fb922f295cc1"
+    }
+  },
+  {
+    "label": "qwen4000",
+    "repo": "mlx-community/Qwen3.5-4B-4bit",
+    "download_elapsed_s": 41.421212333021685,
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+    "size_bytes": 3061129077
+  },
+  {
+    "label": "granite4200",
+    "repo": "ibm-granite/granite-4.2-3b-q4-mlx",
+    "revision": "0c6f39b1827afd5eb2c1c3b13751929857434953",
+    "download_elapsed_s": 31.088562250020914,
+    "size_bytes": 2066181467,
+    "parameters_from_dense_config": 3659737600
+  },
+  {
+    "label": "pollard_mixed",
+    "repo": "PollardWeights/MiniCPM5-2B-Pollard-MLX",
+    "revision": "e07a8344ac3543dcf354cdb9792ce7b58ad1ad98",
+    "size_bytes": 2047356102,
+    "source_model_card": "https://huggingface.co/PollardWeights/MiniCPM5-2B-Pollard-MLX/tree/e07a8344ac3543dcf354cdb9792ce7b58ad1ad98",
+    "downloaded_files": [
+      "README.md",
+      "chat_template.jinja",
+      "config.json",
+      "generation_config.json",
+      "model.safetensors",
+      "model.safetensors.index.json",
+      "tokenizer.json",
+      "tokenizer_config.json"
+    ],
+    "architecture": "LlamaForCausalLM",
+    "license": "Apache-2.0 declared by model card and upstream MiniCPM5-2B",
+    "quantization": "Recommended root affine group64 mixed 4/8-bit; 107 8-bit modules, 189 4-bit modules; not the q4 subdirectory",
+    "training": "Quantization of stock openbmb/MiniCPM5-2B; no new cleanup fine-tuning claimed",
+    "reasoning": "Native template supports enable_thinking=False",
+    "weight_bytes": 2037317211
+  },
+  {
+    "label": "liquid2600",
+    "repo": "LiquidAI/LFM2.5-2.6B-MLX-4bit",
+    "revision": "04efa23776ce61ec34ec95ec34c859854c89542b",
+    "size_bytes": 1601122062,
+    "source_model_card": "https://huggingface.co/LiquidAI/LFM2.5-2.6B-MLX-4bit/tree/04efa23776ce61ec34ec95ec34c859854c89542b",
+    "downloaded_files": [
+      "LICENSE",
+      "README.md",
+      "chat_template.jinja",
+      "config.json",
+      "generation_config.json",
+      "model.safetensors",
+      "model.safetensors.index.json",
+      "tokenizer.json",
+      "tokenizer_config.json"
+    ],
+    "architecture": "Lfm2ForCausalLM",
+    "license": "LFM Open License 1.0; commercial revenue threshold applies",
+    "quantization": "Affine 4-bit group64, 6-bit embeddings",
+    "reasoning": "Always-thinking native template; enable_thinking=False is ignored. Require completed final answer after native closing delimiter.",
+    "weight_bytes": 1583152892
+  },
+  {
+    "label": "spark4000",
+    "repo": "abenzerps/Spark-X2.5-4B-MLX-4bit",
+    "revision": "b23819d4d60c2767fbf6ee3b3527f5f33205be7e",
+    "size_bytes": 2323583619,
+    "source_model_card": "https://huggingface.co/abenzerps/Spark-X2.5-4B-MLX-4bit/tree/b23819d4d60c2767fbf6ee3b3527f5f33205be7e",
+    "downloaded_files": [
+      "README.md",
+      "SPARK_MLX_LLM_LICENSE",
+      "chat_template.jinja",
+      "config.json",
+      "generation_config.json",
+      "model.safetensors",
+      "model.safetensors.index.json",
+      "tokenizer.json",
+      "tokenizer_config.json"
+    ],
+    "architecture": "Spark2_5ForCausalLM / model_type spark2_5",
+    "license": "Apache-2.0",
+    "quantization": "Affine 4-bit group64; actual adapter preserves attention gate projections in BF16",
+    "reasoning": "Native template supports enable_thinking=False",
+    "weight_bytes": 2313395808,
+    "runtime_adapter": {
+      "repo": "https://github.com/XHToken/Spark-MLX-LLM",
+      "revision": "de2b4379fa1e2f2e1f99d84c83f0e008f651d86c",
+      "registration": "spark_mlx_llm.registration.register_model(); process-local only",
+      "requires": "mlx-lm>=0.31.3,<0.32",
+      "caveat": "Architecture absent from checked vanilla mlx-lm; do not substitute Llama model_type."
+    }
+  },
+  {
+    "label": "liquid1200",
+    "repo": "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
+    "revision": "7ccafdb04c36936f4f1c4685198c6c9a40275932",
+    "size_bytes": 663395472,
+    "source_model_card": "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit/tree/7ccafdb04c36936f4f1c4685198c6c9a40275932",
+    "architecture": "Lfm2ForCausalLM",
+    "license": "LFM Open License 1.0; commercial revenue threshold applies",
+    "quantization": "Official 4-bit MLX artifact",
+    "reasoning": "Separate Instruct checkpoint; non-thinking family control"
+  }
+]

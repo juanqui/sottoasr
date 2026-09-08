@@ -2,21 +2,23 @@
   import { onDestroy } from 'svelte';
   import { diffWords } from 'diff';
   import { formatRelativeTime, formatDuration, truncateText } from '../utils/format';
+  import CleanupSuggestion from './cleanup-suggestion.svelte';
   import type { Transcription } from '../utils/tauri';
 
   interface Props {
     item: Transcription;
+    expanded?: boolean;
+    viewMode?: 'cleaned' | 'raw' | 'diff';
+    onviewchange?: (state: { expanded: boolean; viewMode: 'cleaned' | 'raw' | 'diff' }) => void;
     ondelete: (id: string) => void;
-    oncopy: (text: string) => void;
+    oncopy: (text: string) => void | Promise<void>;
   }
 
-  let { item, ondelete, oncopy }: Props = $props();
+  let { item, ondelete, oncopy, expanded = false, viewMode = 'cleaned', onviewchange }: Props = $props();
 
   type ViewMode = 'cleaned' | 'raw' | 'diff';
 
-  let expanded: boolean = $state(false);
   let copyFeedback: boolean = $state(false);
-  let viewMode = $state<ViewMode>('cleaned');
 
   let relativeTime = $derived(formatRelativeTime(item.created_at));
   let durationText = $derived(formatDuration(item.duration_ms));
@@ -24,15 +26,18 @@
   let displayText = $derived(
     viewMode === 'raw' && item.raw_text ? item.raw_text : item.text
   );
-  let previewText = $derived(truncateText(displayText, 120));
+  let previewText = $derived(truncateText(item.text, 120));
 
   // Compute word-level diff parts using the `diff` library
   let diffParts = $derived.by(() => {
-    if (!item.raw_text || !item.llm_applied) return [];
+    if (!item.raw_text) return [];
     return diffWords(item.raw_text, item.text);
   });
 
   let hasLlm = $derived(item.llm_applied && !!item.raw_text);
+  let hasEdits = $derived(!!item.raw_text);
+  let suggestion = $derived(!item.cancelled && !item.capture_error && item.cleanup_suggestion?.trim()
+    && item.cleanup_suggestion !== item.text ? item.cleanup_suggestion : null);
 
   // Cleanup-status hint for non-Applied outcomes. We only show a small icon
   // for failure modes (Failed/Unavailable/TimedOut) — not for Applied (the
@@ -57,8 +62,18 @@
         return null;
     }
   });
+  let cleanupExplanation = $derived.by(() => {
+    switch (item.llm_cleanup_status?.kind) {
+      case 'skipped_no_candidates': return 'AI suggestions did not run: no edits qualified, or the transcript exceeded cleanup limits.';
+      case 'no_changes': return 'Cleanup made no changes.';
+      default: return null;
+    }
+  });
 
+  let disposed = false;
   let copyTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  function notifyView() { onviewchange?.({ expanded, viewMode }); }
 
   function setView(mode: ViewMode) {
     if (viewMode === mode) {
@@ -66,14 +81,17 @@
     } else {
       viewMode = mode;
     }
+    notifyView();
   }
 
   function toggleExpand() {
     expanded = !expanded;
+    notifyView();
   }
 
-  function handleCopy() {
-    oncopy(displayText);
+  async function handleCopy() {
+    try { await oncopy(item.text); } catch { return; }
+    if (disposed) return;
     copyFeedback = true;
     // Clear any existing timeout to avoid stale callbacks
     if (copyTimeoutId) clearTimeout(copyTimeoutId);
@@ -89,6 +107,7 @@
 
   // Clean up timeout on component destroy to prevent memory leaks
   onDestroy(() => {
+    disposed = true;
     if (copyTimeoutId) {
       clearTimeout(copyTimeoutId);
       copyTimeoutId = null;
@@ -99,20 +118,27 @@
 <div class="history-item" class:expanded>
   <!-- Main text area -->
   <button class="item-body" onclick={toggleExpand} type="button" aria-expanded={expanded}>
-    {#if item.cancelled}
+    {#if item.capture_error}
+      <span class="interrupted-badge">Interrupted</span>
+      <p class="capture-error">{item.capture_error}</p>
+    {:else if item.cancelled}
       <span class="cancelled-badge">Cancelled</span>
     {:else if hasLlm}
       <span class="llm-badge">AI Cleaned</span>
-    {:else if cleanupHint}
+    {:else if hasEdits}
+      <span class="llm-badge">Dictionary applied</span>
+    {/if}
+    {#if suggestion}<span class="suggestion-badge">Suggestion to review</span>{/if}
+    {#if cleanupHint && !item.cancelled}
       <span class="cleanup-fail-badge" title={cleanupHint.tooltip}>
         <span class="cleanup-fail-icon">{cleanupHint.emoji}</span>
-        Raw transcript
+        AI cleanup skipped
       </span>
     {/if}
 
     {#if !item.text && item.cancelled}
       <p class="text-preview empty">No transcription (recording was cancelled)</p>
-    {:else if viewMode === 'diff' && expanded && hasLlm}
+    {:else if viewMode === 'diff' && expanded && hasEdits}
       <div class="diff-inline">
         {#each diffParts as part}
           {#if part.added}
@@ -140,7 +166,7 @@
     <span class="words">{item.word_count} {item.word_count === 1 ? 'word' : 'words'}</span>
 
     <div class="actions">
-      {#if hasLlm}
+      {#if hasEdits}
         <button
           class="action-btn"
           class:active={viewMode === 'raw'}
@@ -159,7 +185,7 @@
         class:copied={copyFeedback}
         onclick={handleCopy}
         type="button"
-      >{copyFeedback ? 'Copied' : 'Copy'}</button>
+      >{copyFeedback ? 'Copied' : viewMode !== 'cleaned' || (expanded && suggestion) ? 'Copy transcript' : 'Copy'}</button>
       <button
         class="action-btn delete"
         onclick={handleDelete}
@@ -169,15 +195,24 @@
   </div>
 
   <!-- Diff legend (only when diff view active) -->
-  {#if viewMode === 'diff' && expanded && hasLlm}
+  {#if viewMode === 'diff' && expanded && hasEdits}
     <div class="diff-legend">
       <span class="legend-item"><span class="legend-swatch removed"></span> Removed</span>
       <span class="legend-item"><span class="legend-swatch added"></span> Added</span>
     </div>
   {/if}
+  {#if expanded && suggestion}
+    <CleanupSuggestion text={item.text} {suggestion} {oncopy} />
+  {:else if expanded && cleanupExplanation && !item.cancelled && !item.capture_error}
+    <p class="cleanup-explanation">{cleanupExplanation}</p>
+  {/if}
 </div>
 
 <style>
+  .interrupted-badge { display:inline-block; margin-bottom:6px; font-size:10px; font-weight:600; color:#fcd34d; }
+  .capture-error { margin:0 0 8px; font-size:12px; line-height:1.5; color:#fcd34d; overflow-wrap:anywhere; }
+  .suggestion-badge { display:inline-block; margin:0 4px 6px; color:#fcd34d; font-size:10px; font-weight:600; }
+  .cleanup-explanation { margin:0; padding:0 16px 12px; color:var(--text-dim); font-size:11px; line-height:1.5; }
   .history-item {
     background: var(--card-bg);
     border: 1px solid var(--border);

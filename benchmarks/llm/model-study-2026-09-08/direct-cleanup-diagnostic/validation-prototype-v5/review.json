@@ -1,0 +1,17 @@
+{
+  "reconstruction_checks": 567,
+  "profiles": 9,
+  "v4_to_v5_changed_outputs": [],
+  "remaining_detected_loss_ids": {
+    "minicpm2000-common": [],
+    "pollard_mixed-common": [],
+    "spark4000-common": [],
+    "spark4000-best-dev": [],
+    "qwen4000-common": [],
+    "qwen4000-best-dev": [],
+    "minicpm2000-D1": [],
+    "minicpm2000-D3": [],
+    "minicpm2000-D4": []
+  },
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b"
+}

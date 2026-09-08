@@ -1,0 +1,26 @@
+[
+  {
+    "raw": "I I bought the the wrong charger, um, this morning.",
+    "expected": "I bought the wrong charger, this morning.",
+    "id": "dev_01",
+    "category": "development"
+  },
+  {
+    "raw": "The token um, should remain because it is the literal name of this field.",
+    "expected": "The token um, should remain because it is the literal name of this field.",
+    "id": "dev_02",
+    "category": "development"
+  },
+  {
+    "raw": "Há um, e apenas um, sensor conectado ao computador.",
+    "expected": "Há um, e apenas um, sensor conectado ao computador.",
+    "id": "dev_04",
+    "category": "development"
+  },
+  {
+    "raw": "Repeat the words and and as a literal sequence.",
+    "expected": "Repeat the words and and as a literal sequence.",
+    "id": "dev_06",
+    "category": "development"
+  }
+]

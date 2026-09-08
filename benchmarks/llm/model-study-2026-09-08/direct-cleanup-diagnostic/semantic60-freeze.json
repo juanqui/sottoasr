@@ -1,0 +1,103 @@
+{
+  "date": "2026-09-08",
+  "phase": "Frozen before experimenter accesses independent semantic60",
+  "semantic60_sha256": "cdbd7ca536f2eda6ead7f0a6ac2c5e70a8e8dc73ce32f5a6a0f6f1a06e1fab3e",
+  "files": {
+    "run_direct.py": "743c9bbe6d6a1afe45d27351cc356c9d8f18fae0692d329a22b270e42b974738",
+    "prompt-envelope.json": "4a3457cff99674edc2b3ec8702f12641721c2584268d30f3ce4319c187da0a69",
+    "prompt.json": "bf5247024f5b7b886180da66773123957b01c2105dfc0293cb92a67f326a999a",
+    "reported-only.json": "1e7f2f1b976b41b7740d5f42558e82b9273f879a8d493bb17366e55bd0b99186"
+  },
+  "common_prompt": "prompt-envelope.json",
+  "common_mode": "few_shot",
+  "secondary_profile": {
+    "label": "spark4000-best-dev",
+    "model": "spark4000",
+    "prompt": "prompt.json",
+    "mode": "few_shot",
+    "selection_reason": "Original few-shot7/8 exact vs envelope5/8 exact in known development8, before semantic60 reveal"
+  },
+  "runtime": {
+    "python": "3.14.5",
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.3.0",
+    "huggingface-hub": "1.7.2",
+    "psutil": "7.2.2",
+    "spark_adapter_revision": "de2b4379fa1e2f2e1f99d84c83f0e008f651d86c"
+  },
+  "generation": {
+    "temperature": 0.0,
+    "enable_thinking": false,
+    "max_tokens": "min(8192,max(128,2*input_tokens+32))",
+    "per_request_deadline_s": 10,
+    "outer_per_model_deadline_s": 660,
+    "metal_guideline_bytes": 4294967296,
+    "mlx_cache_bytes": 134217728,
+    "warmup": "Known reported-only.json before each model; excluded fresh quality and main latency",
+    "completion_gate": "error is None and finish_reason == stop; all incomplete reported separately",
+    "transcript_editing": "Direct full text; no candidate IDs, no output-policy rejection applied to raw results"
+  },
+  "models": [
+    {
+      "label": "liquid350",
+      "repo": "LiquidAI/LFM2.5-350M-MLX-4bit",
+      "revision": "f6cb4e006bb7a2d8a6afa14ec0a53e0586f65a5b",
+      "local_path": "/tmp/experiments/sotto-cleanup/lfm25-350m-4bit",
+      "config_sha256": "9a8d76fffac255e7aeba7f154fd493e5b42c55b8bf150cc3478484adec6a98ed",
+      "model_type": "lfm2",
+      "declared_max_position_embeddings": 128000
+    },
+    {
+      "label": "liquid1200",
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
+      "revision": "7ccafdb04c36936f4f1c4685198c6c9a40275932",
+      "local_path": "/tmp/experiments/sotto-cleanup-overnight/models/liquid1200",
+      "config_sha256": "3201758c1b68e92a8102583626b0d76f70ff4c6fc2e2b99d32e96cdbe6788cea",
+      "model_type": "lfm2",
+      "declared_max_position_embeddings": 128000
+    },
+    {
+      "label": "minicpm2000",
+      "repo": "openbmb/MiniCPM5-2B-MLX",
+      "revision": "32f8dd5df1188512a20413f1297083238306634c",
+      "local_path": "/tmp/experiments/sotto-cleanup-overnight/models/minicpm2000",
+      "config_sha256": "deb9ca33e863cbc84a9ab7209cd924fc05505dc33270c807d47f1b78fbd53a50",
+      "model_type": "llama",
+      "declared_max_position_embeddings": 131072
+    },
+    {
+      "label": "pollard_mixed",
+      "repo": "PollardWeights/MiniCPM5-2B-Pollard-MLX",
+      "revision": "e07a8344ac3543dcf354cdb9792ce7b58ad1ad98",
+      "local_path": "/tmp/experiments/sotto-direct-cleanup/models/pollard_mixed",
+      "config_sha256": "46ea7bdbd76bf69a0f86231bc915b65785df983d3b9a1fe5ee7ba99a1d4b1c5f",
+      "model_type": "llama",
+      "declared_max_position_embeddings": 131072
+    },
+    {
+      "label": "qwen4000",
+      "repo": "mlx-community/Qwen3.5-4B-4bit",
+      "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+      "local_path": "/tmp/experiments/sotto-cleanup-overnight/models/qwen4000",
+      "config_sha256": "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa",
+      "model_type": "qwen3_5",
+      "declared_max_position_embeddings": 262144
+    },
+    {
+      "label": "spark4000",
+      "repo": "abenzerps/Spark-X2.5-4B-MLX-4bit",
+      "revision": "b23819d4d60c2767fbf6ee3b3527f5f33205be7e",
+      "local_path": "/tmp/experiments/sotto-direct-cleanup/models/spark4000",
+      "config_sha256": "80bb5d12005645b44f1dfc5d8ec4fcc7813ba9503e2ce4346ae0863b6ec1b7f1",
+      "model_type": "spark2_5",
+      "declared_max_position_embeddings": 1048576
+    }
+  ],
+  "excluded_models": {
+    "liquid2600": "Native envelope sample37.94s,1808 estimated reasoning tokens, final drops those; fails same10s deployment target. Separate30s-cap four-case pilot and90s/4096-token adequate sample archived; no fabricated60-case score.",
+    "minicpm1000": "Envelope development5/8 lexical exact,2 required-word-loss cases and sample paraphrase.",
+    "qwen800": "Envelope development6/8 lexical exact,1 required-word-loss and1 addition, sample leaves uh."
+  },
+  "scoring": "Exact text and lexical subsequence diagnostics; protected companion byte-string checks and manual diff adjudication separately. No incomplete request counted as success or semantic harm. No tuning after reveal."
+}

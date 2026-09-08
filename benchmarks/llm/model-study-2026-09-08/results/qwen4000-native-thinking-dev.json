@@ -1,0 +1,236 @@
+{
+  "summary": {
+    "dataset_sha256": "cdec7f40c22d105f2d7f28cf150b3c417a46112ec2bb90fb800388eaec27c7ce",
+    "classifier_config_sha256": "701414d38b4c72806279c7aa0cefd80ba13cf4370c86e628061a4d80fb584b6f",
+    "guard_sha256": "4450a44c7864f8460d14beb0ceb3df2b70731ff14dd3aebfbbba28cda14451d4",
+    "runtime": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    },
+    "model": "mlx-community/Qwen3.5-4B-4bit",
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+    "deadline_seconds": 10,
+    "all": {
+      "cases": 8,
+      "exact": 4,
+      "needed_cases": 4,
+      "needed_exact": 0,
+      "safe_useful_edits": 0,
+      "preserve_cases": 4,
+      "preserve_unchanged": 4,
+      "harmful_cases": 0,
+      "fallbacks": 7,
+      "deadline_fallbacks": 7,
+      "median_s": 10.086128333001398,
+      "max_s": 10.090819208009634
+    },
+    "eligible": {
+      "cases": 7,
+      "exact": 3,
+      "needed_cases": 4,
+      "needed_exact": 0,
+      "safe_useful_edits": 0,
+      "preserve_cases": 3,
+      "preserve_unchanged": 3,
+      "harmful_cases": 0,
+      "fallbacks": 7,
+      "deadline_fallbacks": 7,
+      "median_s": 10.086128333001398,
+      "max_s": 10.090819208009634
+    }
+  },
+  "loads": [
+    {
+      "process_to_loaded_s": 2.8844185410416685,
+      "ok": true,
+      "elapsed_s": 2.80499937501736,
+      "cpu_s": 1.9491580000000002,
+      "memory": {
+        "rss_bytes": 545439744,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.7007176659535617,
+      "ok": true,
+      "elapsed_s": 1.625547582982108,
+      "cpu_s": 1.879985,
+      "memory": {
+        "rss_bytes": 2924789760,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.6803627499612048,
+      "ok": true,
+      "elapsed_s": 1.6059688749955967,
+      "cpu_s": 1.879333,
+      "memory": {
+        "rss_bytes": 2930409472,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.9120886250166222,
+      "ok": true,
+      "elapsed_s": 1.831508125003893,
+      "cpu_s": 1.928849,
+      "memory": {
+        "rss_bytes": 2921889792,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.8855368330259807,
+      "ok": true,
+      "elapsed_s": 1.808362332987599,
+      "cpu_s": 1.9070200000000002,
+      "memory": {
+        "rss_bytes": 2928050176,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.6442327920231037,
+      "ok": true,
+      "elapsed_s": 1.5637386250309646,
+      "cpu_s": 1.915514,
+      "memory": {
+        "rss_bytes": 2933063680,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    },
+    {
+      "process_to_loaded_s": 1.734425749978982,
+      "ok": true,
+      "elapsed_s": 1.6512537500238977,
+      "cpu_s": 1.8967889999999998,
+      "memory": {
+        "rss_bytes": 2953822208,
+        "metal_active_bytes": 2367528456,
+        "metal_cache_bytes": 0,
+        "metal_peak_bytes": 2367528456
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "I I bought the the wrong charger, um, this morning.",
+      "exact": false,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.024843040970154,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "The token um, should remain because it is the literal name of this field.",
+      "exact": true,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.086305832955986,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "Please uh, type a a into the box without removing either letter.",
+      "exact": false,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.08211850002408,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "Há um, e apenas um, sensor conectado ao computador.",
+      "exact": true,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.090819208009634,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "We uh, need to to check the same result again.",
+      "exact": false,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.075014166999608,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "Repeat the words and and as a literal sequence.",
+      "exact": true,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.086953292018734,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "eligible": false,
+      "selected_ids": [],
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "exact": true,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 4.169996827840805e-07,
+      "error": null,
+      "worker_response": null
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "I I wrote the word erm, in the glossary yesterday.",
+      "exact": false,
+      "changed": false,
+      "harmful": false,
+      "elapsed_s": 10.086128333001398,
+      "error": "TimeoutError: Resident classifier exceeded 10s; process killed",
+      "worker_response": null
+    }
+  ]
+}

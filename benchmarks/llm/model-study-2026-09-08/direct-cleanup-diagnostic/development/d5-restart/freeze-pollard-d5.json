@@ -1,0 +1,19 @@
+{
+  "created_utc": "2026-09-08T14:06:43.059645+00:00",
+  "status": "Frozen model-only capacity control; development",
+  "prompt_sha256": "fdeea4cdc58059b8bdaf7e1ad58f1ac3ce4269755dbaa21e71cac54026374054",
+  "pilot_sha256": "7fe75d5b27340c57d71ce329cabb868ca2a97417e3332ff9c53446b2d8067f9c",
+  "driver_sha256": "df41af0e800968eb1de334b7d5d2b87da716639f215fe013ea15f179889415cd",
+  "only_driver_adaptation": "Read actual model context from top-level or native text_config; identical native special-token admission/generation and scoring.",
+  "model": {
+    "repo": "PollardWeights/MiniCPM5-2B-Pollard-MLX",
+    "revision": "e07a8344ac3543dcf354cdb9792ce7b58ad1ad98",
+    "local_path": "/tmp/experiments/sotto-direct-cleanup/models/pollard_mixed",
+    "model_type": "llama",
+    "max_position_embeddings": 131072,
+    "quantization": "Publisher recommended root mixed4/8bit weights, not q4 subfolder"
+  },
+  "reference_model": "Official MiniCPM5-2B D5 archived results-d5.json",
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "decoding": "Native enable_thinking=False,temp0,10s,4GiB128MiB,budget min(8192,max(128,2*input_tokens+32)); no static prompt cache"
+}

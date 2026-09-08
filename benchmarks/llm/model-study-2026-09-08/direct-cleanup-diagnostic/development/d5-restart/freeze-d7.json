@@ -1,0 +1,15 @@
+{
+  "created_utc": "2026-09-08T14:11:07.046611+00:00",
+  "status": "Frozen D7 development before inference",
+  "single_change": "Add one mixed hesitation/literal inline example to D5; D6 abstract rule is absent",
+  "example": {
+    "raw": "Um, set the field named um to zero.",
+    "cleaned": "Set the field named um to zero."
+  },
+  "prompt_sha256": "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f",
+  "predecessor_prompt_sha256": "fdeea4cdc58059b8bdaf7e1ad58f1ac3ce4269755dbaa21e71cac54026374054",
+  "pilot_sha256": "7fe75d5b27340c57d71ce329cabb868ca2a97417e3332ff9c53446b2d8067f9c",
+  "model": "Official stock MiniCPM5-2B-MLX32f8dd5; unchanged native D5 runtime/profile",
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "baseline_results_sha256": "4ce2e4ef0b275b3f9f273e93a9c3a9378e7f489ce85e397c0b5cf7c13447f286"
+}

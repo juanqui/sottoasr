@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "frozen_at_utc": "2026-09-08T13:04:03.503029+00:00",
+  "validator_sha256": "4a7becf860f7062afd2831be8db3886ebb8830865158d4290aaedc5d2faa42a1",
+  "provenance": "Validator frozen after old9 development and authored structural/contextual counterexamples; semantic60 labels and outputs had not been opened by validator author before this manifest. No release250 or restart12 data viewed.",
+  "scope": "Exploratory post-hoc full-pipeline development; not release qualification",
+  "files": {
+    "source_validation.py": "4a7becf860f7062afd2831be8db3886ebb8830865158d4290aaedc5d2faa42a1",
+    "source-validation-notes.md": "2a5db76baa34c53d761be6c5b62fee827e1cac59360df460fc6cee1c958e5891",
+    "source-validation-tests-v2.txt": "28f38d555ab1f3092b8a95a55aef78a2611de604c2d1c427982c88b725ef8b77",
+    "source-validation-utf8-v2.txt": "cb9b0857d919eb658972f4fedac8d68851942410b8434f607c5debe0d32d18b9",
+    "source-validation-development-v2.json": "a020066731c6d37ad5b63c84315b3179fe1ae94165935530cfddc15da917e60f"
+  }
+}

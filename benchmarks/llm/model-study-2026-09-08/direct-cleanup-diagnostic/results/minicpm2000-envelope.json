@@ -1,0 +1,369 @@
+{
+  "label": "minicpm2000",
+  "load_s": 0.9959772080183029,
+  "loaded_model_class": "mlx_lm.models.llama.Model",
+  "runtime": {
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.3.0",
+    "huggingface-hub": "1.7.2",
+    "psutil": "7.2.2"
+  },
+  "prompt_sha256": "4a3457cff99674edc2b3ec8702f12641721c2584268d30f3ce4319c187da0a69",
+  "cases_sha256": "9be8136756daa7785e1b092df9320aa6df6e5a5616416ab6b806ce8614887e38",
+  "native_thinking": false,
+  "temperature": 0.0,
+  "deadline_s": 10,
+  "reasoning_budget": null,
+  "budget_formula": "min(8192,max(128,2*input_tokens+32))",
+  "memory_limit_bytes": 4294967296,
+  "cache_limit_bytes": 134217728,
+  "summary": {
+    "few_shot": {
+      "cases": 8,
+      "exact": 7,
+      "lexical_exact": 8,
+      "introduced_words_cases": 0,
+      "deleted_required_words_cases": 0,
+      "errors": 0,
+      "unfinished": 0,
+      "median_request_s": 0.7688602915150113,
+      "maximum_request_s": 0.9701330000534654
+    }
+  },
+  "rows": [
+    {
+      "mode": "few_shot",
+      "id": "reported_sentence",
+      "raw_output": "This is a test to see if this can remove all those things from the sentences.",
+      "final_output": "This is a test to see if this can remove all those things from the sentences.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.9038315829820931,
+      "generation_elapsed_s": 0.8886002920335159,
+      "cpu_s": 0.27273100000000006,
+      "rss_before_bytes": 1760509952,
+      "rss_after_bytes": 1752858624,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1787450708,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 18,
+      "prompt_tokens": 268,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "the",
+            "um",
+            "uh",
+            "yeah,"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_01",
+      "raw_output": "I bought the wrong charger this morning.",
+      "final_output": "I bought the wrong charger this morning.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.7013831670046784,
+      "generation_elapsed_s": 0.699894041987136,
+      "cpu_s": 0.172663,
+      "rss_before_bytes": 1753120768,
+      "rss_after_bytes": 1726529536,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1853576440,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 9,
+      "prompt_tokens": 257,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "I"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "the"
+          ],
+          "added": []
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "charger,",
+            "um,"
+          ],
+          "added": [
+            "charger"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_02",
+      "raw_output": "The token um, should remain because it is the literal name of this field.",
+      "final_output": "The token um, should remain because it is the literal name of this field.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.9701330000534654,
+      "generation_elapsed_s": 0.9685194580233656,
+      "cpu_s": 0.20445899999999995,
+      "rss_before_bytes": 1726529536,
+      "rss_after_bytes": 1720369152,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1777554740,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 17,
+      "prompt_tokens": 260,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": false,
+      "word_changes": []
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_03",
+      "raw_output": "Please type a a into the box without removing either letter.",
+      "final_output": "Please type a a into the box without removing either letter.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.851976583013311,
+      "generation_elapsed_s": 0.8504746669786982,
+      "cpu_s": 0.14190899999999984,
+      "rss_before_bytes": 1720369152,
+      "rss_after_bytes": 1694892032,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1776112940,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 13,
+      "prompt_tokens": 258,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "uh,"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_04",
+      "raw_output": "Há um, e apenas um, sensor conectado ao computador.",
+      "final_output": "Há um, e apenas um, sensor conectado ao computador.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.8989594170125201,
+      "generation_elapsed_s": 0.8973570000380278,
+      "cpu_s": 0.19228699999999987,
+      "rss_before_bytes": 1694892032,
+      "rss_after_bytes": 1703411712,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1776833840,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 16,
+      "prompt_tokens": 259,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": false,
+      "word_changes": []
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_05",
+      "raw_output": "We need to check the same result again.",
+      "final_output": "We need to check the same result again.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.7308230409980752,
+      "generation_elapsed_s": 0.7288116249837913,
+      "cpu_s": 0.1584080000000001,
+      "rss_before_bytes": 1703411712,
+      "rss_after_bytes": 1705312256,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1783584036,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 10,
+      "prompt_tokens": 256,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "uh,"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "to"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_06",
+      "raw_output": "Repeat the words and and as a literal sequence.",
+      "final_output": "Repeat the words and and as a literal sequence.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.7542592079844326,
+      "generation_elapsed_s": 0.7516575829940848,
+      "cpu_s": 0.16621700000000006,
+      "rss_before_bytes": 1705312256,
+      "rss_after_bytes": 1706393600,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1782142236,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 11,
+      "prompt_tokens": 254,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": false,
+      "word_changes": []
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_07",
+      "raw_output": "The name Um, belongs to the customer in this ticket.",
+      "final_output": "The name Um, belongs to the customer in this ticket.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.7798225830192678,
+      "generation_elapsed_s": 0.7779722500126809,
+      "cpu_s": 0.1722159999999997,
+      "rss_before_bytes": 1706393600,
+      "rss_after_bytes": 1706393600,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1783584036,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 13,
+      "prompt_tokens": 256,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": false,
+      "word_changes": []
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_08",
+      "raw_output": "I wrote the word erm, in the glossary yesterday.",
+      "final_output": "I wrote the word erm, in the glossary yesterday.",
+      "completed": true,
+      "estimated_reasoning_tokens": 0,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 0.7578980000107549,
+      "generation_elapsed_s": 0.7560128329787403,
+      "cpu_s": 0.17074299999999987,
+      "rss_before_bytes": 1706409984,
+      "rss_after_bytes": 1706852352,
+      "peak_rss_process_bytes": 1833926656,
+      "peak_metal_request_bytes": 1783584036,
+      "active_metal_after_bytes": 1416187912,
+      "generation_tokens": 12,
+      "prompt_tokens": 256,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "I"
+          ],
+          "added": []
+        }
+      ]
+    }
+  ]
+}

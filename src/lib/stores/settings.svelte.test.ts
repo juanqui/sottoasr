@@ -1,131 +1,75 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock the tauri wrapper functions used by SettingsStore
-vi.mock('../utils/tauri', () => ({
-  getSettings: vi.fn(),
-  updateSettings: vi.fn(),
-}));
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../utils/tauri', () => ({ getSettings: vi.fn(), updateSettings: vi.fn() }));
 import { getSettings, updateSettings } from '../utils/tauri';
-import { settingsStore } from './settings.svelte';
+import { SettingsStore, createDefaultSettings } from './settings.svelte';
+import type { Settings, UpdateSettingsResult } from '../utils/tauri';
+const deferred = <T>() => { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+let store: SettingsStore;
+beforeEach(() => { vi.resetAllMocks(); store = new SettingsStore(); vi.mocked(getSettings).mockResolvedValue(createDefaultSettings()); });
 
-import type { Settings } from '../utils/tauri';
-
-const mockGetSettings = vi.mocked(getSettings);
-const mockUpdateSettings = vi.mocked(updateSettings);
-
-const DEFAULT_SETTINGS: Settings = {
-  push_to_talk_shortcut: 'CommandOrControl+Shift+Space',
-  push_to_talk_shortcut_alt: null,
-  toggle_shortcut: 'CommandOrControl+Shift+D',
-  toggle_shortcut_alt: null,
-  cancel_shortcut: 'Escape',
-  cancel_shortcut_alt: null,
-  show_overlay: true,
-  auto_paste: true,
-  restore_clipboard: true,
-  restore_focus_before_paste: true,
-  model_path: '',
-  language: 'auto',
-  max_history: 500,
-  launch_at_login: false,
-  llm_cleanup_enabled: false,
-  auto_check_updates: true,
-};
-
-beforeEach(() => {
-  // Reset mocks
-  mockGetSettings.mockReset();
-  mockUpdateSettings.mockReset();
-  // Reset the store to default state
-  settingsStore.current = { ...DEFAULT_SETTINGS };
-  settingsStore.loaded = false;
-  settingsStore.saving = false;
-});
-
-// ---------------------------------------------------------------------------
-// load()
-// ---------------------------------------------------------------------------
-describe('load()', () => {
-  it('loads settings from the backend and merges with defaults', async () => {
-    const fetched: Settings = {
-      ...DEFAULT_SETTINGS,
-      show_overlay: false,
-      max_history: 100,
-    };
-    mockGetSettings.mockResolvedValueOnce(fetched);
-
-    await settingsStore.load();
-
-    expect(mockGetSettings).toHaveBeenCalledOnce();
-    expect(settingsStore.current.show_overlay).toBe(false);
-    expect(settingsStore.current.max_history).toBe(100);
-    expect(settingsStore.loaded).toBe(true);
+describe('settings draft lifecycle', () => {
+  it('migrates missing fields conservatively and preserves explicit choices', async () => {
+    vi.mocked(getSettings).mockResolvedValueOnce({ show_overlay:false } as Settings);
+    await store.load();
+    expect(store.current.llm_cleanup_enabled).toBe(false);
+    expect(store.current.dictionary).toEqual([]);
+    expect(store.current.vocabulary).toEqual([]);
+    expect(store.current.show_overlay).toBe(false);
+    vi.mocked(getSettings).mockResolvedValueOnce({ ...createDefaultSettings(), llm_cleanup_enabled:true, vocabulary:['Qwen'] });
+    await store.load();
+    expect(store.current.llm_cleanup_enabled).toBe(true);
+    expect(store.current.vocabulary).toEqual(['Qwen']);
   });
-
-  it('falls back to defaults on error', async () => {
-    mockGetSettings.mockRejectedValueOnce(new Error('backend unavailable'));
-
-    await settingsStore.load();
-
-    expect(settingsStore.current).toEqual(DEFAULT_SETTINGS);
-    expect(settingsStore.loaded).toBe(true);
+  it('does not make fallback defaults editable after a failed load', async () => {
+    vi.mocked(getSettings).mockRejectedValueOnce(new Error('unreadable'));
+    expect(await store.load()).toBe(false);
+    expect(store.loaded).toBe(false);
+    await expect(store.save()).rejects.toThrow('Load settings');
+    expect(updateSettings).not.toHaveBeenCalled();
+    await store.load();
+    expect(store.loaded).toBe(true);
+    expect(store.error).toBe('');
   });
-});
-
-// ---------------------------------------------------------------------------
-// save()
-// ---------------------------------------------------------------------------
-describe('save()', () => {
-  it('persists current settings to the backend', async () => {
-    mockUpdateSettings.mockResolvedValueOnce(undefined);
-    settingsStore.current = { ...DEFAULT_SETTINGS, language: 'en' };
-
-    await settingsStore.save();
-
-    expect(mockUpdateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ language: 'en' }),
-    );
-    expect(settingsStore.saving).toBe(false);
+  it('ignores old load completions and completions after disposal', async () => {
+    const first = deferred<Settings>();
+    vi.mocked(getSettings).mockReturnValueOnce(first.promise);
+    const old = store.load();
+    await store.load();
+    first.resolve({ ...createDefaultSettings(), vocabulary:['Stale'] });
+    await old;
+    expect(store.current.vocabulary).toEqual([]);
+    const last = deferred<Settings>();
+    vi.mocked(getSettings).mockReturnValueOnce(last.promise);
+    const loading = store.load(); store.invalidateLoad(); last.resolve({ ...createDefaultSettings(), vocabulary:['Late'] }); await loading;
+    expect(store.current.vocabulary).toEqual([]);
   });
-
-  it('sets saving flag during save and clears it on success', async () => {
-    let savingDuringSave = false;
-    mockUpdateSettings.mockImplementationOnce(async () => {
-      savingDuringSave = settingsStore.saving;
-    });
-
-    await settingsStore.save();
-
-    expect(savingDuringSave).toBe(true);
-    expect(settingsStore.saving).toBe(false);
+  it('acknowledges only the submitted snapshot and shares an in-flight save', async () => {
+    await store.load();
+    store.update('vocabulary', ['Qwen']);
+    const write = deferred<UpdateSettingsResult>();
+    vi.mocked(updateSettings).mockReturnValueOnce(write.promise);
+    const saving = store.save();
+    expect(store.save()).toBe(saving);
+    store.update('vocabulary', ['Qwen', 'Juanqui']);
+    write.resolve({ settings:{ ...createDefaultSettings(), vocabulary:['Qwen'] }, warnings:['Shortcut unavailable'] });
+    await saving;
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(updateSettings).mock.calls[0][0].vocabulary).toEqual(['Qwen']);
+    expect(store.current.vocabulary).toEqual(['Qwen', 'Juanqui']);
+    expect(store.saved?.vocabulary).toEqual(['Qwen']);
+    expect(store.dirty).toBe(true);
+    expect(store.warnings).toEqual(['Shortcut unavailable']);
+    store.discard();
+    expect(store.current.vocabulary).toEqual(['Qwen']);
+    expect(store.dirty).toBe(false);
   });
-
-  it('clears saving flag and rethrows on error', async () => {
-    mockUpdateSettings.mockRejectedValueOnce(new Error('write failed'));
-
-    await expect(settingsStore.save()).rejects.toThrow('write failed');
-    expect(settingsStore.saving).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// update()
-// ---------------------------------------------------------------------------
-describe('update()', () => {
-  it('updates a single field immutably', () => {
-    const before = settingsStore.current;
-    settingsStore.update('language', 'es');
-
-    expect(settingsStore.current.language).toBe('es');
-    // Should be a new object (immutable update)
-    expect(settingsStore.current).not.toBe(before);
-  });
-
-  it('preserves other fields when updating one', () => {
-    settingsStore.update('max_history', 999);
-    expect(settingsStore.current.max_history).toBe(999);
-    expect(settingsStore.current.show_overlay).toBe(true);
-    expect(settingsStore.current.push_to_talk_shortcut).toBe('CommandOrControl+Shift+Space');
+  it('retains the draft and saved preference on write failure', async () => {
+    await store.load(); store.update('llm_cleanup_enabled', true);
+    vi.mocked(updateSettings).mockRejectedValueOnce(new Error('Disk full'));
+    await expect(store.save()).rejects.toThrow('Disk full');
+    expect(store.current.llm_cleanup_enabled).toBe(true);
+    expect(store.saved?.llm_cleanup_enabled).toBe(false);
+    expect(store.saving).toBe(false);
+    expect(store.error).toContain('Disk full');
   });
 });

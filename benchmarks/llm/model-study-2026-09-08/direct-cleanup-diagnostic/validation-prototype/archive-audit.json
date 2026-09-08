@@ -1,0 +1,259 @@
+{
+  "source_quality_counts": {
+    "minicpm2000-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 50,
+      "lexical_exact": 51,
+      "added_word_diagnostic_cases": 1,
+      "required_word_loss_diagnostic_cases": 5,
+      "protected_fidelity_failure_cases": 4,
+      "useful_edits_without_detected_loss": 24,
+      "median_request_s": 0.7964570834883489,
+      "p95_request_s": 2.881527916993946,
+      "maximum_request_s": 3.3541244579828344,
+      "total_cpu_s": 15.947816999999999,
+      "peak_rss_process_bytes": 1759428608,
+      "maximum_observed_rss_after_bytes": 1169145856,
+      "peak_metal_request_bytes": 1931892484,
+      "maximum_prompt_plus_budget_tokens": 692
+    },
+    "pollard_mixed-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 50,
+      "lexical_exact": 51,
+      "added_word_diagnostic_cases": 0,
+      "required_word_loss_diagnostic_cases": 4,
+      "protected_fidelity_failure_cases": 4,
+      "useful_edits_without_detected_loss": 23,
+      "median_request_s": 1.195840145490365,
+      "p95_request_s": 3.773893625009805,
+      "maximum_request_s": 5.825494208023883,
+      "total_cpu_s": 24.121216000000004,
+      "peak_rss_process_bytes": 1917206528,
+      "maximum_observed_rss_after_bytes": 550895616,
+      "peak_metal_request_bytes": 2544261036,
+      "maximum_prompt_plus_budget_tokens": 692
+    },
+    "spark4000-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 42,
+      "lexical_exact": 44,
+      "added_word_diagnostic_cases": 0,
+      "required_word_loss_diagnostic_cases": 2,
+      "protected_fidelity_failure_cases": 2,
+      "useful_edits_without_detected_loss": 14,
+      "median_request_s": 2.0238124380121008,
+      "p95_request_s": 6.685408374993131,
+      "maximum_request_s": 8.150015708000865,
+      "total_cpu_s": 29.466501999999995,
+      "peak_rss_process_bytes": 2331639808,
+      "maximum_observed_rss_after_bytes": 313212928,
+      "peak_metal_request_bytes": 2858026528,
+      "maximum_prompt_plus_budget_tokens": 693
+    },
+    "spark4000-best-dev": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 45,
+      "lexical_exact": 47,
+      "added_word_diagnostic_cases": 1,
+      "required_word_loss_diagnostic_cases": 2,
+      "protected_fidelity_failure_cases": 2,
+      "useful_edits_without_detected_loss": 18,
+      "median_request_s": 1.8172726670163684,
+      "p95_request_s": 6.074010000040289,
+      "maximum_request_s": 8.669723375001922,
+      "total_cpu_s": 32.384793000000016,
+      "peak_rss_process_bytes": 2237644800,
+      "maximum_observed_rss_after_bytes": 492978176,
+      "peak_metal_request_bytes": 2837555292,
+      "maximum_prompt_plus_budget_tokens": 626
+    },
+    "qwen4000-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 49,
+      "lexical_exact": 54,
+      "added_word_diagnostic_cases": 1,
+      "required_word_loss_diagnostic_cases": 4,
+      "protected_fidelity_failure_cases": 3,
+      "useful_edits_without_detected_loss": 25,
+      "median_request_s": 2.390694167028414,
+      "p95_request_s": 7.3309889159863815,
+      "maximum_request_s": 8.169476834009402,
+      "total_cpu_s": 47.86650599999999,
+      "peak_rss_process_bytes": 2470395904,
+      "maximum_observed_rss_after_bytes": 405536768,
+      "peak_metal_request_bytes": 3142597708,
+      "maximum_prompt_plus_budget_tokens": 686
+    },
+    "qwen4000-best-dev": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 43,
+      "lexical_exact": 46,
+      "added_word_diagnostic_cases": 1,
+      "required_word_loss_diagnostic_cases": 2,
+      "protected_fidelity_failure_cases": 1,
+      "useful_edits_without_detected_loss": 17,
+      "median_request_s": 1.8510877289809287,
+      "p95_request_s": 7.16108016599901,
+      "maximum_request_s": 7.664430167002138,
+      "total_cpu_s": 53.472998000000025,
+      "peak_rss_process_bytes": 2297675776,
+      "maximum_observed_rss_after_bytes": 583548928,
+      "peak_metal_request_bytes": 3030906660,
+      "maximum_prompt_plus_budget_tokens": 620
+    },
+    "liquid1200-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 22,
+      "lexical_exact": 23,
+      "added_word_diagnostic_cases": 28,
+      "required_word_loss_diagnostic_cases": 34,
+      "protected_fidelity_failure_cases": 14,
+      "useful_edits_without_detected_loss": 13,
+      "median_request_s": 0.5203252914943732,
+      "p95_request_s": 1.06047220795881,
+      "maximum_request_s": 2.987900667008944,
+      "total_cpu_s": 9.510575000000008,
+      "peak_rss_process_bytes": 898793472,
+      "maximum_observed_rss_after_bytes": 893943808,
+      "peak_metal_request_bytes": 1083227220,
+      "maximum_prompt_plus_budget_tokens": 702
+    },
+    "liquid350-common": {
+      "cases": 60,
+      "completed": 60,
+      "accepted_exact": 17,
+      "lexical_exact": 21,
+      "added_word_diagnostic_cases": 13,
+      "required_word_loss_diagnostic_cases": 33,
+      "protected_fidelity_failure_cases": 15,
+      "useful_edits_without_detected_loss": 12,
+      "median_request_s": 0.19258016601088457,
+      "p95_request_s": 0.26483387500047684,
+      "maximum_request_s": 0.5882504589972086,
+      "total_cpu_s": 4.662298,
+      "peak_rss_process_bytes": 465158144,
+      "maximum_observed_rss_after_bytes": 444497920,
+      "peak_metal_request_bytes": 692634240,
+      "maximum_prompt_plus_budget_tokens": 702
+    }
+  },
+  "issues": [],
+  "dataset_cases": 60,
+  "dataset_groups": {
+    "ordinary_cleanup": 24,
+    "ordinary_preserve": 24,
+    "adversarial_cleanup": 4,
+    "adversarial_preserve": 8
+  },
+  "inference_rows": 480,
+  "warmup_rows": 8,
+  "pins_checked": [
+    {
+      "label": "liquid350",
+      "repo": "LiquidAI/LFM2.5-350M-MLX-4bit",
+      "revision": "f6cb4e006bb7a2d8a6afa14ec0a53e0586f65a5b",
+      "model_type": "lfm2"
+    },
+    {
+      "label": "liquid1200",
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
+      "revision": "7ccafdb04c36936f4f1c4685198c6c9a40275932",
+      "model_type": "lfm2"
+    },
+    {
+      "label": "minicpm2000",
+      "repo": "openbmb/MiniCPM5-2B-MLX",
+      "revision": "32f8dd5df1188512a20413f1297083238306634c",
+      "model_type": "llama"
+    },
+    {
+      "label": "pollard_mixed",
+      "repo": "PollardWeights/MiniCPM5-2B-Pollard-MLX",
+      "revision": "e07a8344ac3543dcf354cdb9792ce7b58ad1ad98",
+      "model_type": "llama"
+    },
+    {
+      "label": "qwen4000",
+      "repo": "mlx-community/Qwen3.5-4B-4bit",
+      "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+      "model_type": "qwen3_5"
+    },
+    {
+      "label": "spark4000",
+      "repo": "abenzerps/Spark-X2.5-4B-MLX-4bit",
+      "revision": "b23819d4d60c2767fbf6ee3b3527f5f33205be7e",
+      "model_type": "spark2_5"
+    }
+  ],
+  "hash_checks": {
+    "run_direct.py": true,
+    "prompt-envelope.json": true,
+    "prompt.json": true,
+    "reported-only.json": true
+  },
+  "loaded_classes": {
+    "minicpm2000-common": "mlx_lm.models.llama.Model",
+    "pollard_mixed-common": "mlx_lm.models.llama.Model",
+    "spark4000-common": "spark_mlx_llm.model.Model",
+    "spark4000-best-dev": "spark_mlx_llm.model.Model",
+    "qwen4000-common": "mlx_lm.models.qwen3_5.Model",
+    "qwen4000-best-dev": "mlx_lm.models.qwen3_5.Model",
+    "liquid1200-common": "mlx_lm.models.lfm2.Model",
+    "liquid350-common": "mlx_lm.models.lfm2.Model"
+  },
+  "embedded_metric_disagreements": [
+    {
+      "profile": "minicpm2000-common",
+      "id": "semantic_05",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    },
+    {
+      "profile": "pollard_mixed-common",
+      "id": "semantic_05",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    },
+    {
+      "profile": "qwen4000-common",
+      "id": "semantic_01",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    },
+    {
+      "profile": "qwen4000-common",
+      "id": "semantic_05",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    },
+    {
+      "profile": "qwen4000-best-dev",
+      "id": "semantic_05",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    },
+    {
+      "profile": "liquid1200-common",
+      "id": "semantic_05",
+      "driver_accepted_sample": false,
+      "canonical_accepted_exact": true
+    }
+  ],
+  "reconstruction_checks": 360,
+  "reporting_qualifications": [
+    "480 scored requests are 8 profiles of 6 distinct models on 60 cases; 8 warmups excluded.",
+    "Canonical external scorer unions primary expected output with alternatives; frozen driver accepted_sample can disagree.",
+    "Lexical diagnostics and exact protected fidelity are not comprehensive semantic adjudication.",
+    "Load timer excludes Python/MLX imports and uses normal OS caches; request timers exclude IPC.",
+    "RSS process peak and per-request Metal allocation peak have different scopes and must not be added.",
+    "Frozen driver lacks a pre-inference context guard; recorded prompt+budget is below every model context in these data."
+  ]
+}

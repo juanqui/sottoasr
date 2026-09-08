@@ -1,0 +1,363 @@
+{
+  "summary": {
+    "cases": 8,
+    "eligible": 7,
+    "exact": 1,
+    "harmful": 5,
+    "safe_useful_cases": 2,
+    "load_s": 0.39312533399788663,
+    "median_eligible_s": 0.008237708010710776,
+    "max_s": 0.01347204198827967,
+    "cpu_s": 0.06338099999999991,
+    "peak_rss_bytes": 388333568,
+    "runtime": "1.29.0",
+    "providers": [
+      "CPUExecutionProvider"
+    ],
+    "input_names": [
+      "attention_mask",
+      "input_ids"
+    ],
+    "model": "sam-castro/mow-disfluency-classifier",
+    "revision": "e1f59b45e03988dd55b8ff307c602f0d4567bf8c",
+    "license_caveat": "Converter declares CC BY4; original fine-tune license/provenance unresolved. Research diagnostic only."
+  },
+  "results": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        1,
+        2
+      ],
+      "output": "I I bought the wrong charger, this morning.",
+      "exact": false,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 0.01347204198827967,
+      "cpu_s": 0.013212000000000002,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "I"
+          ],
+          "offsets": [
+            [
+              0,
+              1
+            ]
+          ],
+          "labels": [
+            "O"
+          ],
+          "selected": false
+        },
+        {
+          "id": 1,
+          "tokens": [
+            "Ġthe"
+          ],
+          "offsets": [
+            [
+              10,
+              14
+            ]
+          ],
+          "labels": [
+            "RP"
+          ],
+          "selected": true
+        },
+        {
+          "id": 2,
+          "tokens": [
+            "Ġum"
+          ],
+          "offsets": [
+            [
+              33,
+              36
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "The token should remain because it is the literal name of this field.",
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 0.009976667002774775,
+      "cpu_s": 0.009915000000000007,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "Ġum"
+          ],
+          "offsets": [
+            [
+              9,
+              12
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Please type a into the box without removing either letter.",
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 0.008237708010710776,
+      "cpu_s": 0.008120999999999934,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "Ġuh"
+          ],
+          "offsets": [
+            [
+              6,
+              9
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        },
+        {
+          "id": 1,
+          "tokens": [
+            "Ġa"
+          ],
+          "offsets": [
+            [
+              15,
+              17
+            ]
+          ],
+          "labels": [
+            "RP"
+          ],
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Há e apenas sensor conectado ao computador.",
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 0.009611707995645702,
+      "cpu_s": 0.009539999999999993,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "Ġum"
+          ],
+          "offsets": [
+            [
+              2,
+              5
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        },
+        {
+          "id": 1,
+          "tokens": [
+            "Ġum"
+          ],
+          "offsets": [
+            [
+              15,
+              18
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "We need to to check the same result again.",
+      "exact": false,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 0.007660415954887867,
+      "cpu_s": 0.007583999999999924,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "Ġuh"
+          ],
+          "offsets": [
+            [
+              2,
+              5
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        },
+        {
+          "id": 1,
+          "tokens": [
+            "Ġto"
+          ],
+          "offsets": [
+            [
+              11,
+              14
+            ]
+          ],
+          "labels": [
+            "O"
+          ],
+          "selected": false
+        }
+      ]
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Repeat the words and as a literal sequence.",
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 0.007175499980803579,
+      "cpu_s": 0.0071229999999999905,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "Ġand"
+          ],
+          "offsets": [
+            [
+              16,
+              20
+            ]
+          ],
+          "labels": [
+            "RP"
+          ],
+          "selected": true
+        }
+      ]
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "eligible": false,
+      "selected_ids": [],
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 3.366702003404498e-05,
+      "cpu_s": 1.7000000000044757e-05,
+      "judgments": []
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        1
+      ],
+      "output": "I I wrote the word in the glossary yesterday.",
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 0.007985167030710727,
+      "cpu_s": 0.007869000000000015,
+      "judgments": [
+        {
+          "id": 0,
+          "tokens": [
+            "I"
+          ],
+          "offsets": [
+            [
+              0,
+              1
+            ]
+          ],
+          "labels": [
+            "O"
+          ],
+          "selected": false
+        },
+        {
+          "id": 1,
+          "tokens": [
+            "erm"
+          ],
+          "offsets": [
+            [
+              19,
+              22
+            ]
+          ],
+          "labels": [
+            "FP"
+          ],
+          "selected": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,12 +1,15 @@
 #![deny(warnings)]
 
 mod models;
+mod persistence;
+mod dictionary;
 mod state;
 mod commands;
 mod audio;
 mod asr;
 mod llm;
 mod paste;
+mod process;
 mod hotkeys;
 mod tray;
 mod updater;
@@ -35,7 +38,6 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_nspanel::init())
@@ -52,6 +54,7 @@ pub fn run() {
             commands::transcription::delete_transcription,
             commands::transcription::clear_transcriptions,
             commands::transcription::export_transcriptions_csv,
+            commands::transcription::export_transcriptions_csv_file,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_settings,
@@ -75,10 +78,13 @@ pub fn run() {
             commands::setup::get_model_status,
             commands::setup::needs_onboarding,
             commands::setup::init_asr,
+            commands::vocabulary::get_vocabulary_status,
+            commands::vocabulary::prepare_vocabulary_model,
             commands::setup::download_model,
             commands::setup::complete_setup,
             // LLM transcript cleanup
             commands::llm::get_llm_status,
+            commands::llm::prepare_llm_model,
             commands::llm::check_llm_update,
             commands::llm::download_llm_model,
             commands::llm::update_llm_model,
@@ -92,6 +98,11 @@ pub fn run() {
             updater::get_update_status,
             // Overlay drag
             commands::overlay::overlay_start_drag,
+            commands::overlay::dismiss_overlay_error,
+            commands::overlay::get_overlay_snapshot,
+            commands::overlay::restart_app,
+            commands::overlay::reveal_recording_audio,
+            commands::overlay::open_transcription_history,
         ])
         .setup(|app| {
             // Register the updater plugin (must use Builder pattern inside setup)
@@ -142,8 +153,15 @@ pub fn run() {
             // initialized, avoiding the ghost/duplicate icon timing bug (tauri#9480).
 
             // Setup hotkeys
-            hotkeys::manager::setup_hotkeys(&handle)
-                .map_err(|e| Box::new(std::io::Error::other(e)))?;
+            if let Err(error) = hotkeys::manager::setup_hotkeys(&handle) {
+                // A stale/conflicting saved shortcut must not prevent the app
+                // from opening its own settings so the user can repair it.
+                log::error!("Keyboard shortcuts could not be registered: {error}");
+                tray::menu::open_or_focus_window(
+                    &handle, "settings", "settings.html",
+                    "SottoASR — Review Keyboard Shortcuts", 520.0, 600.0,
+                );
+            }
 
             // Pre-create the overlay panel (hidden) so that the first recording
             // doesn't steal focus. WebviewWindow creation activates the app on
@@ -172,58 +190,40 @@ pub fn run() {
                 let asr_handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let state: tauri::State<'_, AppState> = asr_handle.state();
-                    let mut engine = state.asr_engine.lock().await;
-                    if let Err(e) = engine.init() {
+                    if let Err(e) = asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await {
                         log::error!("Background ASR init failed: {}", e);
                     } else {
                         state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
                         log::info!("ASR engine ready");
+                        commands::vocabulary::restore_cached(asr_handle.clone());
                     }
                 });
+            }
 
-                // Pre-load LLM sidecar in background (if enabled and model is downloaded)
-                if llm::engine::is_feature_compiled() {
-                    let llm_handle = handle.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let state: tauri::State<'_, AppState> = llm_handle.state();
-                        let enabled = state.settings.lock().await.llm_cleanup_enabled;
-
-                        if !enabled
-                            || !llm::engine::is_venv_ready()
-                            || !llm::engine::is_model_downloaded()
-                        {
-                            return;
-                        }
-
-                        log::info!("Pre-loading LLM sidecar in background...");
-                        match tokio::task::spawn_blocking(|| {
-                            let mut e = llm::engine::LlmEngine::spawn()?;
-                            e.load_model()?;
-                            Ok::<_, String>(e)
-                        })
-                        .await
-                        {
-                            Ok(Ok(engine)) => {
-                                let mut guard = state.llm_engine.lock().await;
-                                *guard = Some(Box::new(engine) as Box<dyn llm::engine::LlmBackend>);
-                                log::info!("LLM sidecar pre-loaded and ready");
-                            }
-                            Ok(Err(e)) => {
-                                log::warn!("LLM pre-load failed: {}", e);
-                            }
-                            Err(e) => {
-                                log::error!("LLM pre-load panicked: {}", e);
-                            }
-                        }
-                    });
-                }
+            // Preload and prewarm enabled cleanup independently of ASR onboarding.
+            if llm::engine::is_feature_compiled() {
+                let llm_handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, AppState> = llm_handle.state();
+                    if !state.settings.lock().await.llm_cleanup_enabled {
+                        return;
+                    }
+                    // Reuse Settings preparation so upgrades with an enabled old
+                    // model also prepare the new pin, and concurrent callers join.
+                    log::info!("Preparing and warming enabled cleanup in background...");
+                    match commands::llm::prepare_llm_model(llm_handle.clone(), state).await {
+                        Ok(_) => log::info!("LLM sidecar pre-loaded, warmed and ready"),
+                        Err(error) => log::warn!("LLM preparation failed: {}", error),
+                    }
+                });
             }
 
             // Start the auto-update checker (15s delay, then every 4 hours)
             updater::start_update_checker(&handle);
 
-            // Sync launch-at-login state from persisted settings
-            {
+            // Only successfully loaded preferences may change the OS login item.
+            // Temporary defaults after a read/parse failure are not saved intent.
+            if handle.state::<AppState>().settings_load_error.is_none() {
                 use tauri_plugin_autostart::ManagerExt;
                 let launch_at_login = handle.state::<AppState>().settings.blocking_lock().launch_at_login;
                 let manager = handle.autolaunch();
@@ -242,32 +242,13 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // When a user-visible window (history, settings, onboarding) is closed,
-            // check if any visible windows remain. If not, switch back to Accessory
-            // so the Dock icon disappears.
+            if window.label() == "settings"
+                && matches!(event, tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed)
+            {
+                commands::keycapture::reset_key_capture();
+            }
             if let tauri::WindowEvent::Destroyed = event {
-                let label = window.label();
-                // Don't care about overlay closing
-                if label == "overlay" {
-                    return;
-                }
-                log::info!("Window '{}' closed", label);
-
-                let app = window.app_handle();
-                // Check if any non-overlay windows are still open
-                let has_visible_windows = app.webview_windows()
-                    .iter()
-                    .any(|(l, w)| {
-                        l.as_str() != "overlay" && w.is_visible().unwrap_or(false)
-                    });
-
-                if !has_visible_windows {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                        log::info!("All windows closed — switched back to Accessory (no Dock icon)");
-                    }
-                }
+                log::info!("Window '{}' closed", window.label());
             }
         })
         .build(tauri::generate_context!())
@@ -288,8 +269,13 @@ pub fn run() {
                     // Allow explicit exit via app.exit() (code == Some(0)).
                     if code.is_none() {
                         api.prevent_exit();
+                    } else if let Err(error) = app.state::<AppState>().begin_exit() {
+                        api.prevent_exit();
+                        log::warn!("Exit deferred: {error}");
+                        commands::overlay::show_busy_exit_warning(app);
                     }
                 }
+                tauri::RunEvent::Exit => process::shutdown(),
                 _ => {}
             }
         });

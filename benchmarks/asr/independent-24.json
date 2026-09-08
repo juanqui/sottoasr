@@ -1,0 +1,158 @@
+{
+  "vocabulary": [
+    "Qwen",
+    "Claude",
+    "CRAN",
+    "MiniCPM",
+    "SottoASR",
+    "Kubernetes",
+    "Mistral",
+    "Gemma"
+  ],
+  "cases": [
+    {
+      "id": "ordinary_01",
+      "kind": "ordinary",
+      "spoken": "The queen visited the hospital on Wednesday.",
+      "expected": "The queen visited the hospital on Wednesday."
+    },
+    {
+      "id": "ordinary_02",
+      "kind": "ordinary",
+      "spoken": "Quinn sent the revised budget to the finance team.",
+      "expected": "Quinn sent the revised budget to the finance team."
+    },
+    {
+      "id": "ordinary_03",
+      "kind": "ordinary",
+      "spoken": "A dark cloud covered the western side of the valley.",
+      "expected": "A dark cloud covered the western side of the valley."
+    },
+    {
+      "id": "ordinary_04",
+      "kind": "ordinary",
+      "spoken": "The children ran toward the empty playground.",
+      "expected": "The children ran toward the empty playground."
+    },
+    {
+      "id": "ordinary_05",
+      "kind": "ordinary",
+      "spoken": "Our coach asked Claude to call Quinn after practice.",
+      "expected": "Our coach asked Claude to call Quinn after practice."
+    },
+    {
+      "id": "ordinary_06",
+      "kind": "ordinary",
+      "spoken": "Please clean the screen before the next demonstration.",
+      "expected": "Please clean the screen before the next demonstration."
+    },
+    {
+      "id": "ordinary_07",
+      "kind": "ordinary",
+      "spoken": "We stored the cranberries in a sealed glass container.",
+      "expected": "We stored the cranberries in a sealed glass container."
+    },
+    {
+      "id": "ordinary_08",
+      "kind": "ordinary",
+      "spoken": "The crane moved a steel beam above the warehouse.",
+      "expected": "The crane moved a steel beam above the warehouse."
+    },
+    {
+      "id": "ordinary_09",
+      "kind": "ordinary",
+      "spoken": "Gemma lives near the river and teaches piano lessons.",
+      "expected": "Gemma lives near the river and teaches piano lessons."
+    },
+    {
+      "id": "ordinary_10",
+      "kind": "ordinary",
+      "spoken": "The minimum charge is eight dollars per delivery.",
+      "expected": "The minimum charge is eight dollars per delivery."
+    },
+    {
+      "id": "ordinary_11",
+      "kind": "ordinary",
+      "spoken": "The queen and Quinn both appeared in the photograph.",
+      "expected": "The queen and Quinn both appeared in the photograph."
+    },
+    {
+      "id": "ordinary_12",
+      "kind": "ordinary",
+      "spoken": "We ran outside because the cloud looked like a dragon.",
+      "expected": "We ran outside because the cloud looked like a dragon."
+    },
+    {
+      "id": "target_01",
+      "kind": "target",
+      "spoken": "We compared Qwen with Claude on the same laptop.",
+      "expected": "We compared Qwen with Claude on the same laptop."
+    },
+    {
+      "id": "target_02",
+      "kind": "target",
+      "spoken": "Install the package from CRAN after checking its checksum.",
+      "expected": "Install the package from CRAN after checking its checksum."
+    },
+    {
+      "id": "target_03",
+      "kind": "target",
+      "spoken": "Our local assistant uses MiniCPM for short editing tasks.",
+      "expected": "Our local assistant uses MiniCPM for short editing tasks."
+    },
+    {
+      "id": "target_04",
+      "kind": "target",
+      "spoken": "I use SottoASR to dictate notes while reviewing code.",
+      "expected": "I use SottoASR to dictate notes while reviewing code."
+    },
+    {
+      "id": "target_05",
+      "kind": "target",
+      "spoken": "Kubernetes restarted the container after the readiness check failed.",
+      "expected": "Kubernetes restarted the container after the readiness check failed."
+    },
+    {
+      "id": "target_06",
+      "kind": "target",
+      "spoken": "Try the Mistral model before changing the batch size.",
+      "expected": "Try the Mistral model before changing the batch size."
+    },
+    {
+      "id": "target_07",
+      "kind": "target",
+      "spoken": "The Gemma model should preserve the final invoice number.",
+      "expected": "The Gemma model should preserve the final invoice number."
+    },
+    {
+      "id": "target_08",
+      "kind": "target",
+      "spoken": "Qwen answered the technical question while Quinn took notes.",
+      "expected": "Qwen answered the technical question while Quinn took notes."
+    },
+    {
+      "id": "target_09",
+      "kind": "target",
+      "spoken": "The queen is a chess piece; Qwen is the model we tested.",
+      "expected": "The queen is a chess piece; Qwen is the model we tested."
+    },
+    {
+      "id": "target_10",
+      "kind": "target",
+      "spoken": "A cloud blocked the sun while Claude processed the local file.",
+      "expected": "A cloud blocked the sun while Claude processed the local file."
+    },
+    {
+      "id": "target_11",
+      "kind": "target",
+      "spoken": "We ran the CRAN package tests twice before lunch.",
+      "expected": "We ran the CRAN package tests twice before lunch."
+    },
+    {
+      "id": "target_12",
+      "kind": "target",
+      "spoken": "Use Qwen three point eight Flash Next and keep build identifier seventy two.",
+      "expected": "Use Qwen three point eight Flash Next and keep build identifier seventy two."
+    }
+  ]
+}

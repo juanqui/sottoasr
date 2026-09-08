@@ -1,0 +1,718 @@
+{
+  "label": "liquid350",
+  "summary": {
+    "zero_shot": {
+      "exact_dev8": 1,
+      "lexical_exact_dev8": 2,
+      "introduced_words_cases": 3,
+      "deleted_required_words_cases": 5,
+      "median_s": 0.10349685451365076,
+      "maximum_s": 0.1346223340369761
+    },
+    "few_shot": {
+      "exact_dev8": 2,
+      "lexical_exact_dev8": 4,
+      "introduced_words_cases": 3,
+      "deleted_required_words_cases": 4,
+      "median_s": 0.10360447899438441,
+      "maximum_s": 0.11893470800714567
+    },
+    "load_s": 1.2121997919748537,
+    "peak_metal_bytes": 537879344,
+    "peak_rss_bytes": 466518016
+  },
+  "prompt_sha256": "bf5247024f5b7b886180da66773123957b01c2105dfc0293cb92a67f326a999a",
+  "rows": [
+    {
+      "mode": "zero_shot",
+      "id": "reported_sentence",
+      "raw_output": "This is a test to see if it can remove all the \"uh\" and \"uh\" from the sentences.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.6210698329959996,
+      "cpu_s": 0.06327900000000009,
+      "generation_tokens": 24,
+      "prompt_tokens": 147,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "this"
+          ],
+          "added": [
+            "it"
+          ]
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "um",
+            "uh",
+            "yeah,",
+            "those",
+            "things"
+          ],
+          "added": [
+            "\"uh\"",
+            "and",
+            "\"uh\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_01",
+      "raw_output": "I bought the wrong charger, um, this morning.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.10584408295108005,
+      "cpu_s": 0.037536000000000014,
+      "generation_tokens": 13,
+      "prompt_tokens": 137,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "I"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "the"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_02",
+      "raw_output": "The token um should remain because it is the literal name of this field.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.10949216602602974,
+      "cpu_s": 0.04136299999999982,
+      "generation_tokens": 16,
+      "prompt_tokens": 139,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "um,"
+          ],
+          "added": [
+            "um"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_03",
+      "raw_output": "Perfect. Here's the cleaned transcript:\n\nPerfectly type a a into the box without removing either letter.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.1346223340369761,
+      "cpu_s": 0.04269900000000004,
+      "generation_tokens": 25,
+      "prompt_tokens": 137,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "Please",
+            "uh,"
+          ],
+          "added": [
+            "Perfect.",
+            "Here's",
+            "the",
+            "cleaned",
+            "transcript:",
+            "Perfectly"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_04",
+      "raw_output": "Há um, e apenas um.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.08367516699945554,
+      "cpu_s": 0.024993000000000043,
+      "generation_tokens": 9,
+      "prompt_tokens": 138,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "um,",
+            "sensor",
+            "conectado",
+            "ao",
+            "computador."
+          ],
+          "added": [
+            "um."
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_05",
+      "raw_output": "We need to check the same result again.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.08669520897092298,
+      "cpu_s": 0.02476300000000009,
+      "generation_tokens": 10,
+      "prompt_tokens": 135,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "uh,"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "to"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_06",
+      "raw_output": "Repeat \"literal\"",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.07593049999559298,
+      "cpu_s": 0.02088599999999996,
+      "generation_tokens": 7,
+      "prompt_tokens": 134,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "the",
+            "words",
+            "and",
+            "and",
+            "as",
+            "a",
+            "literal",
+            "sequence."
+          ],
+          "added": [
+            "\"literal\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_07",
+      "raw_output": "The name Um belongs to the customer in the ticket.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.10427983402041718,
+      "cpu_s": 0.03760399999999997,
+      "generation_tokens": 12,
+      "prompt_tokens": 135,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "Um,"
+          ],
+          "added": [
+            "Um"
+          ]
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "this"
+          ],
+          "added": [
+            "the"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "zero_shot",
+      "id": "dev_08",
+      "raw_output": "I wrote the word \"er\" in the glossary yesterday.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.10271387500688434,
+      "cpu_s": 0.03605499999999995,
+      "generation_tokens": 14,
+      "prompt_tokens": 136,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "I"
+          ],
+          "added": []
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "erm,"
+          ],
+          "added": [
+            "\"er\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "reported_sentence",
+      "raw_output": "This is a test to see if this can remove all the \"uh\" and \"ye\" from the sentences.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.14943783404305577,
+      "cpu_s": 0.04542299999999999,
+      "generation_tokens": 24,
+      "prompt_tokens": 200,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "um",
+            "uh",
+            "yeah,",
+            "those",
+            "things"
+          ],
+          "added": [
+            "\"uh\"",
+            "and",
+            "\"ye\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_01",
+      "raw_output": "I bought the wrong charger, this morning.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.09763049997854978,
+      "cpu_s": 0.028591000000000033,
+      "generation_tokens": 11,
+      "prompt_tokens": 190,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "I"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "the"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um,"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_02",
+      "raw_output": "The token um should remain because it is the literal name of this field.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.11427854100475088,
+      "cpu_s": 0.03327000000000013,
+      "generation_tokens": 16,
+      "prompt_tokens": 192,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "um,"
+          ],
+          "added": [
+            "um"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_03",
+      "raw_output": "Please type a a",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.07717649999540299,
+      "cpu_s": 0.02096600000000004,
+      "generation_tokens": 5,
+      "prompt_tokens": 190,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "uh,"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "into",
+            "the",
+            "box",
+            "without",
+            "removing",
+            "either",
+            "letter."
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_04",
+      "raw_output": "Há um, e apenas um sensor conectado ao computador.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.10957845801021904,
+      "cpu_s": 0.03208999999999995,
+      "generation_tokens": 15,
+      "prompt_tokens": 191,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "um,"
+          ],
+          "added": [
+            "um"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_05",
+      "raw_output": "We need to check the same result again.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.09463808301370591,
+      "cpu_s": 0.026820999999999984,
+      "generation_tokens": 10,
+      "prompt_tokens": 188,
+      "budget": 128,
+      "strict_exact": true,
+      "accepted_sample": true,
+      "lexical_exact": true,
+      "introduced_words": false,
+      "deleted_required_words": false,
+      "changed": true,
+      "character_deletion_only": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "uh,"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "to"
+          ],
+          "added": []
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_06",
+      "raw_output": "Repeat \"green\"",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.08108283299952745,
+      "cpu_s": 0.02158300000000013,
+      "generation_tokens": 6,
+      "prompt_tokens": 187,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "the",
+            "words",
+            "and",
+            "and",
+            "as",
+            "a",
+            "literal",
+            "sequence."
+          ],
+          "added": [
+            "\"green\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_07",
+      "raw_output": "The label reads: \"Um belongs to the customer in this ticket.\"",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.11869837500853464,
+      "cpu_s": 0.042834999999999956,
+      "generation_tokens": 15,
+      "prompt_tokens": 188,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "name",
+            "Um,"
+          ],
+          "added": [
+            "label",
+            "reads:",
+            "\"Um"
+          ]
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "ticket."
+          ],
+          "added": [
+            "ticket.\""
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "few_shot",
+      "id": "dev_08",
+      "raw_output": "Please write the word erm in the glossary yesterday.",
+      "finish_reason": "stop",
+      "error": null,
+      "elapsed_s": 0.11893470800714567,
+      "cpu_s": 0.04765700000000006,
+      "generation_tokens": 12,
+      "prompt_tokens": 189,
+      "budget": 128,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": true,
+      "deleted_required_words": true,
+      "changed": true,
+      "character_deletion_only": false,
+      "word_changes": [
+        {
+          "op": "replace",
+          "removed": [
+            "I",
+            "I",
+            "wrote"
+          ],
+          "added": [
+            "Please",
+            "write"
+          ]
+        },
+        {
+          "op": "replace",
+          "removed": [
+            "erm,"
+          ],
+          "added": [
+            "erm"
+          ]
+        }
+      ]
+    }
+  ]
+}

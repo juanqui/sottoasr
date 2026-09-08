@@ -1,0 +1,14 @@
+{
+  "frozen_at_utc": "2026-09-08T13:42:11.922701+00:00",
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "predecessor_sha256": "5f871555c86441d581650e280da676c9396a3d23f27b754c6cfd5d4e61fda6d9",
+  "scope": "Protected quote/code span scanner. Complete opening backtick run closes only at same complete unescaped run; unmatched spans protect EOF. Other v4 quote, literal, deletion, reconstruction and alignment rules unchanged.",
+  "provenance": "24 authored unit groups passed before v5 development rescoring. No release250 or restart12 accessed. No model inference. Prior development data only.",
+  "python_version": "3.11.14",
+  "unicode_version": "14.0.0",
+  "tests": "24 groups passed in 0.019 s; code run widths1,2,3,5,12, shorter/longer nested runs, escapes, EOF, and all v4 regressions.",
+  "files": {
+    "source_validation.py": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+    "unit-tests.txt": "cc1b85a73d7ee4a99766b876919e213b4fc98c5f075c9a718ecf3297ea5d4b29"
+  }
+}

@@ -1,0 +1,6 @@
+test_utf8_offsets_reconstruct_source (__main__.ValidatorTests.test_utf8_offsets_reconstruct_source) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK

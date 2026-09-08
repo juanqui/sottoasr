@@ -1,0 +1,99 @@
+[
+  {
+    "label": "liquid350",
+    "repo": "LiquidAI/LFM2.5-350M-MLX-4bit",
+    "revision": "f6cb4e006bb7a2d8a6afa14ec0a53e0586f65a5b",
+    "size_bytes": 226574917
+  },
+  {
+    "label": "qwen800",
+    "repo": "mlx-community/Qwen3.5-0.8B-4bit",
+    "revision": "da28692b5f139cb0ec58a356b437486b7dac7462",
+    "size_bytes": 652029391
+  },
+  {
+    "label": "liquid230",
+    "repo": "LiquidAI/LFM2.5-230M-MLX-4bit",
+    "download_elapsed_s": 5.55483603477478,
+    "revision": "817c2706bbbf7a88f16346469b5747b950087e0e",
+    "size_bytes": 150855558
+  },
+  {
+    "label": "falcon90",
+    "repo": "mlx-community/Falcon-H1-Tiny-90M-Instruct-4bit",
+    "download_elapsed_s": 2.8037779331207275,
+    "revision": "12db8d70c659710fa84e8a6c72f014034da36c85",
+    "size_bytes": 53966489
+  },
+  {
+    "label": "granite350",
+    "repo": "mlx-community/granite-4.0-350m-4bit",
+    "download_elapsed_s": 5.453449964523315,
+    "revision": "f118e62936e8a845680a4c614997e14d7441f26e",
+    "size_bytes": 208125866
+  },
+  {
+    "label": "graniteh350",
+    "repo": "mlx-community/granite-4.0-h-350m-4bit",
+    "download_elapsed_s": 4.832228899002075,
+    "revision": "2b96c1f68e5349bcaec2a498a68cc177537e46d1",
+    "size_bytes": 201776919
+  },
+  {
+    "label": "gemma270",
+    "repo": "mlx-community/gemma-3-270m-it-4bit",
+    "download_elapsed_s": 4.545503854751587,
+    "revision": "ff1143e3a10547c9f2129e94ca37059b096b23f4",
+    "size_bytes": 190208344
+  },
+  {
+    "label": "functiongemma270",
+    "repo": "mlx-community/functiongemma-270m-it-4bit",
+    "download_elapsed_s": 4.5491368770599365,
+    "revision": "95c30bf2f45a0145d555808900312ac92a061a2f",
+    "size_bytes": 184370373
+  },
+  {
+    "label": "liquid1200",
+    "repo": "LiquidAI/LFM2.5-1.2B-Instruct-MLX-4bit",
+    "download_elapsed_s": 14.913240194320679,
+    "revision": "7ccafdb04c36936f4f1c4685198c6c9a40275932",
+    "size_bytes": 663395472
+  },
+  {
+    "label": "qwen2000",
+    "repo": "mlx-community/Qwen3.5-2B-4bit",
+    "download_elapsed_s": 28.185287952423096,
+    "revision": "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
+    "size_bytes": 1749080357
+  },
+  {
+    "label": "minicpm1000",
+    "repo": "openbmb/MiniCPM5-1B-MLX",
+    "download_elapsed_s": 118.60621862503467,
+    "revision": "9879b18bf2928355fcdf4287635388a3665a40cb",
+    "size_bytes": 617994322
+  },
+  {
+    "label": "minicpm2000",
+    "repo": "openbmb/MiniCPM5-2B-MLX",
+    "download_elapsed_s": 23.878413625003304,
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "size_bytes": 1426119249
+  },
+  {
+    "label": "qwen4000",
+    "repo": "mlx-community/Qwen3.5-4B-4bit",
+    "download_elapsed_s": 41.421212333021685,
+    "revision": "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+    "size_bytes": 3061129077
+  },
+  {
+    "label": "granite4200",
+    "repo": "ibm-granite/granite-4.2-3b-q4-mlx",
+    "revision": "0c6f39b1827afd5eb2c1c3b13751929857434953",
+    "download_elapsed_s": 31.088562250020914,
+    "size_bytes": 2066181467,
+    "parameters_from_dense_config": 3659737600
+  }
+]

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
+  import { createEventScope } from '../utils/event-scope';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
   import type { PermissionStatus } from '../utils/tauri';
@@ -17,13 +17,17 @@
   let progressPercent = $state(0);
   let errorMessage = $state('');
   let isProcessing = $state(false);
+  let restarting = $state(false);
+  let restartError = $state('');
 
   // Poll interval for permission checks
   let permissionPollInterval: ReturnType<typeof setInterval> | null = null;
   let permissionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Event listener cleanup
-  let unlisteners: Array<() => void> = [];
+  const scope = createEventScope();
+  let disposed = false;
+  let checkingPermissions = false;
 
   // Derived: both permissions granted and functional
   let micGranted = $derived(micPermission === 'authorized');
@@ -32,6 +36,7 @@
   onMount(async () => {
     try {
       const info = await invoke<{ backend: string; model_available: boolean }>('get_asr_backend');
+      if (disposed) return;
       backendName = info.backend;
 
       if (info.model_available) {
@@ -42,11 +47,11 @@
       console.error('Failed to get backend info:', e);
     }
 
-    unlisteners.push(await listen<{ step: string; message: string }>('setup-progress', (event) => {
+    await scope.listen<{ step: string; message: string }>('setup-progress', (event) => {
       progressMessage = event.payload.message;
-    }));
+    });
 
-    unlisteners.push(await listen<{ progress: number; current_file: string; status: string }>(
+    await scope.listen<{ progress: number; current_file: string; status: string }>(
       'model-download-progress',
       (event) => {
         progressPercent = Math.round(event.payload.progress * 100);
@@ -57,26 +62,28 @@
           progressMessage = 'Download complete!';
         }
       }
-    ));
+    );
 
-    unlisteners.push(await listen('asr-init-complete', () => {
+    await scope.listen('asr-init-complete', () => {
       currentStep = 'ready';
       isProcessing = false;
-    }));
+    });
 
-    unlisteners.push(await listen<{ error: string }>('asr-init-error', (event) => {
+    await scope.listen<{ error: string }>('asr-init-error', (event) => {
       errorMessage = event.payload.error;
       currentStep = 'error';
       isProcessing = false;
-    }));
+    });
   });
 
   onDestroy(() => {
     stopPermissionPolling();
-    unlisteners.forEach(fn => fn());
+    disposed = true;
+    scope.dispose();
   });
 
   function startPermissionPolling() {
+    stopPermissionPolling();
     checkPermissions(); // immediate check
     // Poll every 1.5s so the UI updates quickly when the user toggles in System Settings
     permissionPollInterval = setInterval(checkPermissions, 1500);
@@ -94,22 +101,25 @@
   }
 
   async function checkPermissions() {
+    if (disposed || checkingPermissions) return;
+    checkingPermissions = true;
     try {
       const status = await invoke<PermissionStatus>('check_all_permissions');
+      if (disposed) return;
       micPermission = status.microphone;
       axPermission = status.accessibility_api;
       axFunctional = status.accessibility_functional;
       needsRestart = status.needs_restart;
     } catch (e) {
       console.error('Permission check failed:', e);
-    }
+    } finally { checkingPermissions = false; }
   }
 
   async function requestMicrophone() {
     try {
       await invoke('request_microphone_permission');
       // Recheck after prompt
-      permissionCheckTimeout = setTimeout(checkPermissions, 500);
+      if (!disposed) permissionCheckTimeout = setTimeout(checkPermissions, 500);
     } catch (e) {
       console.error('Microphone request failed:', e);
     }
@@ -128,13 +138,13 @@
   }
 
   async function restartApp() {
+    if (restarting) return;
+    restarting = true;
+    restartError = '';
     try {
-      await invoke('restart', {});
-    } catch {
-      // tauri-plugin-process restart
-      const { relaunch } = await import('@tauri-apps/plugin-process');
-      await relaunch();
-    }
+      await invoke('restart_app');
+    } catch (error) { if (!disposed) restartError = String(error); }
+    finally { if (!disposed) restarting = false; }
   }
 
   function goToPermissions() {
@@ -388,12 +398,13 @@
         Without restarting, SottoASR won't be able to paste transcribed text
         at your cursor. Your settings and model data will be preserved.
       </p>
+      {#if restartError}<p class="error-message" role="alert">{restartError}</p>{/if}
 
       <div class="button-row">
         <button class="secondary" onclick={closeOnboarding}>
           Later
         </button>
-        <button class="primary" onclick={restartApp}>
+        <button class="primary" disabled={restarting} onclick={restartApp}>
           Restart Now
         </button>
       </div>
@@ -659,18 +670,6 @@
   }
   .success-note {
     color: #22c55e;
-  }
-  .skip-link {
-    background: none;
-    color: #666;
-    font-size: 0.8rem;
-    text-decoration: underline;
-    margin-top: 1rem;
-    padding: 0.5rem;
-    width: 100%;
-  }
-  .skip-link:hover {
-    color: #999;
   }
   .secondary {
     background: #333;

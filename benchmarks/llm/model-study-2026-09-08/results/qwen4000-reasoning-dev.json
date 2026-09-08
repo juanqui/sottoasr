@@ -1,0 +1,245 @@
+{
+  "summary": {
+    "label": "qwen4000",
+    "load_s": 2.67463649995625,
+    "cases": 8,
+    "exact": 3,
+    "harmful": 2,
+    "safe_useful_cases": 1,
+    "fallbacks": 0,
+    "median_judgment_s": 2.924768499971833,
+    "max_case_s": 8.549646834027953,
+    "peak_metal_bytes": 2729469656,
+    "prompt_sha256": "58b57bede20ab2806ebc6639975629957fbeec60adff0bbd07173cb84fc8955b"
+  },
+  "rows": [
+    {
+      "case_id": "dev_01",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The first I is a redundant repetition of the sentence subject.\nDecision: DELETE",
+      "elapsed_s": 2.9531794160138816,
+      "generation_tokens": 19
+    },
+    {
+      "case_id": "dev_01",
+      "id": 1,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The word the is a necessary article required by the grammatical structure.\nDecision: KEEP",
+      "elapsed_s": 2.814974000037182,
+      "generation_tokens": 21
+    },
+    {
+      "case_id": "dev_01",
+      "id": 2,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The um is an empty hesitation in the middle of a stuttered sentence.\nDecision: DELETE",
+      "elapsed_s": 2.765711707994342,
+      "generation_tokens": 22
+    },
+    {
+      "case_id": "dev_02",
+      "id": 0,
+      "gold_delete": false,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The um is a spoken hesitation, not the literal word 'um' being discussed.\nDecision: DELETE",
+      "elapsed_s": 3.034788832999766,
+      "generation_tokens": 24
+    },
+    {
+      "case_id": "dev_03",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The speaker explicitly instructs to keep both letters, so the repetition is intentional.\nDecision: KEEP",
+      "elapsed_s": 2.901846250053495,
+      "generation_tokens": 23
+    },
+    {
+      "case_id": "dev_03",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The word a is the intended object of the verb type, not a hesitation.\nDecision: KEEP",
+      "elapsed_s": 2.93569449998904,
+      "generation_tokens": 23
+    },
+    {
+      "case_id": "dev_04",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The Portuguese word um means one; removing it changes the quantity in the sentence.\nDecision: KEEP",
+      "elapsed_s": 2.924768499971833,
+      "generation_tokens": 23
+    },
+    {
+      "case_id": "dev_04",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The Portuguese word um means one and is essential to the sentence's meaning.\nDecision: KEEP",
+      "elapsed_s": 2.8161584999761544,
+      "generation_tokens": 22
+    },
+    {
+      "case_id": "dev_05",
+      "id": 0,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The uh is an empty hesitation, but the repeated 'to' is deliberate emphasis.\nDecision: KEEP",
+      "elapsed_s": 3.0963802919723094,
+      "generation_tokens": 24
+    },
+    {
+      "case_id": "dev_05",
+      "id": 1,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The word to is the grammatical connector required to make the sentence complete.\nDecision: KEEP",
+      "elapsed_s": 2.8765398749965243,
+      "generation_tokens": 22
+    },
+    {
+      "case_id": "dev_06",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The word and is the literal content the speaker intends to repeat.\nDecision: KEEP",
+      "elapsed_s": 2.813120541977696,
+      "generation_tokens": 20
+    },
+    {
+      "case_id": "dev_08",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The first I is an accidental repetition of the subject, not a meaningful word.\nDecision: DELETE",
+      "elapsed_s": 2.952757041028235,
+      "generation_tokens": 23
+    },
+    {
+      "case_id": "dev_08",
+      "id": 1,
+      "gold_delete": false,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The erm is an empty hesitation that does not affect the meaning of the sentence.\nDecision: DELETE",
+      "elapsed_s": 2.973423542047385,
+      "generation_tokens": 23
+    }
+  ],
+  "cases": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "output": "I bought the the wrong charger, this morning.",
+      "selected_ids": [
+        0,
+        2
+      ],
+      "exact": false,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 8.549646834027953,
+      "fallback": false
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "output": "The token should remain because it is the literal name of this field.",
+      "selected_ids": [
+        0
+      ],
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 3.0365324590238743,
+      "fallback": false
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "output": "Please uh, type a a into the box without removing either letter.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 5.8396533749764785,
+      "fallback": false
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "output": "Há um, e apenas um, sensor conectado ao computador.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 5.743801457982045,
+      "fallback": false
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "output": "We uh, need to to check the same result again.",
+      "selected_ids": [],
+      "exact": false,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 5.976505875005387,
+      "fallback": false
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "output": "Repeat the words and and as a literal sequence.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 2.8142561669810675,
+      "fallback": false
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 3.779097460210323e-05,
+      "fallback": false
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "output": "I wrote the word in the glossary yesterday.",
+      "selected_ids": [
+        0,
+        1
+      ],
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 5.929859999974724,
+      "fallback": false
+    }
+  ]
+}

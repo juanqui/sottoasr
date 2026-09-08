@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getVersion } from '@tauri-apps/api/app';
-  import { listen } from '@tauri-apps/api/event';
+  import { invoke } from '@tauri-apps/api/core';
+  import { createEventScope } from '../utils/event-scope';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
   import { getUpdateStatus, checkAppUpdate, performAppUpdate, updateLlmModel } from '../utils/tauri';
@@ -17,31 +18,37 @@
   let downloadedMB = $state('0');
   let totalMB = $state('');
   let errorMessage = $state('');
+  let restarting = $state(false);
   let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   let autoCloseSeconds = $state(4);
   let checkTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let downloadStallTimer: ReturnType<typeof setInterval> | null = null;
   let lastProgressTime = 0;
 
-  let unlisteners: Array<() => void> = [];
+  let disposed = false;
+  const scope = createEventScope((error) => { errorMessage = String(error); step = 'error'; });
 
-  onMount(async () => {
+  onMount(() => { void initialize().catch((error) => { if (!disposed) { errorMessage = String(error); step = 'error'; } }); });
+
+  async function initialize() {
     currentVersion = await getVersion();
+    if (disposed) return;
 
     // Register event listeners before triggering check.
-    unlisteners.push(await listen<string>('update-available', async () => {
+    await scope.listen<string>('update-available', async () => {
       const status = await getUpdateStatus();
+      if (disposed) return;
       availableVersion = status.version ?? '';
       releaseNotes = status.release_notes ?? '';
       step = 'available';
-    }));
+    });
 
-    unlisteners.push(await listen('update-up-to-date', () => {
+    await scope.listen('update-up-to-date', () => {
       step = 'up_to_date';
       startAutoClose();
-    }));
+    });
 
-    unlisteners.push(await listen<UpdateDownloadProgress>('update-download-progress', (event) => {
+    await scope.listen<UpdateDownloadProgress>('update-download-progress', (event) => {
       const p = event.payload;
       lastProgressTime = Date.now();
       downloadProgress = Math.round(p.progress * 100);
@@ -49,37 +56,38 @@
       if (p.total_bytes) {
         totalMB = (p.total_bytes / 1_048_576).toFixed(1);
       }
-    }));
+    });
 
-    unlisteners.push(await listen<string>('update-check-error', (event) => {
+    await scope.listen<string>('update-check-error', (event) => {
       errorMessage = event.payload;
       step = 'error';
-    }));
+    });
 
     // Model update events.
-    unlisteners.push(await listen('llm-update-available', () => {
+    await scope.listen('llm-update-available', () => {
       clearAutoClose();
       if (step === 'checking' || step === 'up_to_date') {
         step = 'model_available';
       }
-    }));
+    });
 
-    unlisteners.push(await listen('llm-download-complete', () => {
+    await scope.listen('llm-download-complete', () => {
       if (step === 'model_downloading') {
         step = 'model_ready';
       }
-    }));
+    });
 
-    unlisteners.push(await listen<string>('llm-download-error', (event) => {
+    await scope.listen<{ message: string }>('llm-download-error', (event) => {
       if (step === 'model_downloading') {
-        errorMessage = event.payload || 'Model download failed';
+        errorMessage = event.payload.message || 'Model download failed';
         step = 'model_error';
       }
-    }));
+    });
 
     // Determine initial state from existing update status.
     try {
       const status = await getUpdateStatus();
+      if (disposed) return;
       if (status.restart_pending) {
         step = 'ready';
       } else if (status.downloading) {
@@ -95,16 +103,18 @@
         doCheck();
       }
     } catch {
+      if (disposed) return;
       step = 'checking';
       doCheck();
     }
-  });
+  }
 
   onDestroy(() => {
+    disposed = true;
     clearAutoClose();
     clearCheckTimeout();
     clearDownloadStallTimer();
-    unlisteners.forEach(fn => fn());
+    scope.dispose();
   });
 
   async function doCheck() {
@@ -124,11 +134,13 @@
 
     try {
       const version = await checkAppUpdate();
+      if (disposed) return;
       if (version) {
         // Transition directly — don't rely solely on the event listener.
         // Guard: skip if the event listener already transitioned us.
         if (step === 'checking') {
           const status = await getUpdateStatus();
+          if (disposed) return;
           availableVersion = status.version ?? version;
           releaseNotes = status.release_notes ?? '';
           step = 'available';
@@ -140,6 +152,7 @@
         }
       }
     } catch (err: any) {
+      if (disposed) return;
       errorMessage = err?.toString() || 'Check failed';
       step = 'error';
     } finally {
@@ -169,6 +182,7 @@
       await performAppUpdate();
       step = 'ready';
     } catch (err: any) {
+      if (disposed) return;
       errorMessage = err?.toString() || 'Update failed';
       step = 'error';
     } finally {
@@ -191,12 +205,13 @@
   }
 
   async function handleRestart() {
+    if (restarting) return;
+    restarting = true;
+    errorMessage = '';
     try {
-      const { relaunch } = await import('@tauri-apps/plugin-process');
-      await relaunch();
-    } catch {
-      // Fallback — should not happen.
-    }
+      await invoke('restart_app');
+    } catch (error) { if (!disposed) errorMessage = String(error); }
+    finally { if (!disposed) restarting = false; }
   }
 
   function handleLater() {
@@ -204,7 +219,7 @@
   }
 
   function startAutoClose() {
-    if (autoCloseTimer) return; // Prevent duplicate intervals.
+    if (disposed || autoCloseTimer) return; // Never schedule work for a closed window.
     autoCloseSeconds = 4;
     autoCloseTimer = setInterval(() => {
       autoCloseSeconds -= 1;
@@ -241,6 +256,7 @@
       await updateLlmModel();
       step = 'model_ready';
     } catch (err: any) {
+      if (disposed) return;
       errorMessage = err?.toString() || 'Model update failed';
       step = 'model_error';
     } finally {
@@ -336,10 +352,11 @@
       </div>
       <h2>Update Ready</h2>
       <p class="subtitle">SottoASR v{availableVersion || 'latest'} has been downloaded. Restart to apply.</p>
+      {#if errorMessage}<p class="error-message" role="alert">{errorMessage}</p>{/if}
 
       <div class="button-row">
         <button class="secondary" onclick={handleLater}>Later</button>
-        <button class="primary" onclick={handleRestart}>Restart Now</button>
+        <button class="primary" disabled={restarting} onclick={handleRestart}>Restart Now</button>
       </div>
     </div>
 
@@ -387,7 +404,7 @@
   {:else if step === 'model_downloading'}
     <div class="step">
       <h2>Updating AI Model</h2>
-      <p class="subtitle">Downloading the latest cleanup model (~233 MB)...</p>
+      <p class="subtitle">Downloading the latest cleanup model...</p>
 
       <div class="progress-section">
         <div class="progress-bar-container">

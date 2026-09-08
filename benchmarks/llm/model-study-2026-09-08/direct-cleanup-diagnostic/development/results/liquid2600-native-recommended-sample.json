@@ -1,0 +1,86 @@
+{
+  "label": "liquid2600",
+  "load_s": 1.4409906250075437,
+  "loaded_model_class": "mlx_lm.models.lfm2.Model",
+  "runtime": {
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.3.0",
+    "huggingface-hub": "1.7.2",
+    "psutil": "7.2.2"
+  },
+  "prompt_sha256": "4a3457cff99674edc2b3ec8702f12641721c2584268d30f3ce4319c187da0a69",
+  "cases_sha256": "1e7f2f1b976b41b7740d5f42558e82b9273f879a8d493bb17366e55bd0b99186",
+  "warmup_cases_sha256": null,
+  "native_thinking": true,
+  "temperature": 0.1,
+  "top_k": 50,
+  "repetition_penalty": 1.1,
+  "repetition_context_size": 20,
+  "seed_per_request": 42,
+  "deadline_s": 90,
+  "reasoning_budget": 4096,
+  "budget_formula": "native reasoning budget",
+  "memory_limit_bytes": 4294967296,
+  "cache_limit_bytes": 134217728,
+  "summary": {},
+  "rows": [
+    {
+      "mode": "few_shot",
+      "id": "reported_sentence",
+      "is_warmup": false,
+      "raw_output": "The user wants me to clean up the transcript by removing speech disfluencies like \"um\", \"uh\", \"you know\" type fillers, and abandoned fragments. I need to preserve the intended meaning, facts, names, numbers, negations, and their order. I should not summarize or add information.\n\nLet me analyze the transcript:\n\"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nThe disfluencies to remove:\n- \"um\" (multiple occurrences)\n- \"yeah\"\n\nThe cleaned version should be:\n\"This is a test to see if this can remove all the things from the sentences.\"\n\nWait, I need to be careful. The instruction says \"Remove empty hesitation fillers, accidental word stutters, and clearly abandoned short fragments.\"\n\nSo \"um\" and \"uh\" are hesitation fillers that should be removed. \"yeah\" is also a filler word.\n\nThe original: \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nAfter removal:\n\"This is a test to see if this can remove all the things from the sentences.\"\n\nBut wait - \"those\" might be a reference to something specific. Let me think about this more carefully.\n\nActually, looking at the transcript again:\n\"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nThe \"those\" could be referring to something specific in context. But since there's no prior context, I should preserve it as is - the instruction says to preserve literal words being discussed. So \"those\" stays.\n\nThe cleaned version: \"This is a test to see if this can remove all the things from the sentences.\"\n\nBut actually, I should consider whether \"those\" is a filler or a reference. In this context, it seems like the speaker is referring to \"things\" mentioned earlier in the sentence. Since there's no prior context, I'll keep it as is.\n\nLet me also check if \"remove\" should be kept - yes, that's the main action being tested.\n\nFinal cleaned transcript: \"This is a test to see if this can remove all the things from the sentences.\"\n\nWait, I should double-check - is \"those\" a filler? It's not really a hesitation filler like \"um\" or \"uh\". It's a demonstrative pronoun. So I should keep it.\n\nThe result: \"This is a test to see if this can remove all the things from the sentences.\"\n\nActually, looking more carefully at the original: \"This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.\"\n\nThe structure is:\n- \"This is a test to see\" (main clause)\n- \"um if this can remove all the um uh yeah, those things from the sentences\" (the part being tested)\n\nSo after removing \"um\", \"uh\", and \"yeah\":\n\"This is a test to see if this can remove all the things from the sentences.\"\n\nYes, that's correct. I'll provide just this cleaned transcript without any preface or quotation marks.</think>This is a test to see if this can remove all the things from the sentences.",
+      "final_output": "This is a test to see if this can remove all the things from the sentences.",
+      "completed": true,
+      "estimated_reasoning_tokens": 666,
+      "finish_reason": "stop",
+      "error": null,
+      "request_elapsed_s": 16.388282665982842,
+      "generation_elapsed_s": 16.37309545901371,
+      "cpu_s": 6.0573179999999995,
+      "time_to_first_token_s": 1.798795707989484,
+      "reported_prompt_tps": 165.05545090452594,
+      "reported_generation_tps": 47.048581927949364,
+      "rss_before_bytes": 747667456,
+      "rss_after_bytes": 776699904,
+      "peak_rss_process_bytes": 1812398080,
+      "peak_metal_request_bytes": 2027371642,
+      "active_metal_after_bytes": 1583347760,
+      "generation_tokens": 685,
+      "prompt_tokens": 259,
+      "budget": 4096,
+      "strict_exact": false,
+      "accepted_sample": false,
+      "lexical_exact": false,
+      "introduced_words": false,
+      "deleted_required_words": true,
+      "changed": true,
+      "word_changes": [
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um"
+          ],
+          "added": []
+        },
+        {
+          "op": "delete",
+          "removed": [
+            "um",
+            "uh",
+            "yeah,",
+            "those"
+          ],
+          "added": []
+        }
+      ]
+    }
+  ]
+}

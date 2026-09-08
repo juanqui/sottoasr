@@ -1,0 +1,40 @@
+{
+  "description": "Regression diagnostic using current Rust candidates and reconstruction, actual sorted Rust JSON Value key order, production sidecar and installed local MLX runtime. No microphone or live History mutation.",
+  "sidecar_sha256": "b5408a5f9362b8903a42a207d7c5432df1bd41143be35663e02c55b5cea779eb",
+  "request": {
+    "action": "cleanup",
+    "candidates": [
+      {
+        "id": 0,
+        "kind": "hesitation",
+        "text": "um"
+      },
+      {
+        "id": 1,
+        "kind": "hesitation",
+        "text": "um"
+      },
+      {
+        "id": 2,
+        "kind": "hesitation",
+        "text": "um"
+      },
+      {
+        "id": 3,
+        "kind": "hesitation",
+        "text": "uh"
+      }
+    ],
+    "text": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences."
+  },
+  "response": {
+    "ok": true,
+    "delete_ids": [
+      0
+    ],
+    "elapsed_ms": 133
+  },
+  "proposal": "This is a test to see if this can um remove all the um uh yeah, those things from the sentences.",
+  "model_removed_all_four": false,
+  "ordinary_output": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences."
+}

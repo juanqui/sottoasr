@@ -1,27 +1,10 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use crate::state::AppState;
 use crate::models::AppStateEnum;
 
 #[tauri::command]
-pub async fn start_recording(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    // Recording is primarily triggered by hotkeys (see hotkeys/manager.rs).
-    // This command exists for frontend-initiated recording if needed.
-    let current = state.get_state();
-    if current != AppStateEnum::Idle {
-        return Err(format!("Cannot start recording: currently in {:?} state", current));
-    }
-
-    state.set_state(AppStateEnum::Recording);
-    state.is_recording.store(true, std::sync::atomic::Ordering::SeqCst);
-
-    app.emit("recording-started", ()).map_err(|e| e.to_string())?;
-    app.emit("state-changed", &AppStateEnum::Recording).map_err(|e| e.to_string())?;
-
-    log::info!("Recording started via command");
-    Ok(())
+pub async fn start_recording(app: AppHandle) -> Result<(), String> {
+    crate::hotkeys::manager::handle_start_recording(&app).map(|_| ())
 }
 
 #[tauri::command]

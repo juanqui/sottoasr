@@ -46,16 +46,18 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
             .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
     }
 
+    // Remember ownership immediately after our write. Capturing this after
+    // activation/paste would mistake a user's intervening Copy for our value.
+    let change_count_after_write = get_pasteboard_change_count();
+
     // Brief pause for clipboard to settle (NSPasteboard change count propagation)
     std::thread::sleep(std::time::Duration::from_millis(30));
 
-    // Always re-activate the target app before pasting. CGEventPost to HID sends
-    // Cmd+V to whatever app is frontmost, so we must ensure the right app has focus.
-    // We always activate (even if we think it's already frontmost) because
-    // NSWorkspace.frontmostApplication is unreliable from background threads.
+    // HID events follow focus. Activation failure must preserve the transcript
+    // for recovery instead of sending Cmd+V to an unrelated application.
     if target_pid > 0 {
         log::info!("Re-activating target app PID {} before paste", target_pid);
-        activate_pid(target_pid);
+        activate_pid(target_pid)?;
     }
 
     // Simulate Cmd+V via HID (goes to the frontmost app)
@@ -71,15 +73,12 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
 
     // Restore clipboard contents after the paste has been consumed
     if let Some(original) = saved_clipboard {
-        // Capture the current change count right after our paste
-        let change_count_after_paste = get_pasteboard_change_count();
-
         std::thread::spawn(move || {
             // Wait long enough for the target app to consume the paste
             std::thread::sleep(std::time::Duration::from_millis(500));
             // Only restore if nobody else has changed the clipboard
             let current_count = get_pasteboard_change_count();
-            if current_count == change_count_after_paste {
+            if change_count_after_write >= 0 && current_count == change_count_after_write {
                 if let Ok(mut clipboard) = arboard::Clipboard::new() {
                     let _ = clipboard.set_text(&original);
                     log::info!("Clipboard restored to previous contents");
@@ -87,7 +86,7 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
             } else {
                 log::info!(
                     "Clipboard changed by user, skipping restore (count {} \u{2192} {})",
-                    change_count_after_paste, current_count
+                    change_count_after_write, current_count
                 );
             }
         });
@@ -184,19 +183,25 @@ pub fn warmup_cgevent_pipeline() {
 /// Activate (bring to front) the application with the given PID.
 /// Uses NSRunningApplication.activateWithOptions: and then AppleScript as fallback.
 /// Waits for activation to settle before returning.
-fn activate_pid(pid: i32) {
+fn activate_pid(pid: i32) -> Result<(), String> {
     // Try ObjC activation first
     let objc_ok = activate_pid_objc(pid);
 
     if !objc_ok {
         // Fallback: use AppleScript which is more reliable for cross-app activation
         log::info!("ObjC activation failed, trying AppleScript fallback for PID {}", pid);
-        activate_pid_applescript(pid);
+        activate_pid_applescript(pid)?;
     }
 
     // Always wait for the activation to settle — window server needs time
     // to transfer focus, especially across apps.
     std::thread::sleep(std::time::Duration::from_millis(150));
+    // AppKit properties update with the main run loop. This runs on the paste
+    // worker, after the activation delay, without blocking that loop.
+    if get_frontmost_pid() != pid {
+        return Err("The original app could not be focused. Open History to copy your transcription.".into());
+    }
+    Ok(())
 }
 
 /// Try to activate via NSRunningApplication. Returns true if the call succeeded.
@@ -241,27 +246,19 @@ fn activate_pid_objc(pid: i32) -> bool {
 }
 
 /// Fallback activation via osascript. More reliable across apps but slightly slower.
-fn activate_pid_applescript(pid: i32) {
+fn activate_pid_applescript(pid: i32) -> Result<(), String> {
     let script = format!(
         "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
         pid
     );
-    match std::process::Command::new("osascript")
-        .args(["-e", &script])
-        .output()
-    {
-        Ok(output) => {
-            if output.status.success() {
-                log::info!("AppleScript activation succeeded for PID {}", pid);
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                log::warn!("AppleScript activation failed for PID {}: {}", pid, stderr.trim());
-            }
-        }
-        Err(e) => {
-            log::warn!("Failed to run osascript: {}", e);
-        }
+    let output = crate::process::bounded_command(
+        std::process::Command::new("osascript").args(["-e", &script]),
+        std::time::Duration::from_secs(2),
+    ).map_err(|error| format!("Could not activate the original app: {error}"))?;
+    if !output.status.success() {
+        return Err("The original app is unavailable or macOS denied activation. Open History to copy your transcription.".into());
     }
+    Ok(())
 }
 
 fn simulate_cmd_v() -> Result<(), String> {

@@ -1,0 +1,99 @@
+[
+  {
+    "profile": "Stock Mini2 D5",
+    "raw_exact": 22,
+    "delivered_exact": 20,
+    "raw_restart_complete": 3,
+    "delivered_restart_complete": 3,
+    "delivered_restart_preserve": 6,
+    "delivered_word_loss_ids": [
+      "release_202",
+      "release_220",
+      "release_225",
+      "release_242"
+    ],
+    "sample_natural": true,
+    "median_s": 0.8957999170233961,
+    "p95_s": 1.0720344170113094,
+    "maximum_s": 3.0241440830286592,
+    "peak_metal_GB": 2.028148876,
+    "peak_rss_GB": 1.664647168
+  },
+  {
+    "profile": "Qwen4 D5",
+    "raw_exact": 22,
+    "delivered_exact": 22,
+    "raw_restart_complete": 4,
+    "delivered_restart_complete": 3,
+    "delivered_restart_preserve": 6,
+    "delivered_word_loss_ids": [
+      "release_202",
+      "release_220",
+      "release_225",
+      "release_242"
+    ],
+    "sample_natural": false,
+    "median_s": 1.6731619169877376,
+    "p95_s": 2.177935999992769,
+    "maximum_s": 5.707352917001117,
+    "peak_metal_GB": 3.203499678,
+    "peak_rss_GB": 1.687437312
+  },
+  {
+    "profile": "Spark4 D5",
+    "raw_exact": 25,
+    "delivered_exact": 20,
+    "raw_restart_complete": 3,
+    "delivered_restart_complete": 2,
+    "delivered_restart_preserve": 5,
+    "delivered_word_loss_ids": [
+      "restart_11",
+      "release_202",
+      "release_220"
+    ],
+    "sample_natural": false,
+    "median_s": 1.64281079149805,
+    "p95_s": 1.9712847500341013,
+    "maximum_s": 5.83304658299312,
+    "peak_metal_GB": 2.97666291,
+    "peak_rss_GB": 2.754002944
+  },
+  {
+    "profile": "Pollard mixed D5",
+    "raw_exact": 21,
+    "delivered_exact": 20,
+    "raw_restart_complete": 3,
+    "delivered_restart_complete": 3,
+    "delivered_restart_preserve": 6,
+    "delivered_word_loss_ids": [
+      "release_202",
+      "release_220",
+      "release_225",
+      "release_242"
+    ],
+    "sample_natural": true,
+    "median_s": 0.931043041520752,
+    "p95_s": 1.1668594160000794,
+    "maximum_s": 3.862988625012804,
+    "peak_metal_GB": 2.642614568,
+    "peak_rss_GB": 2.486616064
+  },
+  {
+    "profile": "Stock Mini2 D7",
+    "raw_exact": 25,
+    "delivered_exact": 23,
+    "raw_restart_complete": 2,
+    "delivered_restart_complete": 2,
+    "delivered_restart_preserve": 6,
+    "delivered_word_loss_ids": [
+      "release_220",
+      "release_242"
+    ],
+    "sample_natural": true,
+    "median_s": 0.9159762495255563,
+    "p95_s": 1.0298113750177436,
+    "maximum_s": 3.469802499981597,
+    "peak_metal_GB": 2.034325744,
+    "peak_rss_GB": 1.85253888
+  }
+]

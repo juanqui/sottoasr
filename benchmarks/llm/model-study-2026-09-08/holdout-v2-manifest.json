@@ -1,0 +1,7 @@
+{
+  "cases": 96,
+  "needs_edits": 40,
+  "sha256": "aa8c89b9d7b1e152767ede77286b395b3a2c75a01c4e9637077cf7b7a46f15f1",
+  "status": "locked-before-model-inference; independently reviewed and approved",
+  "review": "Root independently reviewed all 96 raw/expected cases before inference; approved with no label changes on 2026-09-08."
+}

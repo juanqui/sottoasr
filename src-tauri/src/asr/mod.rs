@@ -6,3 +6,5 @@ pub mod fluidaudio_backend;
 
 #[cfg(feature = "asr-parakeet")]
 pub mod parakeet_backend;
+
+pub mod vocabulary;

@@ -1,0 +1,72 @@
+{
+  "status": "Final frozen qualification profile; root authorized release",
+  "created_utc": "2026-09-08T13:43:57.351003+00:00",
+  "model": {
+    "repository": "openbmb/MiniCPM5-2B-MLX",
+    "revision": "32f8dd5df1188512a20413f1297083238306634c",
+    "local_path": "/tmp/experiments/sotto-cleanup-overnight/models/minicpm2000",
+    "weights_sha256": "c207798696a4a454e7ac211b25227625466c693335941cee8904fb922f295cc1",
+    "config_sha256": "deb9ca33e863cbc84a9ab7209cd924fc05505dc33270c807d47f1b78fbd53a50",
+    "model_type": "llama",
+    "max_position_embeddings": 131072
+  },
+  "prompt_sha256": "ffe72a3812d42fb9f455e428f62ff300d232ace46acdf668e6d012425e7d48e5",
+  "driver_sha256": "31713c2262119e4a65dfa9279aa097dd7f1de7bb7e808dd10c24ab319e4fa0f6",
+  "validator_path": "../validation-prototype-v5/source_validation.py",
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "span_scorer_sha256": "0fd226992b2797bd28b1f68a6a86a4666634d5d8a9d11d2d2094b0a1ade174e5",
+  "protected_scorer_sha256": "5a0ad7f2da85839a1058f7c35011311e9b7d86d54f5dd719755af666e4927267",
+  "datasets": {
+    "release250.json": "7f31cbcc0b84c66b9a5a93147eb61d1d99e5a62da4e7e7dcaa547b18cd89db95",
+    "release-restarts12.json": "26885dfd4d0163125f09d680b543b961cce73f55368a1a3086c8d9417ab9edc4"
+  },
+  "runtime": {
+    "python": "3.14.5",
+    "mlx": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.3.0",
+    "huggingface-hub": "1.7.2",
+    "psutil": "7.2.2",
+    "unicode_database": "16.0.0"
+  },
+  "generation": {
+    "temperature": 0,
+    "top_k": 0,
+    "repetition_penalty": null,
+    "seed_per_request": 42,
+    "enable_thinking": false,
+    "mode": "few_shot",
+    "example_format": "system_inline",
+    "budget_formula": "min(8192,max(128,2*input_tokens+32))",
+    "deadline_s": 10,
+    "memory_limit_bytes": 4294967296,
+    "cache_limit_bytes": 134217728,
+    "prompt_cache": "fresh per request; no static caching",
+    "context_admission": "formatted native prompt tokens + entire reserved generation budget <= config max_position_embeddings"
+  },
+  "completion_and_fallback": "Only stop finish_reason with no error and measured request <=10s is eligible. Any unfinished generation, context overrun, or validator rejection falls back to exact raw source. No partial salvage.",
+  "warmup": "Known reported-only.json once before each separate dataset process; excluded from qualification counts/timings; natural accepted alternative assessed separately.",
+  "metrics": "Canonical gold span scorer; token and complete-run recall, complete ordinary cleanup, exact protected payload fidelity and root semantic adjudication. Unscored ambiguity cannot be omitted to claim passing. Raw and delivered outputs both retained. RSS/Metal overlap and must not be added; no measured power.",
+  "blindness": "Manifest written without opening either release dataset. D3 unchanged after development; v4 narrowly repairs existing escaped/newline quote protection.",
+  "files": {
+    "span-metrics-tests.txt": "8d3a57f871b5f552c78354c73c6443bcc107c1571f71f22937cb5c0f391550f0",
+    "development68-canonical.json": "a5762074801f6a858f39e6fd03800151908b86efb517838c3f2b609233a9dc48",
+    "development68-v4-delivered.json": "02fdce5d38c2a8ef99b5714d5981caba3f4e51886147a2fa595b1f3ada462a43",
+    "run_qualification.py": "31713c2262119e4a65dfa9279aa097dd7f1de7bb7e808dd10c24ab319e4fa0f6",
+    "freeze-v5.json": "63e2c8174acb52842555d6007f6af6ed65c2a09009ca550216709064a1c9b0a3",
+    "score_semantic.py": "5a0ad7f2da85839a1058f7c35011311e9b7d86d54f5dd719755af666e4927267",
+    "span_metrics.py": "0fd226992b2797bd28b1f68a6a86a4666634d5d8a9d11d2d2094b0a1ade174e5",
+    "v5-python314-tests.txt": "d55d98bb5ec7bd86bf2a76535065bbce696b8e59c698980f2ee838cdcf95091a",
+    "evaluate_qualification.py": "7d084d8eb467d9396a446ad324256d34aa599b828cd9cd2724fdc915c9bc67d0",
+    "reported-only.json": "1e7f2f1b976b41b7740d5f42558e82b9273f879a8d493bb17366e55bd0b99186",
+    "test_span_metrics.py": "fd37cc4872ad62d15632a06fcaf81cda6f5f98b8474ac1d903ef943728cba9e6",
+    "development68-v4-spans.json": "b0ab70bac10723788a27032259f587d59ab86e1ed4aa6f1ada77959f328b0aaf",
+    "prompt-inline.json": "ffe72a3812d42fb9f455e428f62ff300d232ace46acdf668e6d012425e7d48e5",
+    "freeze.json": "012a21830b7791ae29b68dea032ccc20767e6682693a5da86fcea8999115ccba"
+  },
+  "predecessor_freeze_sha256": "012a21830b7791ae29b68dea032ccc20767e6682693a5da86fcea8999115ccba",
+  "offline_evaluator_sha256": "7d084d8eb467d9396a446ad324256d34aa599b828cd9cd2724fdc915c9bc67d0",
+  "protected_annotations": "Embedded protected_spans in each case; UTF-8 source offsets validated, raw/delivered payloads checked independently.",
+  "supersedes_v5_draft_sha256": "63e2c8174acb52842555d6007f6af6ed65c2a09009ca550216709064a1c9b0a3",
+  "pre_run_reporting_correction": "Summary excludes all is_warmup rows, not a hardcoded sample ID; no generation behavior changed."
+}

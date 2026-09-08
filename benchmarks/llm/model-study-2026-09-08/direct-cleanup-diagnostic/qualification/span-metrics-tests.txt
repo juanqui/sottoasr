@@ -1,0 +1,18 @@
+test_added_words_are_not_hidden_by_good_deletions (test_span_metrics.SpanMetricsTests.test_added_words_are_not_hidden_by_good_deletions) ... ok
+test_ambiguity_limit_is_explicit_and_not_a_fabricated_score (test_span_metrics.SpanMetricsTests.test_ambiguity_limit_is_explicit_and_not_a_fabricated_score) ... ok
+test_case_and_unicode_composition_are_lexical_formatting (test_span_metrics.SpanMetricsTests.test_case_and_unicode_composition_are_lexical_formatting) ... ok
+test_complete_run_requires_all_fillers (test_span_metrics.SpanMetricsTests.test_complete_run_requires_all_fillers) ... ok
+test_distinct_runs_are_counted_separately (test_span_metrics.SpanMetricsTests.test_distinct_runs_are_counted_separately) ... ok
+test_faithful_partial_output_can_use_an_equivalent_gold_alignment (test_span_metrics.SpanMetricsTests.test_faithful_partial_output_can_use_an_equivalent_gold_alignment) ... ok
+test_identical_repeat_copies_are_equivalent (test_span_metrics.SpanMetricsTests.test_identical_repeat_copies_are_equivalent) ... ok
+test_meaningful_loss_is_separate_from_removed_fillers (test_span_metrics.SpanMetricsTests.test_meaningful_loss_is_separate_from_removed_fillers) ... ok
+test_preserve_case_and_invalid_gold (test_span_metrics.SpanMetricsTests.test_preserve_case_and_invalid_gold) ... ok
+test_protected_punctuation_requires_the_other_scorer (test_span_metrics.SpanMetricsTests.test_protected_punctuation_requires_the_other_scorer) ... ok
+test_reordering_fails_source_preservation (test_span_metrics.SpanMetricsTests.test_reordering_fails_source_preservation) ... ok
+test_repeated_phrase_is_one_complete_run (test_span_metrics.SpanMetricsTests.test_repeated_phrase_is_one_complete_run) ... ok
+test_wrong_literal_occurrence_gets_no_deletion_credit (test_span_metrics.SpanMetricsTests.test_wrong_literal_occurrence_gets_no_deletion_credit) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.001s
+
+OK

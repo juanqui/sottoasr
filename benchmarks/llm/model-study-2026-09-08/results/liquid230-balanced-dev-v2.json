@@ -1,0 +1,263 @@
+{
+  "summary": {
+    "label": "liquid230",
+    "prompt_variant": "balanced",
+    "dataset_sha256": "cdec7f40c22d105f2d7f28cf150b3c417a46112ec2bb90fb800388eaec27c7ce",
+    "protocol_sha256": "758afaba5ab6c8f03d60949b0e8d708cc69124176616305ad2d16385ab614b8b",
+    "runtime": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    },
+    "python": "3.14.5",
+    "load_s": 0.746453209023457,
+    "load_cpu_s": 0.7109979999999999,
+    "process_to_loaded_s": 0.760449541034177,
+    "after_load": {
+      "rss_bytes": 350240768,
+      "peak_rss_bytes": 377552896,
+      "metal_active_bytes": 146058760,
+      "metal_cache_bytes": 1652,
+      "metal_peak_bytes": 146058760
+    },
+    "first_cleanup_s": 0.14422020898200572,
+    "process_to_first_result_s": 0.9049658330040984,
+    "all": {
+      "cases": 8,
+      "exact": 5,
+      "needs_edits": 4,
+      "needed_exact": 2,
+      "needed_safe_useful": 2,
+      "preserve_cases": 4,
+      "preserve_unchanged": 3,
+      "changed": 5,
+      "harmful_cases": 3,
+      "fallbacks": 2,
+      "median_s": 0.09981054102536291,
+      "p95_s": 0.11619670799700543,
+      "max_s": 0.14422020898200572
+    },
+    "eligible": {
+      "cases": 7,
+      "exact": 4,
+      "needs_edits": 4,
+      "needed_exact": 2,
+      "needed_safe_useful": 2,
+      "preserve_cases": 3,
+      "preserve_unchanged": 2,
+      "changed": 5,
+      "harmful_cases": 3,
+      "fallbacks": 2,
+      "median_s": 0.09981054102536291,
+      "p95_s": 0.11619670799700543,
+      "max_s": 0.14422020898200572
+    },
+    "warm_eligible": {
+      "cases": 6,
+      "exact": 3,
+      "needs_edits": 3,
+      "needed_exact": 1,
+      "needed_safe_useful": 1,
+      "preserve_cases": 3,
+      "preserve_unchanged": 2,
+      "changed": 4,
+      "harmful_cases": 3,
+      "fallbacks": 2,
+      "median_s": 0.09866225000587292,
+      "p95_s": 0.09986800001934171,
+      "max_s": 0.11619670799700543
+    },
+    "after_run": {
+      "rss_bytes": 360939520,
+      "peak_rss_bytes": 377552896,
+      "metal_active_bytes": 146058760,
+      "metal_cache_bytes": 131072,
+      "metal_peak_bytes": 372455152
+    },
+    "process_cpu_s": 0.9684650000000001,
+    "measured_processing_wall_s": 1.5157372500398196,
+    "idle": {
+      "seconds": 0.11005858302814886,
+      "cpu_s": 5.6000000000056005e-05,
+      "before": {
+        "rss_bytes": 360939520,
+        "peak_rss_bytes": 377552896,
+        "metal_active_bytes": 146058760,
+        "metal_cache_bytes": 131072,
+        "metal_peak_bytes": 372455152
+      },
+      "after": {
+        "rss_bytes": 360939520,
+        "peak_rss_bytes": 377552896,
+        "metal_active_bytes": 146058760,
+        "metal_cache_bytes": 131072,
+        "metal_peak_bytes": 372455152
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1,
+        2
+      ],
+      "output": "I bought the wrong charger, this morning.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.14422020898200572,
+      "cpu_s": 0.043757000000000046,
+      "raw_generation": "[0, 1, 2]",
+      "generation_tokens": 10,
+      "prompt_tokens": 548,
+      "prompt_tps": 5194.819573382363,
+      "generation_tps": 430.9245788002486,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "The token um, should remain because it is the literal name of this field.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+      "elapsed_s": 0.11619670799700543,
+      "cpu_s": 0.04441499999999998,
+      "raw_generation": "The token \"um\" should remain as it is the literal name of the field.",
+      "generation_tokens": 18,
+      "prompt_tokens": 508,
+      "prompt_tps": 6996.482309701127,
+      "generation_tps": 454.24626011273733,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Please type a into the box without removing either letter.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.09751395898638293,
+      "cpu_s": 0.028278000000000025,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 527,
+      "prompt_tps": 6760.9790344968005,
+      "generation_tps": 458.4677347539084,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Há e apenas sensor conectado ao computador.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.096502042026259,
+      "cpu_s": 0.030335,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 527,
+      "prompt_tps": 6712.54916796652,
+      "generation_tps": 515.7503525418093,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "We need to check the same result again.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.09981054102536291,
+      "cpu_s": 0.02751999999999999,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 525,
+      "prompt_tps": 6615.683898026223,
+      "generation_tps": 448.6269000222267,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [],
+      "output": "Repeat the words and and as a literal sequence.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": "ValueError: Model returned invalid or duplicate deletion IDs",
+      "elapsed_s": 0.09986800001934171,
+      "cpu_s": 0.037395999999999985,
+      "raw_generation": "[0, 1, \"and\"]",
+      "generation_tokens": 10,
+      "prompt_tokens": 504,
+      "prompt_tps": 6795.875954195508,
+      "generation_tps": 477.8296821703628,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "eligible": false,
+      "selected_ids": [],
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 2.833025064319372e-06,
+      "cpu_s": 1.8000000000073513e-05
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "I wrote the word in the glossary yesterday.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.09728325001196936,
+      "cpu_s": 0.02876500000000004,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 526,
+      "prompt_tps": 6600.3632159939025,
+      "generation_tps": 528.5212739277403,
+      "finish_reason": "stop"
+    }
+  ]
+}

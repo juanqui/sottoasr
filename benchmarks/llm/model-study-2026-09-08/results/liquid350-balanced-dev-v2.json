@@ -1,0 +1,267 @@
+{
+  "summary": {
+    "label": "liquid350",
+    "prompt_variant": "balanced",
+    "dataset_sha256": "cdec7f40c22d105f2d7f28cf150b3c417a46112ec2bb90fb800388eaec27c7ce",
+    "protocol_sha256": "758afaba5ab6c8f03d60949b0e8d708cc69124176616305ad2d16385ab614b8b",
+    "runtime": {
+      "mlx": "0.32.2",
+      "mlx-lm": "0.31.3",
+      "transformers": "5.3.0",
+      "huggingface-hub": "1.7.2"
+    },
+    "python": "3.14.5",
+    "load_s": 0.9956895830109715,
+    "load_cpu_s": 0.72962,
+    "process_to_loaded_s": 1.0169642909895629,
+    "after_load": {
+      "rss_bytes": 422215680,
+      "peak_rss_bytes": 455032832,
+      "metal_active_bytes": 221772808,
+      "metal_cache_bytes": 1860,
+      "metal_peak_bytes": 221772808
+    },
+    "first_cleanup_s": 0.24803150002844632,
+    "process_to_first_result_s": 1.2653281249804422,
+    "all": {
+      "cases": 8,
+      "exact": 3,
+      "needs_edits": 4,
+      "needed_exact": 2,
+      "needed_safe_useful": 2,
+      "preserve_cases": 4,
+      "preserve_unchanged": 1,
+      "changed": 7,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.18261775001883507,
+      "p95_s": 0.18428487499477342,
+      "max_s": 0.24803150002844632
+    },
+    "eligible": {
+      "cases": 7,
+      "exact": 2,
+      "needs_edits": 4,
+      "needed_exact": 2,
+      "needed_safe_useful": 2,
+      "preserve_cases": 3,
+      "preserve_unchanged": 0,
+      "changed": 7,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.18261775001883507,
+      "p95_s": 0.18428487499477342,
+      "max_s": 0.24803150002844632
+    },
+    "warm_eligible": {
+      "cases": 6,
+      "exact": 1,
+      "needs_edits": 3,
+      "needed_exact": 1,
+      "needed_safe_useful": 1,
+      "preserve_cases": 3,
+      "preserve_unchanged": 0,
+      "changed": 6,
+      "harmful_cases": 5,
+      "fallbacks": 0,
+      "median_s": 0.1814117290196009,
+      "p95_s": 0.18368945899419487,
+      "max_s": 0.18428487499477342
+    },
+    "after_run": {
+      "rss_bytes": 432455680,
+      "peak_rss_bytes": 455032832,
+      "metal_active_bytes": 221772808,
+      "metal_cache_bytes": 262144,
+      "metal_peak_bytes": 874169632
+    },
+    "process_cpu_s": 1.086685,
+    "measured_processing_wall_s": 2.331344166013878,
+    "idle": {
+      "seconds": 0.11005666700657457,
+      "cpu_s": 4.700000000013027e-05,
+      "before": {
+        "rss_bytes": 432455680,
+        "peak_rss_bytes": 455032832,
+        "metal_active_bytes": 221772808,
+        "metal_cache_bytes": 262144,
+        "metal_peak_bytes": 874169632
+      },
+      "after": {
+        "rss_bytes": 432455680,
+        "peak_rss_bytes": 455032832,
+        "metal_active_bytes": 221772808,
+        "metal_cache_bytes": 262144,
+        "metal_peak_bytes": 874169632
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1,
+        2
+      ],
+      "output": "I bought the wrong charger, this morning.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.24803150002844632,
+      "cpu_s": 0.06301699999999999,
+      "raw_generation": "[0, 1, 2]",
+      "generation_tokens": 10,
+      "prompt_tokens": 548,
+      "prompt_tps": 2759.345898757734,
+      "generation_tps": 287.9030316436833,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "The token should remain because it is the literal name of this field.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.16397366701858118,
+      "cpu_s": 0.03667700000000007,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 508,
+      "prompt_tps": 3431.1756726342487,
+      "generation_tps": 395.279689176191,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Please type a into the box without removing either letter.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.18368945899419487,
+      "cpu_s": 0.04661700000000002,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 527,
+      "prompt_tps": 3337.61001240994,
+      "generation_tps": 354.0002025405239,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "Há e apenas sensor conectado ao computador.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.18428487499477342,
+      "cpu_s": 0.042974999999999985,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 527,
+      "prompt_tps": 3381.529757559599,
+      "generation_tps": 308.84850087774277,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "We need to check the same result again.",
+      "exact": true,
+      "changed": true,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 0.18020570802036673,
+      "cpu_s": 0.044964000000000115,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 525,
+      "prompt_tps": 3417.555261867838,
+      "generation_tps": 338.2479964482846,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0
+      ],
+      "output": "Repeat the words and as a literal sequence.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.16710250003961846,
+      "cpu_s": 0.05006100000000013,
+      "raw_generation": "[0]",
+      "generation_tokens": 4,
+      "prompt_tokens": 504,
+      "prompt_tps": 3296.501146817437,
+      "generation_tps": 494.1881622667105,
+      "finish_reason": "stop"
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "eligible": false,
+      "selected_ids": [],
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "exact": true,
+      "changed": false,
+      "harmful_deletion": false,
+      "fallback_reason": null,
+      "elapsed_s": 3.208988346159458e-06,
+      "cpu_s": 1.8000000000073513e-05
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "eligible": true,
+      "selected_ids": [
+        0,
+        1
+      ],
+      "output": "I wrote the word in the glossary yesterday.",
+      "exact": false,
+      "changed": true,
+      "harmful_deletion": true,
+      "fallback_reason": null,
+      "elapsed_s": 0.18261775001883507,
+      "cpu_s": 0.05289800000000011,
+      "raw_generation": "[0, 1]",
+      "generation_tokens": 7,
+      "prompt_tokens": 526,
+      "prompt_tps": 3342.3732462677212,
+      "generation_tps": 363.6387252658394,
+      "finish_reason": "stop"
+    }
+  ]
+}

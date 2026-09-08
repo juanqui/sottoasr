@@ -1,0 +1,56 @@
+{
+  "repo": "ibm-granite/granite-4.2-3b-q4-mlx",
+  "revision": "0c6f39b1827afd5eb2c1c3b13751929857434953",
+  "created": "2026-09-01T20:38:57.000Z",
+  "modified": "2026-09-02T20:46:04.000Z",
+  "card": {
+    "license": "apache-2.0",
+    "library_name": "mlx",
+    "tags": [
+      "language",
+      "granite-4.2",
+      "mlx"
+    ],
+    "base_model": [
+      "ibm-granite/granite-4.2-3b"
+    ]
+  },
+  "files": [
+    {
+      "name": ".gitattributes",
+      "bytes": 1519
+    },
+    {
+      "name": "README.md",
+      "bytes": 10620
+    },
+    {
+      "name": "chat_template.jinja",
+      "bytes": 9013
+    },
+    {
+      "name": "config.json",
+      "bytes": 1185
+    },
+    {
+      "name": "generation_config.json",
+      "bytes": 207
+    },
+    {
+      "name": "granite-4.2-3b-q4-metadata.properties",
+      "bytes": 1162
+    },
+    {
+      "name": "model.safetensors",
+      "bytes": 2059005430
+    },
+    {
+      "name": "tokenizer.json",
+      "bytes": 7153414
+    },
+    {
+      "name": "tokenizer_config.json",
+      "bytes": 436
+    }
+  ]
+}

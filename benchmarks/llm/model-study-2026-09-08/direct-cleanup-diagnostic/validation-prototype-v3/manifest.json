@@ -1,0 +1,28 @@
+{
+  "files": {
+    "README.md": "47eb12bb257dd33965c9486addb6ad862cc89bfe80ed06cc62a9cdea66070056",
+    "evaluate.py": "431ec65d71ee49d2998237086bd40f63ee1e88ecc12e09f54833ad215bc2605c",
+    "freeze.json": "ca89716d506414cfe94920a2591befcff9a6da3adbe2e68352ef1bd4bf635593",
+    "inputs/minicpm2000-D1.json": "88ff6e842162e5462d44f63b54f6c5ee4d23b780e123cb22699fcedd840150c4",
+    "inputs/minicpm2000-D3.json": "832015413946c8c74e558da277ac119f6c1b1880f859a812bfe2827907eecfa4",
+    "inputs/minicpm2000-D4.json": "2b0bb694ec8357a9343cb2b36b099492c78291e9b66f8c8182791f4e1a35799d",
+    "minicpm2000-D1.json": "df715e9a8290457010272adef2a05d01704059dda492c89e21179b27da8251bd",
+    "minicpm2000-D3.json": "fcfe97ff873ad21cd02b5ebf16741d12b257555dc9d78148173aad7b7852ffdf",
+    "minicpm2000-D4.json": "8783864908208a7bb7f7a485dbd0888ae1ffa7644eaff56ec50cf769c622d6c6",
+    "minicpm2000-common.json": "f150cb86c8aa3568a3a7940ae4f6124532b4e5236552c86d5fbb1fd3a7ffe9ba",
+    "pollard_mixed-common.json": "a7f6bdd6d0d809863bee5be0e7d92613d9ed1369d5ab35fe9b0ee5d4cc9d7caa",
+    "qwen4000-best-dev.json": "85677806ffb9d6a6761d9fd43bb1cb0f2d23bac3319584b02e4afee4f5f48478",
+    "qwen4000-common.json": "faf2b2ef33916338567c40f487d13c24d34bdbc29b013c46f6faafa012963b9b",
+    "scoring-output.txt": "00de5828f9cc39cb7eb1b9cec362256cc985407ac2e92e406259d01dfa301faa",
+    "source_validation.py": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e",
+    "spark4000-best-dev.json": "9eb6fc272149480e8a429d173fcfb8fe15d685d8820077420205edb23e47ea97",
+    "spark4000-common.json": "c41afb15d19cf49a9f5d7ee4dbbc7e00ccd5f2249219eda399439a01184a7db9",
+    "summary.json": "becf85176f2d0249e92b44430175bafdeb7da7b928e62b3b5086f7b26b7a5659",
+    "unit-tests.txt": "ca059fc2584e150c93a69a06f68c98308cee1afc205317e642e44cdca3b90035"
+  },
+  "exclude": [
+    "**/__pycache__/**",
+    "**/*.pyc"
+  ],
+  "source_sha256": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e"
+}

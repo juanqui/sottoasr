@@ -1,0 +1,172 @@
+{
+  "description": "Revealed development smoke cases only; not independent qualification. Reported sentence uses the user-approved natural target. Other cleanup misses may fall back to the full source.",
+  "cases": [
+    {
+      "id": "reported_sentence",
+      "raw": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+      "expected": "This is a test to see if this can remove all those things from the sentences.",
+      "acceptable_outputs": [
+        "This is a test to see if this can remove all those things from the sentences."
+      ],
+      "protected_spans": []
+    },
+    {
+      "id": "dev_02",
+      "raw": "The token um, should remain because it is the literal name of this field.",
+      "expected": "The token um, should remain because it is the literal name of this field.",
+      "protected_spans": []
+    },
+    {
+      "id": "dev_03",
+      "raw": "Please uh, type a a into the box without removing either letter.",
+      "expected": "Please type a a into the box without removing either letter.",
+      "protected_spans": []
+    },
+    {
+      "id": "dev_07",
+      "raw": "The name Um, belongs to the customer in this ticket.",
+      "expected": "The name Um, belongs to the customer in this ticket.",
+      "protected_spans": []
+    },
+    {
+      "id": "dev_08",
+      "raw": "I I wrote the word erm, in the glossary yesterday.",
+      "expected": "I wrote the word erm, in the glossary yesterday.",
+      "protected_spans": []
+    },
+    {
+      "id": "release_202",
+      "raw": "Dr. Um um confirmed that the spare lens is available.",
+      "expected": "Dr. Um confirmed that the spare lens is available.",
+      "protected_spans": [
+        {
+          "text": "Dr. Um",
+          "start_byte": 0,
+          "end_byte": 6
+        }
+      ]
+    },
+    {
+      "id": "release_220",
+      "raw": "The sample tag ends in uh, um.",
+      "expected": "The sample tag ends in uh.",
+      "protected_spans": [
+        {
+          "text": "uh",
+          "start_byte": 23,
+          "end_byte": 25
+        }
+      ]
+    },
+    {
+      "id": "release_225",
+      "raw": "Set the request parameter um to the value returned by unit_multiplier.",
+      "expected": "Set the request parameter um to the value returned by unit_multiplier.",
+      "protected_spans": [
+        {
+          "text": "um",
+          "start_byte": 26,
+          "end_byte": 28
+        },
+        {
+          "text": "unit_multiplier",
+          "start_byte": 54,
+          "end_byte": 69
+        }
+      ]
+    },
+    {
+      "id": "release_242",
+      "raw": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "expected": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "protected_spans": []
+    },
+    {
+      "id": "release_030",
+      "raw": "The adapter uh supports 24 volts, and um the fuse is rated for 3 amps.",
+      "expected": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+      "protected_spans": [
+        {
+          "text": "24 volts",
+          "start_byte": 24,
+          "end_byte": 32
+        },
+        {
+          "text": "3 amps",
+          "start_byte": 63,
+          "end_byte": 69
+        }
+      ]
+    },
+    {
+      "id": "release_217",
+      "raw": "The length is um twenty, sorry, thirty centimeters after trimming.",
+      "expected": "The length is twenty, sorry, thirty centimeters after trimming.",
+      "protected_spans": [
+        {
+          "text": "twenty",
+          "start_byte": 17,
+          "end_byte": 23
+        },
+        {
+          "text": "thirty centimeters",
+          "start_byte": 32,
+          "end_byte": 50
+        }
+      ]
+    },
+    {
+      "id": "semantic_47",
+      "raw": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "expected": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "protected_spans": [
+        {
+          "text": "two cartons",
+          "kind": "numeric_fact",
+          "occurrence_in_source": 1,
+          "start_byte": 64,
+          "end_byte": 75
+        },
+        {
+          "text": "first shipment",
+          "kind": "numeric_fact",
+          "occurrence_in_source": 1,
+          "start_byte": 85,
+          "end_byte": 99
+        },
+        {
+          "text": "One carton",
+          "kind": "numeric_fact",
+          "occurrence_in_source": 1,
+          "start_byte": 186,
+          "end_byte": 196
+        },
+        {
+          "text": "eighteen units",
+          "kind": "numeric_fact",
+          "occurrence_in_source": 1,
+          "start_byte": 368,
+          "end_byte": 382
+        }
+      ]
+    },
+    {
+      "id": "authored_quote",
+      "raw": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+      "expected": "The exact text is \"say \\\"um, uh\\\" now\" on screen.",
+      "protected_terms": []
+    },
+    {
+      "id": "authored_code",
+      "raw": "Keep ``um uh`` intact.",
+      "expected": "Keep ``um uh`` intact.",
+      "protected_terms": []
+    },
+    {
+      "id": "authored_negation",
+      "raw": "Please do not um enable automatic deletion for archived projects.",
+      "expected": "Please do not enable automatic deletion for archived projects.",
+      "protected_terms": []
+    }
+  ]
+}

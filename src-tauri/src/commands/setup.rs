@@ -14,15 +14,16 @@ pub async fn get_asr_backend() -> Result<serde_json::Value, String> {
 
 /// Get detailed model status.
 #[tauri::command]
-pub async fn get_model_status() -> Result<ModelStatus, String> {
-    Ok(model::get_model_status())
+pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus, String> {
+    let mut status = model::get_model_status();
+    status.loaded = state.is_model_loaded.load(std::sync::atomic::Ordering::SeqCst);
+    Ok(status)
 }
 
 /// Check if the app needs onboarding (first-launch setup).
 #[tauri::command]
 pub async fn needs_onboarding(state: State<'_, AppState>) -> Result<bool, String> {
-    let engine = state.asr_engine.lock().await;
-    Ok(!engine.is_ready())
+    Ok(!state.is_model_loaded.load(std::sync::atomic::Ordering::SeqCst))
 }
 
 /// Initialize the ASR engine.
@@ -40,27 +41,16 @@ pub async fn init_asr(
         "backend": model::backend_name(),
     })).map_err(|e| e.to_string())?;
 
-    // Take the engine out of the mutex so we can pass it to spawn_blocking
-    let mut engine = state.asr_engine.lock().await;
-
-    if engine.is_ready() {
-        log::info!("ASR engine already initialized");
-        return Ok(());
-    }
-
-    log::info!("Initializing ASR engine: {}", engine.backend_name());
-
-    // FluidAudio's init() blocks the thread via DispatchSemaphore.
-    // We MUST run it on a blocking thread, not on the async runtime.
-    let init_result = engine.init();
+    let init_result = crate::asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await;
 
     match init_result {
         Ok(()) => {
             state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+            crate::commands::vocabulary::restore_cached(app.clone());
             app.emit("asr-init-complete", serde_json::json!({
-                "backend": engine.backend_name(),
+                "backend": model::backend_name(),
             })).map_err(|e| e.to_string())?;
-            log::info!("ASR engine ready: {}", engine.backend_name());
+            log::info!("ASR engine ready: {}", model::backend_name());
             Ok(())
         }
         Err(e) => {
@@ -121,10 +111,10 @@ pub async fn complete_setup(
 
     // Initialize ASR — FluidAudio blocks for 20-30s on first run
     let asr_ok = {
-        let mut engine = state.asr_engine.lock().await;
-        match engine.init() {
+        match crate::asr::engine::with_engine(&state.asr_engine, |engine| engine.init()).await {
             Ok(()) => {
                 state.is_model_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                crate::commands::vocabulary::restore_cached(app.clone());
                 true
             }
             Err(e) => {

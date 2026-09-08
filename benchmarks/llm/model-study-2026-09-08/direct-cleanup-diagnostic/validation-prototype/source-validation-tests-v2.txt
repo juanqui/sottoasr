@@ -1,0 +1,21 @@
+test_adjacent_duplicates_have_equivalent_alignments (__main__.ValidatorTests.test_adjacent_duplicates_have_equivalent_alignments) ... ok
+test_capitalized_leading_and_terminal_fillers (__main__.ValidatorTests.test_capitalized_leading_and_terminal_fillers) ... ok
+test_incomplete_and_work_limits (__main__.ValidatorTests.test_incomplete_and_work_limits) ... ok
+test_known_contextual_limits_are_explicit (__main__.ValidatorTests.test_known_contextual_limits_are_explicit) ... ok
+test_literal_mentions_and_deliberate_emphasis (__main__.ValidatorTests.test_literal_mentions_and_deliberate_emphasis) ... ok
+test_materially_different_duplicate_alignment_is_rejected (__main__.ValidatorTests.test_materially_different_duplicate_alignment_is_rejected) ... ok
+test_multi_filler_article_restart_general_category (__main__.ValidatorTests.test_multi_filler_article_restart_general_category) ... ok
+test_protected_content_and_final_clause (__main__.ValidatorTests.test_protected_content_and_final_clause) ... ok
+test_quotes_code_dictionary_and_identifiers (__main__.ValidatorTests.test_quotes_code_dictionary_and_identifiers) ... ok
+test_repeated_phrase (__main__.ValidatorTests.test_repeated_phrase) ... ok
+test_source_punctuation_and_paragraphs_are_authoritative (__main__.ValidatorTests.test_source_punctuation_and_paragraphs_are_authoritative) ... ok
+test_unsupported_restart_and_agreement (__main__.ValidatorTests.test_unsupported_restart_and_agreement) ... ok
+test_utf8_offsets_reconstruct_source (__main__.ValidatorTests.test_utf8_offsets_reconstruct_source) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.033s
+
+OK
+real 0.37
+user 0.10
+sys 0.02

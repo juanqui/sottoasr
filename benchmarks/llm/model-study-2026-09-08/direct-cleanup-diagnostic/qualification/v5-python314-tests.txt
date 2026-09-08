@@ -1,0 +1,29 @@
+test_adjacent_duplicates_have_equivalent_alignments (__main__.ValidatorTests.test_adjacent_duplicates_have_equivalent_alignments) ... ok
+test_bounded_literal_payloads (__main__.ValidatorTests.test_bounded_literal_payloads) ... ok
+test_bounded_notation_payloads (__main__.ValidatorTests.test_bounded_notation_payloads) ... ok
+test_capitalized_leading_and_terminal_fillers (__main__.ValidatorTests.test_capitalized_leading_and_terminal_fillers) ... ok
+test_code_escaped_delimiter_runs_remain_payload (__main__.ValidatorTests.test_code_escaped_delimiter_runs_remain_payload) ... ok
+test_complete_backtick_runs_protect_nested_short_and_unterminated_payloads (__main__.ValidatorTests.test_complete_backtick_runs_protect_nested_short_and_unterminated_payloads) ... ok
+test_escaped_contractions_and_quote_style_keep_the_inner_payload_exact (__main__.ValidatorTests.test_escaped_contractions_and_quote_style_keep_the_inner_payload_exact) ... ok
+test_escaped_quotes_backslash_parity_and_unterminated_payloads (__main__.ValidatorTests.test_escaped_quotes_backslash_parity_and_unterminated_payloads) ... ok
+test_explicit_reported_sound_is_distinct_from_an_ordinary_filler (__main__.ValidatorTests.test_explicit_reported_sound_is_distinct_from_an_ordinary_filler) ... ok
+test_final_period_is_source_owned (__main__.ValidatorTests.test_final_period_is_source_owned) ... ok
+test_incomplete_and_work_limits (__main__.ValidatorTests.test_incomplete_and_work_limits) ... ok
+test_known_contextual_limits_are_explicit (__main__.ValidatorTests.test_known_contextual_limits_are_explicit) ... ok
+test_literal_mentions_and_deliberate_emphasis (__main__.ValidatorTests.test_literal_mentions_and_deliberate_emphasis) ... ok
+test_materially_different_duplicate_alignment_is_rejected (__main__.ValidatorTests.test_materially_different_duplicate_alignment_is_rejected) ... ok
+test_multi_filler_article_restart_general_category (__main__.ValidatorTests.test_multi_filler_article_restart_general_category) ... ok
+test_multiline_and_unterminated_quote_code_payloads (__main__.ValidatorTests.test_multiline_and_unterminated_quote_code_payloads) ... ok
+test_paired_filler_dashes_have_one_explicit_gap (__main__.ValidatorTests.test_paired_filler_dashes_have_one_explicit_gap) ... ok
+test_protected_content_and_final_clause (__main__.ValidatorTests.test_protected_content_and_final_clause) ... ok
+test_quote_style_changes_preserve_exact_payload_and_original_delimiters (__main__.ValidatorTests.test_quote_style_changes_preserve_exact_payload_and_original_delimiters) ... ok
+test_quotes_code_dictionary_and_identifiers (__main__.ValidatorTests.test_quotes_code_dictionary_and_identifiers) ... ok
+test_repeated_phrase (__main__.ValidatorTests.test_repeated_phrase) ... ok
+test_source_punctuation_and_paragraphs_are_authoritative (__main__.ValidatorTests.test_source_punctuation_and_paragraphs_are_authoritative) ... ok
+test_unsupported_restart_and_agreement (__main__.ValidatorTests.test_unsupported_restart_and_agreement) ... ok
+test_utf8_offsets_reconstruct_source (__main__.ValidatorTests.test_utf8_offsets_reconstruct_source) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 0.018s
+
+OK

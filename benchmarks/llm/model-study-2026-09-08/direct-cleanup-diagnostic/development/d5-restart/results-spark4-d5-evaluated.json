@@ -1,0 +1,4488 @@
+{
+  "model_result_sha256": "2a48de9d3e4360f4a5f5e5d33dc00583643cd933234d67961b1e08f3ab9cb23d",
+  "gold_sha256": "7fe75d5b27340c57d71ce329cabb868ca2a97417e3332ff9c53446b2d8067f9c",
+  "validator_sha256": "552391856a3db623f063706403534d183da9d4e994cd78387e58383442de081b",
+  "protected_annotation_sha256": "7fe75d5b27340c57d71ce329cabb868ca2a97417e3332ff9c53446b2d8067f9c",
+  "protected_annotations_embedded": true,
+  "summary": {
+    "all": {
+      "cases": 36,
+      "model_completed": 36,
+      "proposals_accepted": 23,
+      "model_median_s": 1.64281079149805,
+      "validation_median_s": 6.156301242299378e-05,
+      "raw": {
+        "quality_eligible_cases": 36,
+        "accepted_exact": 25,
+        "protected_failure_cases": 3,
+        "span_metrics": {
+          "cases": 36,
+          "scored_cases": 36,
+          "unscored_cases": 0,
+          "edit_required_cases": 22,
+          "complete_cleanup_cases": 14,
+          "complete_cleanup_rate": 0.6363636363636364,
+          "preserve_cases": 14,
+          "preserve_lexically_unchanged": 11,
+          "invalid_preservation_cases": 10,
+          "source_word_additions": 1,
+          "required_word_losses": 10,
+          "gold_delete_tokens_all_cases": 45,
+          "correctly_deleted_tokens_scored_cases": 42,
+          "safe_correctly_deleted_tokens_scored_cases": 30,
+          "deletion_token_recall_lower_bound": 0.9333333333333333,
+          "safe_deletion_token_recall_lower_bound": 0.6666666666666666,
+          "gold_delete_runs_scored_cases": 28,
+          "completed_delete_runs_scored_cases": 25,
+          "deletion_run_recall_scored_cases": 0.8928571428571429,
+          "safe_deletion_run_recall_scored_cases": 0.7142857142857143,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 36,
+        "accepted_exact": 20,
+        "protected_failure_cases": 3,
+        "span_metrics": {
+          "cases": 36,
+          "scored_cases": 36,
+          "unscored_cases": 0,
+          "edit_required_cases": 22,
+          "complete_cleanup_cases": 8,
+          "complete_cleanup_rate": 0.36363636363636365,
+          "preserve_cases": 14,
+          "preserve_lexically_unchanged": 13,
+          "invalid_preservation_cases": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 3,
+          "gold_delete_tokens_all_cases": 45,
+          "correctly_deleted_tokens_scored_cases": 22,
+          "safe_correctly_deleted_tokens_scored_cases": 20,
+          "deletion_token_recall_lower_bound": 0.4888888888888889,
+          "safe_deletion_token_recall_lower_bound": 0.4444444444444444,
+          "gold_delete_runs_scored_cases": 28,
+          "completed_delete_runs_scored_cases": 16,
+          "deletion_run_recall_scored_cases": 0.5714285714285714,
+          "safe_deletion_run_recall_scored_cases": 0.5,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "adversarial_cleanup": {
+      "cases": 3,
+      "model_completed": 3,
+      "proposals_accepted": 3,
+      "model_median_s": 1.6386728749494068,
+      "validation_median_s": 8.84170294739306e-05,
+      "raw": {
+        "quality_eligible_cases": 3,
+        "accepted_exact": 1,
+        "protected_failure_cases": 2,
+        "span_metrics": {
+          "cases": 3,
+          "scored_cases": 3,
+          "unscored_cases": 0,
+          "edit_required_cases": 3,
+          "complete_cleanup_cases": 1,
+          "complete_cleanup_rate": 0.3333333333333333,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 2,
+          "gold_delete_tokens_all_cases": 3,
+          "correctly_deleted_tokens_scored_cases": 3,
+          "safe_correctly_deleted_tokens_scored_cases": 1,
+          "deletion_token_recall_lower_bound": 1.0,
+          "safe_deletion_token_recall_lower_bound": 0.3333333333333333,
+          "gold_delete_runs_scored_cases": 3,
+          "completed_delete_runs_scored_cases": 3,
+          "deletion_run_recall_scored_cases": 1.0,
+          "safe_deletion_run_recall_scored_cases": 0.3333333333333333,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 3,
+        "accepted_exact": 1,
+        "protected_failure_cases": 2,
+        "span_metrics": {
+          "cases": 3,
+          "scored_cases": 3,
+          "unscored_cases": 0,
+          "edit_required_cases": 3,
+          "complete_cleanup_cases": 1,
+          "complete_cleanup_rate": 0.3333333333333333,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 2,
+          "gold_delete_tokens_all_cases": 3,
+          "correctly_deleted_tokens_scored_cases": 3,
+          "safe_correctly_deleted_tokens_scored_cases": 1,
+          "deletion_token_recall_lower_bound": 1.0,
+          "safe_deletion_token_recall_lower_bound": 0.3333333333333333,
+          "gold_delete_runs_scored_cases": 3,
+          "completed_delete_runs_scored_cases": 3,
+          "deletion_run_recall_scored_cases": 1.0,
+          "safe_deletion_run_recall_scored_cases": 0.3333333333333333,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "adversarial_preserve": {
+      "cases": 2,
+      "model_completed": 2,
+      "proposals_accepted": 2,
+      "model_median_s": 1.8579952290165238,
+      "validation_median_s": 2.2249529138207436e-05,
+      "raw": {
+        "quality_eligible_cases": 2,
+        "accepted_exact": 2,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 2,
+          "scored_cases": 2,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 2,
+          "preserve_lexically_unchanged": 2,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 2,
+        "accepted_exact": 2,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 2,
+          "scored_cases": 2,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 2,
+          "preserve_lexically_unchanged": 2,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "development": {
+      "cases": 8,
+      "model_completed": 8,
+      "proposals_accepted": 4,
+      "model_median_s": 1.6136946665064897,
+      "validation_median_s": 7.691650534979999e-05,
+      "raw": {
+        "quality_eligible_cases": 8,
+        "accepted_exact": 4,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 8,
+          "scored_cases": 8,
+          "unscored_cases": 0,
+          "edit_required_cases": 4,
+          "complete_cleanup_cases": 2,
+          "complete_cleanup_rate": 0.5,
+          "preserve_cases": 4,
+          "preserve_lexically_unchanged": 2,
+          "invalid_preservation_cases": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 4,
+          "gold_delete_tokens_all_cases": 7,
+          "correctly_deleted_tokens_scored_cases": 7,
+          "safe_correctly_deleted_tokens_scored_cases": 5,
+          "deletion_token_recall_lower_bound": 1.0,
+          "safe_deletion_token_recall_lower_bound": 0.7142857142857143,
+          "gold_delete_runs_scored_cases": 7,
+          "completed_delete_runs_scored_cases": 7,
+          "deletion_run_recall_scored_cases": 1.0,
+          "safe_deletion_run_recall_scored_cases": 0.7142857142857143,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 8,
+        "accepted_exact": 6,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 8,
+          "scored_cases": 8,
+          "unscored_cases": 0,
+          "edit_required_cases": 4,
+          "complete_cleanup_cases": 2,
+          "complete_cleanup_rate": 0.5,
+          "preserve_cases": 4,
+          "preserve_lexically_unchanged": 4,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 7,
+          "correctly_deleted_tokens_scored_cases": 5,
+          "safe_correctly_deleted_tokens_scored_cases": 5,
+          "deletion_token_recall_lower_bound": 0.7142857142857143,
+          "safe_deletion_token_recall_lower_bound": 0.7142857142857143,
+          "gold_delete_runs_scored_cases": 7,
+          "completed_delete_runs_scored_cases": 5,
+          "deletion_run_recall_scored_cases": 0.7142857142857143,
+          "safe_deletion_run_recall_scored_cases": 0.7142857142857143,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "ordinary_cleanup": {
+      "cases": 8,
+      "model_completed": 8,
+      "proposals_accepted": 3,
+      "model_median_s": 1.6154420420061797,
+      "validation_median_s": 5.485396832227707e-05,
+      "raw": {
+        "quality_eligible_cases": 8,
+        "accepted_exact": 7,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 8,
+          "scored_cases": 8,
+          "unscored_cases": 0,
+          "edit_required_cases": 8,
+          "complete_cleanup_cases": 7,
+          "complete_cleanup_rate": 0.875,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 11,
+          "correctly_deleted_tokens_scored_cases": 10,
+          "safe_correctly_deleted_tokens_scored_cases": 10,
+          "deletion_token_recall_lower_bound": 0.9090909090909091,
+          "safe_deletion_token_recall_lower_bound": 0.9090909090909091,
+          "gold_delete_runs_scored_cases": 9,
+          "completed_delete_runs_scored_cases": 8,
+          "deletion_run_recall_scored_cases": 0.8888888888888888,
+          "safe_deletion_run_recall_scored_cases": 0.8888888888888888,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 8,
+        "accepted_exact": 1,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 8,
+          "scored_cases": 8,
+          "unscored_cases": 0,
+          "edit_required_cases": 8,
+          "complete_cleanup_cases": 2,
+          "complete_cleanup_rate": 0.25,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 11,
+          "correctly_deleted_tokens_scored_cases": 3,
+          "safe_correctly_deleted_tokens_scored_cases": 3,
+          "deletion_token_recall_lower_bound": 0.2727272727272727,
+          "safe_deletion_token_recall_lower_bound": 0.2727272727272727,
+          "gold_delete_runs_scored_cases": 9,
+          "completed_delete_runs_scored_cases": 3,
+          "deletion_run_recall_scored_cases": 0.3333333333333333,
+          "safe_deletion_run_recall_scored_cases": 0.3333333333333333,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "ordinary_preserve": {
+      "cases": 2,
+      "model_completed": 2,
+      "proposals_accepted": 2,
+      "model_median_s": 3.8734767290006857,
+      "validation_median_s": 0.00011675001587718725,
+      "raw": {
+        "quality_eligible_cases": 2,
+        "accepted_exact": 2,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 2,
+          "scored_cases": 2,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 2,
+          "preserve_lexically_unchanged": 2,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 2,
+        "accepted_exact": 2,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 2,
+          "scored_cases": 2,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 2,
+          "preserve_lexically_unchanged": 2,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "reported_sample": {
+      "cases": 1,
+      "model_completed": 1,
+      "proposals_accepted": 1,
+      "model_median_s": 1.9499013749882579,
+      "validation_median_s": 0.00040166598046198487,
+      "raw": {
+        "quality_eligible_cases": 1,
+        "accepted_exact": 1,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 1,
+          "scored_cases": 1,
+          "unscored_cases": 0,
+          "edit_required_cases": 1,
+          "complete_cleanup_cases": 1,
+          "complete_cleanup_rate": 1.0,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 4,
+          "correctly_deleted_tokens_scored_cases": 4,
+          "safe_correctly_deleted_tokens_scored_cases": 4,
+          "deletion_token_recall_lower_bound": 1.0,
+          "safe_deletion_token_recall_lower_bound": 1.0,
+          "gold_delete_runs_scored_cases": 3,
+          "completed_delete_runs_scored_cases": 3,
+          "deletion_run_recall_scored_cases": 1.0,
+          "safe_deletion_run_recall_scored_cases": 1.0,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 1,
+        "accepted_exact": 1,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 1,
+          "scored_cases": 1,
+          "unscored_cases": 0,
+          "edit_required_cases": 1,
+          "complete_cleanup_cases": 1,
+          "complete_cleanup_rate": 1.0,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 4,
+          "correctly_deleted_tokens_scored_cases": 4,
+          "safe_correctly_deleted_tokens_scored_cases": 4,
+          "deletion_token_recall_lower_bound": 1.0,
+          "safe_deletion_token_recall_lower_bound": 1.0,
+          "gold_delete_runs_scored_cases": 3,
+          "completed_delete_runs_scored_cases": 3,
+          "deletion_run_recall_scored_cases": 1.0,
+          "safe_deletion_run_recall_scored_cases": 1.0,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "restart_cleanup": {
+      "cases": 6,
+      "model_completed": 6,
+      "proposals_accepted": 2,
+      "model_median_s": 1.6243602710019331,
+      "validation_median_s": 7.44589779060334e-05,
+      "raw": {
+        "quality_eligible_cases": 6,
+        "accepted_exact": 3,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 6,
+          "scored_cases": 6,
+          "unscored_cases": 0,
+          "edit_required_cases": 6,
+          "complete_cleanup_cases": 3,
+          "complete_cleanup_rate": 0.5,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 3,
+          "source_word_additions": 1,
+          "required_word_losses": 3,
+          "gold_delete_tokens_all_cases": 20,
+          "correctly_deleted_tokens_scored_cases": 18,
+          "safe_correctly_deleted_tokens_scored_cases": 10,
+          "deletion_token_recall_lower_bound": 0.9,
+          "safe_deletion_token_recall_lower_bound": 0.5,
+          "gold_delete_runs_scored_cases": 6,
+          "completed_delete_runs_scored_cases": 4,
+          "deletion_run_recall_scored_cases": 0.6666666666666666,
+          "safe_deletion_run_recall_scored_cases": 0.5,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 6,
+        "accepted_exact": 2,
+        "protected_failure_cases": 0,
+        "span_metrics": {
+          "cases": 6,
+          "scored_cases": 6,
+          "unscored_cases": 0,
+          "edit_required_cases": 6,
+          "complete_cleanup_cases": 2,
+          "complete_cleanup_rate": 0.3333333333333333,
+          "preserve_cases": 0,
+          "preserve_lexically_unchanged": 0,
+          "invalid_preservation_cases": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "gold_delete_tokens_all_cases": 20,
+          "correctly_deleted_tokens_scored_cases": 7,
+          "safe_correctly_deleted_tokens_scored_cases": 7,
+          "deletion_token_recall_lower_bound": 0.35,
+          "safe_deletion_token_recall_lower_bound": 0.35,
+          "gold_delete_runs_scored_cases": 6,
+          "completed_delete_runs_scored_cases": 2,
+          "deletion_run_recall_scored_cases": 0.3333333333333333,
+          "safe_deletion_run_recall_scored_cases": 0.3333333333333333,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    },
+    "restart_preserve": {
+      "cases": 6,
+      "model_completed": 6,
+      "proposals_accepted": 6,
+      "model_median_s": 1.8559459999960382,
+      "validation_median_s": 3.366649616509676e-05,
+      "raw": {
+        "quality_eligible_cases": 6,
+        "accepted_exact": 5,
+        "protected_failure_cases": 1,
+        "span_metrics": {
+          "cases": 6,
+          "scored_cases": 6,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 6,
+          "preserve_lexically_unchanged": 5,
+          "invalid_preservation_cases": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      },
+      "delivered": {
+        "quality_eligible_cases": 6,
+        "accepted_exact": 5,
+        "protected_failure_cases": 1,
+        "span_metrics": {
+          "cases": 6,
+          "scored_cases": 6,
+          "unscored_cases": 0,
+          "edit_required_cases": 0,
+          "complete_cleanup_cases": 0,
+          "complete_cleanup_rate": null,
+          "preserve_cases": 6,
+          "preserve_lexically_unchanged": 5,
+          "invalid_preservation_cases": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "gold_delete_tokens_all_cases": 0,
+          "correctly_deleted_tokens_scored_cases": 0,
+          "safe_correctly_deleted_tokens_scored_cases": 0,
+          "deletion_token_recall_lower_bound": null,
+          "safe_deletion_token_recall_lower_bound": null,
+          "gold_delete_runs_scored_cases": 0,
+          "completed_delete_runs_scored_cases": 0,
+          "deletion_run_recall_scored_cases": null,
+          "safe_deletion_run_recall_scored_cases": null,
+          "run_metrics_cover_all_cases": true
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "reported_sentence",
+      "group": "reported_sample",
+      "source": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+      "expected": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+      "acceptable_outputs": [
+        "This is a test to see if this can remove all the yeah, those things from the sentences.",
+        "This is a test to see if this can remove all those things from the sentences."
+      ],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            22,
+            25
+          ],
+          [
+            37,
+            40
+          ],
+          [
+            55,
+            61
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00040166598046198487,
+      "model_request_s": 1.9499013749882579,
+      "serial_model_plus_offline_validation_s": 1.9503030409687199,
+      "raw": {
+        "output": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 22,
+          "gold_words": 18,
+          "output_words": 18,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 4,
+          "safe_correctly_deleted_tokens": 4,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 3,
+          "completed_delete_runs": 3,
+          "safe_completed_delete_runs": 3,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 3,
+          "run_alignment_correctly_deleted_tokens": 4,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 10,
+              "end_word": 11,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 14,
+              "end_word": 16,
+              "words": [
+                "um",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 22,
+          "gold_words": 18,
+          "output_words": 18,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 4,
+          "safe_correctly_deleted_tokens": 4,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 3,
+          "completed_delete_runs": 3,
+          "safe_completed_delete_runs": 3,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 3,
+          "run_alignment_correctly_deleted_tokens": 4,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 10,
+              "end_word": 11,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 14,
+              "end_word": 16,
+              "words": [
+                "um",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_01",
+      "group": "development",
+      "source": "I I bought the the wrong charger, um, this morning.",
+      "expected": "I bought the wrong charger, this morning.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "I bought the wrong charger, this morning.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            2,
+            4
+          ],
+          [
+            15,
+            19
+          ],
+          [
+            34,
+            38
+          ]
+        ],
+        "categories": [
+          "adjacent repeated span",
+          "hesitation"
+        ],
+        "equivalent_alignments": 4,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.0002495420048944652,
+      "model_request_s": 1.567690666008275,
+      "serial_model_plus_offline_validation_s": 1.5679402080131695,
+      "raw": {
+        "output": "I bought the wrong charger, this morning.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 7,
+          "output_words": 7,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 3,
+          "completed_delete_runs": 3,
+          "safe_completed_delete_runs": 3,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 3,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 4,
+          "output_alignment_count": 4,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "i"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 4,
+              "end_word": 5,
+              "words": [
+                "the"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 7,
+              "end_word": 8,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I bought the wrong charger, this morning.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 7,
+          "output_words": 7,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 3,
+          "completed_delete_runs": 3,
+          "safe_completed_delete_runs": 3,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 3,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 4,
+          "output_alignment_count": 4,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "i"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 4,
+              "end_word": 5,
+              "words": [
+                "the"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 7,
+              "end_word": 8,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_02",
+      "group": "development",
+      "source": "The token um, should remain because it is the literal name of this field.",
+      "expected": "The token um, should remain because it is the literal name of this field.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "The token um, should remain because it is the literal name of this field.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.8499984182417393e-05,
+      "model_request_s": 1.767982417019084,
+      "serial_model_plus_offline_validation_s": 1.7680109170032665,
+      "raw": {
+        "output": "The token um, should remain because it is the literal name of this field.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 14,
+          "gold_words": 14,
+          "output_words": 14,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The token um, should remain because it is the literal name of this field.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 14,
+          "gold_words": 14,
+          "output_words": 14,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_03",
+      "group": "development",
+      "source": "Please uh, type a a into the box without removing either letter.",
+      "expected": "Please type a a into the box without removing either letter.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "Please uh, type a a into the box without removing either letter.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00011800002539530396,
+      "model_request_s": 1.624458083009813,
+      "serial_model_plus_offline_validation_s": 1.6245760830352083,
+      "raw": {
+        "output": "Please type a into the box without removing either letter.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 11,
+          "output_words": 10,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Please uh, type a a into the box without removing either letter.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 11,
+          "output_words": 12,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "uh"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_04",
+      "group": "development",
+      "source": "Há um, e apenas um, sensor conectado ao computador.",
+      "expected": "Há um, e apenas um, sensor conectado ao computador.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Há um, e apenas um, sensor conectado ao computador.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 1.9041995983570814e-05,
+      "model_request_s": 1.7839918329846114,
+      "serial_model_plus_offline_validation_s": 1.784010874980595,
+      "raw": {
+        "output": "Há um, e apenas um, sensor conectado ao computador.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Há um, e apenas um, sensor conectado ao computador.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_05",
+      "group": "development",
+      "source": "We uh, need to to check the same result again.",
+      "expected": "We need to check the same result again.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "We need to check the same result again.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            3,
+            7
+          ],
+          [
+            15,
+            18
+          ]
+        ],
+        "categories": [
+          "adjacent repeated span",
+          "hesitation"
+        ],
+        "equivalent_alignments": 2,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00021183397620916367,
+      "model_request_s": 1.594064375036396,
+      "serial_model_plus_offline_validation_s": 1.5942762090126052,
+      "raw": {
+        "output": "We need to check the same result again.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 2,
+          "safe_correctly_deleted_tokens": 2,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 2,
+          "completed_delete_runs": 2,
+          "safe_completed_delete_runs": 2,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 2,
+          "run_alignment_correctly_deleted_tokens": 2,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 4,
+              "end_word": 5,
+              "words": [
+                "to"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "We need to check the same result again.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 2,
+          "safe_correctly_deleted_tokens": 2,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 2,
+          "completed_delete_runs": 2,
+          "safe_completed_delete_runs": 2,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 2,
+          "run_alignment_correctly_deleted_tokens": 2,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 4,
+              "end_word": 5,
+              "words": [
+                "to"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_06",
+      "group": "development",
+      "source": "Repeat the words and and as a literal sequence.",
+      "expected": "Repeat the words and and as a literal sequence.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "Repeat the words and and as a literal sequence.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 9.437499102205038e-05,
+      "model_request_s": 1.589000083040446,
+      "serial_model_plus_offline_validation_s": 1.589094458031468,
+      "raw": {
+        "output": "Repeat the words and as a literal sequence.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 9,
+          "output_words": 8,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 2,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Repeat the words and and as a literal sequence.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_07",
+      "group": "development",
+      "source": "The name Um, belongs to the customer in this ticket.",
+      "expected": "The name Um, belongs to the customer in this ticket.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "The name Um, belongs to the customer in this ticket.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 5.570799112319946e-05,
+      "model_request_s": 1.6029312500031665,
+      "serial_model_plus_offline_validation_s": 1.6029869579942897,
+      "raw": {
+        "output": "The name belongs to the customer in this ticket.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 10,
+          "output_words": 9,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The name Um, belongs to the customer in this ticket.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 10,
+          "output_words": 10,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "dev_08",
+      "group": "development",
+      "source": "I I wrote the word erm, in the glossary yesterday.",
+      "expected": "I wrote the word erm, in the glossary yesterday.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "I I wrote the word erm, in the glossary yesterday.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 5.94580196775496e-05,
+      "model_request_s": 1.6406490000081249,
+      "serial_model_plus_offline_validation_s": 1.6407084580278024,
+      "raw": {
+        "output": "I wrote the word, in the glossary yesterday.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "i"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I I wrote the word erm, in the glossary yesterday.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 10,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 1,
+              "end_word": 2,
+              "words": [
+                "i"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_01",
+      "group": "restart_cleanup",
+      "source": "Can you load the um uh those flight cases into the van?",
+      "expected": "Can you load those flight cases into the van?",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Can you load those flight cases into the van?",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            13,
+            23
+          ]
+        ],
+        "categories": [
+          "bounded article restart",
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.0001141249667853117,
+      "model_request_s": 1.625081499980297,
+      "serial_model_plus_offline_validation_s": 1.6251956249470823,
+      "raw": {
+        "output": "Can you load those flight cases into the van?",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "the",
+                "um",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Can you load those flight cases into the van?",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "the",
+                "um",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_02",
+      "group": "restart_cleanup",
+      "source": "I need a erm um that slim adapter for the projector.",
+      "expected": "I need that slim adapter for the projector.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "I need a erm um that slim adapter for the projector.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 6.154202856123447e-05,
+      "model_request_s": 1.6216177910100669,
+      "serial_model_plus_offline_validation_s": 1.621679333038628,
+      "raw": {
+        "output": "I need a slim adapter for the projector.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 2,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.6666666666666666,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 2,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 5,
+              "words": [
+                "a",
+                "erm",
+                "um"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I need a erm um that slim adapter for the projector.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 8,
+          "output_words": 11,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 5,
+              "words": [
+                "a",
+                "erm",
+                "um"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_03",
+      "group": "restart_cleanup",
+      "source": "We can label all the uh um these drawers before the shelves arrive.",
+      "expected": "We can label all these drawers before the shelves arrive.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "We can label all the uh um these drawers before the shelves arrive.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 6.88339932821691e-05,
+      "model_request_s": 1.638573375006672,
+      "serial_model_plus_offline_validation_s": 1.6386422089999542,
+      "raw": {
+        "output": "We can label all these drawers before the shelves arrive.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 13,
+          "gold_words": 10,
+          "output_words": 10,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 4,
+              "end_word": 7,
+              "words": [
+                "the",
+                "uh",
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "We can label all the uh um these drawers before the shelves arrive.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 13,
+          "gold_words": 10,
+          "output_words": 13,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 4,
+              "end_word": 7,
+              "words": [
+                "the",
+                "uh",
+                "um"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_04",
+      "group": "restart_cleanup",
+      "source": "The repair needs an um uh this narrow seal behind the valve.",
+      "expected": "The repair needs this narrow seal behind the valve.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "The repair needs an um uh this narrow seal behind the valve.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 5.9624959249049425e-05,
+      "model_request_s": 1.6236390420235693,
+      "serial_model_plus_offline_validation_s": 1.6236986669828184,
+      "raw": {
+        "output": "The repair needs a narrow seal behind the valve.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 1,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "an",
+                "um",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The repair needs an um uh this narrow seal behind the valve.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 9,
+          "output_words": 12,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "an",
+                "um",
+                "uh"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_05",
+      "group": "restart_cleanup",
+      "source": "Please forward the erm uh yeah, that revised invoice to accounts.",
+      "expected": "Please forward that revised invoice to accounts.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "Please forward the erm uh yeah, that revised invoice to accounts.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 8.008396252989769e-05,
+      "model_request_s": 1.5857927920296788,
+      "serial_model_plus_offline_validation_s": 1.5858728759922087,
+      "raw": {
+        "output": "Please forward the revised invoice to accounts.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 7,
+          "output_words": 7,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.75,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 6,
+              "words": [
+                "the",
+                "erm",
+                "uh",
+                "yeah"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Please forward the erm uh yeah, that revised invoice to accounts.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 7,
+          "output_words": 11,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 6,
+              "words": [
+                "the",
+                "erm",
+                "uh",
+                "yeah"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_06",
+      "group": "restart_cleanup",
+      "source": "I was looking for a um erm, uh, those black retaining clips in the side drawer.",
+      "expected": "I was looking for those black retaining clips in the side drawer.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "I was looking for those black retaining clips in the side drawer.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            18,
+            32
+          ]
+        ],
+        "categories": [
+          "bounded article restart",
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00013312505325302482,
+      "model_request_s": 1.7189065829734318,
+      "serial_model_plus_offline_validation_s": 1.7190397080266848,
+      "raw": {
+        "output": "I was looking for those black retaining clips in the side drawer.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 16,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 4,
+          "safe_correctly_deleted_tokens": 4,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 4,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 4,
+              "end_word": 8,
+              "words": [
+                "a",
+                "um",
+                "erm",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I was looking for those black retaining clips in the side drawer.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 16,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 4,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 4,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 4,
+          "safe_correctly_deleted_tokens": 4,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 4,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 4,
+              "end_word": 8,
+              "words": [
+                "a",
+                "um",
+                "erm",
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_07",
+      "group": "restart_preserve",
+      "source": "Yeah, those replacement pads are the ones we agreed to order.",
+      "expected": "Yeah, those replacement pads are the ones we agreed to order.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Yeah, those replacement pads are the ones we agreed to order.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.0583043806254864e-05,
+      "model_request_s": 1.7374945830088109,
+      "serial_model_plus_offline_validation_s": 1.7375151660526171,
+      "raw": {
+        "output": "Yeah, those replacement pads are the ones we agreed to order.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 11,
+          "output_words": 11,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Yeah, those replacement pads are the ones we agreed to order.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 11,
+          "output_words": 11,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_08",
+      "group": "restart_preserve",
+      "source": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+      "expected": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 8.841603994369507e-05,
+      "model_request_s": 1.855828624975402,
+      "serial_model_plus_offline_validation_s": 1.8559170410153456,
+      "raw": {
+        "output": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 15,
+          "output_words": 15,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I wanted the metal bracket, but this plastic bracket is the one they actually supplied.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 15,
+          "output_words": 15,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_09",
+      "group": "restart_preserve",
+      "source": "We ordered a short cable, no, a long cable for the overhead run.",
+      "expected": "We ordered a short cable, no, a long cable for the overhead run.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "We ordered a short cable, no, a long cable for the overhead run.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.4124979972839355e-05,
+      "model_request_s": 1.8147756669786759,
+      "serial_model_plus_offline_validation_s": 1.8147997919586487,
+      "raw": {
+        "output": "We ordered a short cable, no, a long cable for the overhead run.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 13,
+          "gold_words": 13,
+          "output_words": 13,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "We ordered a short cable, no, a long cable for the overhead run.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 13,
+          "gold_words": 13,
+          "output_words": 13,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_10",
+      "group": "restart_preserve",
+      "source": "The note says “the um uh those,” and every word is part of the example.",
+      "expected": "The note says “the um uh those,” and every word is part of the example.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "The note says “the um uh those,” and every word is part of the example.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 3.866699989885092e-05,
+      "model_request_s": 1.8560633750166744,
+      "serial_model_plus_offline_validation_s": 1.8561020420165733,
+      "raw": {
+        "output": "The note says “the um uh those,” and every word is part of the example.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 15,
+          "output_words": 15,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The note says “the um uh those,” and every word is part of the example.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 15,
+          "output_words": 15,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "restart_11",
+      "group": "restart_preserve",
+      "source": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+      "expected": "In the recording, the speaker says a, then um uh, and finally that before the noun adapter.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "In the recording, the speaker says a, then um and finally that before the noun adapter.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            46,
+            50
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00015120801981538534,
+      "model_request_s": 1.9003935829969123,
+      "serial_model_plus_offline_validation_s": 1.9005447910167277,
+      "raw": {
+        "output": "In the recording, the speaker says a, then um, and finally that before the noun adapter.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 17,
+          "gold_words": 17,
+          "output_words": 16,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": [
+          {
+            "text": "a, then um uh, and finally that",
+            "start_byte": 35,
+            "end_byte": 66
+          }
+        ]
+      },
+      "delivered": {
+        "output": "In the recording, the speaker says a, then um and finally that before the noun adapter.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 17,
+          "gold_words": 17,
+          "output_words": 16,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": [
+          {
+            "text": "a, then um uh, and finally that",
+            "start_byte": 35,
+            "end_byte": 66
+          }
+        ]
+      }
+    },
+    {
+      "id": "restart_12",
+      "group": "restart_preserve",
+      "source": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+      "expected": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.8665992431342602e-05,
+      "model_request_s": 1.9124544999795035,
+      "serial_model_plus_offline_validation_s": 1.9124831659719348,
+      "raw": {
+        "output": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 16,
+          "gold_words": 16,
+          "output_words": 16,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Yeah, I first chose a generic mount; that specific mount was offered only after the inspection.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 16,
+          "gold_words": 16,
+          "output_words": 16,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_202",
+      "group": "adversarial_cleanup",
+      "source": "Dr. Um um confirmed that the spare lens is available.",
+      "expected": "Dr. Um confirmed that the spare lens is available.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Dr. confirmed that the spare lens is available.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            4,
+            10
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 8.84170294739306e-05,
+      "model_request_s": 1.6386728749494068,
+      "serial_model_plus_offline_validation_s": 1.6387612919788808,
+      "raw": {
+        "output": "Dr. confirmed that the spare lens is available.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": [
+          {
+            "text": "Dr. Um",
+            "start_byte": 0,
+            "end_byte": 6
+          }
+        ]
+      },
+      "delivered": {
+        "output": "Dr. confirmed that the spare lens is available.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": [
+          {
+            "text": "Dr. Um",
+            "start_byte": 0,
+            "end_byte": 6
+          }
+        ]
+      }
+    },
+    {
+      "id": "release_220",
+      "group": "adversarial_cleanup",
+      "source": "The sample tag ends in uh, um.",
+      "expected": "The sample tag ends in uh.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "The sample tag ends in.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            22,
+            29
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 6.158399628475308e-05,
+      "model_request_s": 1.5121841660002246,
+      "serial_model_plus_offline_validation_s": 1.5122457499965094,
+      "raw": {
+        "output": "The sample tag ends in.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 7,
+          "gold_words": 6,
+          "output_words": 5,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": [
+          {
+            "text": "uh",
+            "start_byte": 23,
+            "end_byte": 25
+          }
+        ]
+      },
+      "delivered": {
+        "output": "The sample tag ends in.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 7,
+          "gold_words": 6,
+          "output_words": 5,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 1,
+          "preservation_valid": false,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 1,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": [
+          {
+            "text": "uh",
+            "start_byte": 23,
+            "end_byte": 25
+          }
+        ]
+      }
+    },
+    {
+      "id": "release_225",
+      "group": "adversarial_preserve",
+      "source": "Set the request parameter um to the value returned by unit_multiplier.",
+      "expected": "Set the request parameter um to the value returned by unit_multiplier.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Set the request parameter um to the value returned by unit_multiplier.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.166605554521084e-05,
+      "model_request_s": 1.7447057079989463,
+      "serial_model_plus_offline_validation_s": 1.7447273740544915,
+      "raw": {
+        "output": "Set the request parameter um to the value returned by unit_multiplier.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 11,
+          "output_words": 11,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Set the request parameter um to the value returned by unit_multiplier.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 11,
+          "output_words": 11,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_242",
+      "group": "adversarial_preserve",
+      "source": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "expected": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.2833002731204033e-05,
+      "model_request_s": 1.9712847500341013,
+      "serial_model_plus_offline_validation_s": 1.9713075830368325,
+      "raw": {
+        "output": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Um diese Uhrzeit fährt kein Bus mehr, deshalb nehmen wir ein Taxi.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_006",
+      "group": "ordinary_cleanup",
+      "source": "We should, um, label the two power supplies separately.",
+      "expected": "We should label the two power supplies separately.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "We should, label the two power supplies separately.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            11,
+            15
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 8.666596841067076e-05,
+      "model_request_s": 1.576290416996926,
+      "serial_model_plus_offline_validation_s": 1.5763770829653367,
+      "raw": {
+        "output": "We should label the two power supplies separately.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "We should, label the two power supplies separately.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_010",
+      "group": "ordinary_cleanup",
+      "source": "Uh, not yet.",
+      "expected": "Not yet.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "Uh, not yet.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.395804040133953e-05,
+      "model_request_s": 1.4000049169990234,
+      "serial_model_plus_offline_validation_s": 1.4000288750394247,
+      "raw": {
+        "output": "Not yet.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 3,
+          "gold_words": 2,
+          "output_words": 2,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 0,
+              "end_word": 1,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Uh, not yet.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 3,
+          "gold_words": 2,
+          "output_words": 3,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 0,
+              "end_word": 1,
+              "words": [
+                "uh"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_055",
+      "group": "ordinary_cleanup",
+      "source": "The return label should go on on the largest carton.",
+      "expected": "The return label should go on the largest carton.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "The return label should go on on the largest carton.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 5.6416960433125496e-05,
+      "model_request_s": 1.6611373749910854,
+      "serial_model_plus_offline_validation_s": 1.6611937919515185,
+      "raw": {
+        "output": "The return label should go on the largest carton.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "on"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The return label should go on on the largest carton.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 10,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 6,
+              "end_word": 7,
+              "words": [
+                "on"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_056",
+      "group": "ordinary_cleanup",
+      "source": "We can can finish the cable test before lunch.",
+      "expected": "We can finish the cable test before lunch.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "We can can finish the cable test before lunch.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 4.591600736603141e-05,
+      "model_request_s": 1.5920118329813704,
+      "serial_model_plus_offline_validation_s": 1.5920577489887364,
+      "raw": {
+        "output": "We can finish the cable test before lunch.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "can"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "We can can finish the cable test before lunch.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 9,
+          "gold_words": 8,
+          "output_words": 9,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "can"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_062",
+      "group": "ordinary_cleanup",
+      "source": "Please bring bring the torque wrench back after the inspection.",
+      "expected": "Please bring the torque wrench back after the inspection.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "Please bring bring the torque wrench back after the inspection.",
+        "reason": "Proposal requires protected/unsupported edits or punctuation changes",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 5.329097621142864e-05,
+      "model_request_s": 1.6449725829879753,
+      "serial_model_plus_offline_validation_s": 1.6450258739641868,
+      "raw": {
+        "output": "Please bring the torque wrench back after the inspection.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 2,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "bring"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Please bring bring the torque wrench back after the inspection.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 10,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 2,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "bring"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_073",
+      "group": "ordinary_cleanup",
+      "source": "At the moment at the moment, the spare server is unavailable.",
+      "expected": "At the moment, the spare server is unavailable.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": false,
+        "output": "At the moment at the moment, the spare server is unavailable.",
+        "reason": "Ambiguous source reconstruction",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 0,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00014512502821162343,
+      "model_request_s": 1.6234265000093728,
+      "serial_model_plus_offline_validation_s": 1.6235716250375845,
+      "raw": {
+        "output": "At the moment, the spare server is unavailable.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 8,
+          "output_words": 8,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 3,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 3,
+          "safe_correctly_deleted_tokens": 3,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 3,
+          "gold_alignment_count": 5,
+          "output_alignment_count": 5,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "at",
+                "the",
+                "moment"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "At the moment at the moment, the spare server is unavailable.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 11,
+          "gold_words": 8,
+          "output_words": 11,
+          "gold_delete_tokens": 3,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 5,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 6,
+              "words": [
+                "at",
+                "the",
+                "moment"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_001",
+      "group": "ordinary_cleanup",
+      "source": "Um, unlock the equipment cabinet when you arrive.",
+      "expected": "Unlock the equipment cabinet when you arrive.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "Um, unlock the equipment cabinet when you arrive.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 1.550000160932541e-05,
+      "model_request_s": 1.6074575840029866,
+      "serial_model_plus_offline_validation_s": 1.6074730840045959,
+      "raw": {
+        "output": "Um, unlock the equipment cabinet when you arrive.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 8,
+          "gold_words": 7,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 0,
+              "end_word": 1,
+              "words": [
+                "um"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "Um, unlock the equipment cabinet when you arrive.",
+        "quality_eligible": true,
+        "accepted_exact": false,
+        "canonical_span_score": {
+          "source_words": 8,
+          "gold_words": 7,
+          "output_words": 8,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": false,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": 0.0,
+          "safe_deletion_token_recall": 0.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": 0.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 0,
+              "end_word": 1,
+              "words": [
+                "um"
+              ],
+              "completed": false
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_030",
+      "group": "ordinary_cleanup",
+      "source": "The adapter uh supports 24 volts, and um the fuse is rated for 3 amps.",
+      "expected": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            12,
+            15
+          ],
+          [
+            38,
+            41
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.0001244159648194909,
+      "model_request_s": 1.9085244580055587,
+      "serial_model_plus_offline_validation_s": 1.9086488739703782,
+      "raw": {
+        "output": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 13,
+          "output_words": 13,
+          "gold_delete_tokens": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 2,
+          "safe_correctly_deleted_tokens": 2,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 2,
+          "completed_delete_runs": 2,
+          "safe_completed_delete_runs": 2,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 2,
+          "run_alignment_correctly_deleted_tokens": 2,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 7,
+              "end_word": 8,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The adapter supports 24 volts, and the fuse is rated for 3 amps.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 15,
+          "gold_words": 13,
+          "output_words": 13,
+          "gold_delete_tokens": 2,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 2,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 2,
+          "safe_correctly_deleted_tokens": 2,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 2,
+          "completed_delete_runs": 2,
+          "safe_completed_delete_runs": 2,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 2,
+          "run_alignment_correctly_deleted_tokens": 2,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 2,
+              "end_word": 3,
+              "words": [
+                "uh"
+              ],
+              "completed": true
+            },
+            {
+              "start_word": 7,
+              "end_word": 8,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_165",
+      "group": "ordinary_preserve",
+      "source": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+      "expected": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 2.2833002731204033e-05,
+      "model_request_s": 1.9139068750082515,
+      "serial_model_plus_offline_validation_s": 1.9139297080109827,
+      "raw": {
+        "output": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "La caja pequeña contiene los tornillos y la grande contiene las placas.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 12,
+          "gold_words": 12,
+          "output_words": 12,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "release_217",
+      "group": "adversarial_cleanup",
+      "source": "The length is um twenty, sorry, thirty centimeters after trimming.",
+      "expected": "The length is twenty, sorry, thirty centimeters after trimming.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "The length is twenty, sorry, thirty centimeters after trimming.",
+        "reason": "Source-derived deletions accepted",
+        "deletion_bytes": [
+          [
+            14,
+            17
+          ]
+        ],
+        "categories": [
+          "hesitation"
+        ],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 9.408401092514396e-05,
+      "model_request_s": 1.7550541670061648,
+      "serial_model_plus_offline_validation_s": 1.75514825101709,
+      "raw": {
+        "output": "The length is twenty, sorry, thirty centimeters after trimming.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 4,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "The length is twenty, sorry, thirty centimeters after trimming.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 10,
+          "gold_words": 9,
+          "output_words": 9,
+          "gold_delete_tokens": 1,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": true,
+          "source_words_deleted": 1,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 1,
+          "safe_correctly_deleted_tokens": 1,
+          "deletion_token_recall": 1.0,
+          "safe_deletion_token_recall": 1.0,
+          "gold_delete_runs": 1,
+          "completed_delete_runs": 1,
+          "safe_completed_delete_runs": 1,
+          "deletion_run_recall": 1.0,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 1,
+          "run_alignment_correctly_deleted_tokens": 1,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": [
+            {
+              "start_word": 3,
+              "end_word": 4,
+              "words": [
+                "um"
+              ],
+              "completed": true
+            }
+          ]
+        },
+        "protected_failures": []
+      }
+    },
+    {
+      "id": "semantic_47",
+      "group": "ordinary_preserve",
+      "source": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "expected": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+      "acceptable_outputs": [],
+      "completed": true,
+      "finish_reason": "stop",
+      "error": null,
+      "validation": {
+        "accepted": true,
+        "output": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+        "reason": "No change",
+        "deletion_bytes": [],
+        "categories": [],
+        "equivalent_alignments": 1,
+        "capitalization_bytes": [],
+        "gap_insertions": [],
+        "semantic_guarantee": false
+      },
+      "validation_s": 0.00021066702902317047,
+      "model_request_s": 5.83304658299312,
+      "serial_model_plus_offline_validation_s": 5.833257250022143,
+      "raw": {
+        "output": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 123,
+          "gold_words": 123,
+          "output_words": 123,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      },
+      "delivered": {
+        "output": "I checked the receiving area before leaving this afternoon. The two cartons from the first shipment are on the lower shelf, and the replacement power supplies are in the locked cabinet. One carton has a torn corner, but none of the internal packaging appears damaged. Please photograph the serial labels before moving anything to the assembly bench. The invoice lists eighteen units, which matches the count on the delivery note. I have not opened the sealed accessory bags because the quality team wants to inspect them together. If the courier brings the remaining carton tomorrow, ask them to use the side door and leave the paperwork with reception. We should keep the damaged carton until the supplier confirms whether they need it returned.",
+        "quality_eligible": true,
+        "accepted_exact": true,
+        "canonical_span_score": {
+          "source_words": 123,
+          "gold_words": 123,
+          "output_words": 123,
+          "gold_delete_tokens": 0,
+          "source_word_additions": 0,
+          "required_word_losses": 0,
+          "preservation_valid": true,
+          "lexically_complete": true,
+          "complete_cleanup": false,
+          "source_words_deleted": 0,
+          "score_status": "scored",
+          "correctly_deleted_tokens": 0,
+          "safe_correctly_deleted_tokens": 0,
+          "deletion_token_recall": null,
+          "safe_deletion_token_recall": null,
+          "gold_delete_runs": 0,
+          "completed_delete_runs": 0,
+          "safe_completed_delete_runs": 0,
+          "deletion_run_recall": null,
+          "alignment_required_words_removed": 0,
+          "token_alignment_gold_run_count": 0,
+          "run_alignment_correctly_deleted_tokens": 0,
+          "gold_alignment_count": 1,
+          "output_alignment_count": 1,
+          "gold_runs": []
+        },
+        "protected_failures": []
+      }
+    }
+  ]
+}

@@ -3,10 +3,11 @@
 //! Uses CGEventTap to intercept ALL key events (including system-level media keys)
 //! and emits them as Tauri events.
 
-use tauri::{AppHandle, Emitter};
-use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, Manager};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 static CAPTURING: AtomicBool = AtomicBool::new(false);
+static CAPTURE_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Start the CGEventTap background thread. Called once at app startup.
 /// The tap runs continuously but only emits events when CAPTURING is true.
@@ -44,17 +45,34 @@ pub fn init_key_capture_thread(app: &AppHandle) {
     }
 }
 
+/// Native window events call this even if frontend cleanup never runs.
+pub fn reset_key_capture() {
+    CAPTURE_GENERATION.fetch_add(1, Ordering::SeqCst);
+    CAPTURING.store(false, Ordering::SeqCst);
+}
+
 #[tauri::command]
-pub async fn start_key_capture() -> Result<(), String> {
-    CAPTURING.store(true, Ordering::SeqCst);
-    log::info!("Key capture enabled");
-    Ok(())
+pub async fn start_key_capture(app: AppHandle) -> Result<(), String> {
+    let generation = CAPTURE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let focused = handle.get_webview_window("settings")
+            .is_some_and(|window| window.is_focused().unwrap_or(false));
+        let result = if focused && CAPTURE_GENERATION.load(Ordering::SeqCst) == generation {
+            CAPTURING.store(true, Ordering::SeqCst);
+            Ok(())
+        } else {
+            Err("Focus Settings before recording a keyboard shortcut".to_string())
+        };
+        let _ = sender.send(result);
+    }).map_err(|error| error.to_string())?;
+    receiver.await.map_err(|_| "Keyboard shortcut capture did not start".to_string())?
 }
 
 #[tauri::command]
 pub async fn stop_key_capture() -> Result<(), String> {
-    CAPTURING.store(false, Ordering::SeqCst);
-    log::info!("Key capture disabled");
+    reset_key_capture();
     Ok(())
 }
 
@@ -113,13 +131,6 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
                     fn CGEventGetFlags(event: *const std::ffi::c_void) -> u64;
                 }
 
-                // Log ALL event types for diagnostics
-                let keycode_for_log = CGEventGetIntegerValueField(event, 9) as u16;
-                log::info!(
-                    "[keycap] event_type={}, keycode=0x{:02X} ({})",
-                    event_type_raw, keycode_for_log, keycode_for_log
-                );
-
                 // Handle NX_SYSDEFINED events (media/system keys)
                 if event_type_raw == 14 {
                     let subtype = CGEventGetIntegerValueField(event, CGEVENT_FIELD_SUBTYPE);
@@ -151,12 +162,10 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
                         NX_KEYTYPE_ILLUMINATION_DOWN => "KeyboardBrightnessDown",
                         NX_KEYTYPE_ILLUMINATION_TOGGLE => "KeyboardBrightnessToggle",
                         _ => {
-                            log::info!("Unknown NX media key type: {} (data1: 0x{:X})", key_code, data1);
                             return event;
                         }
                     };
 
-                    log::info!("Captured system key: {} (NX type {})", key_name, key_code);
 
                     let _ = app.emit("key-captured", serde_json::json!({
                         "code": key_name,
@@ -192,13 +201,11 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
                         // kCGEventKeyDown — only emit for non-modifier keys
                         let key_name = vk_to_name(keycode);
                         if key_name.is_empty() {
-                            log::info!("Unknown macOS keycode: 0x{:02X}", keycode);
                             return event;
                         }
                         let is_modifier = matches!(key_name, "Meta" | "Shift" | "ShiftRight" |
                             "Alt" | "AltRight" | "Control" | "ControlRight" | "Fn");
                         if !is_modifier {
-                            log::info!("Captured key: {} (vk 0x{:02X})", key_name, keycode);
                             let _ = app.emit("key-captured", serde_json::json!({
                                 "code": key_name,
                                 "key": key_name,

@@ -1,0 +1,213 @@
+{
+  "reconstruction_checks": 1134,
+  "validator_sha256": "33520cd53a2716fb502a602b89cce77531ec0ab6c2858ec8e52504cdc3254e9e",
+  "headline": {
+    "minicpm2000-common": {
+      "raw": {
+        "ordinary_cleanup": 20,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 4,
+        "detected_losses": 5
+      },
+      "v2": {
+        "ordinary_cleanup": 18,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v3": {
+        "ordinary_cleanup": 20,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "pollard_mixed-common": {
+      "raw": {
+        "ordinary_cleanup": 19,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 5,
+        "detected_losses": 4
+      },
+      "v2": {
+        "ordinary_cleanup": 17,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v3": {
+        "ordinary_cleanup": 19,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "spark4000-common": {
+      "raw": {
+        "ordinary_cleanup": 13,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 1,
+        "adversarial_preserve": 6,
+        "detected_losses": 2
+      },
+      "v2": {
+        "ordinary_cleanup": 12,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 1,
+        "adversarial_preserve": 6,
+        "detected_losses": 2
+      },
+      "v3": {
+        "ordinary_cleanup": 13,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 1,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "spark4000-best-dev": {
+      "raw": {
+        "ordinary_cleanup": 15,
+        "ordinary_preserve": 23,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 6,
+        "detected_losses": 3
+      },
+      "v2": {
+        "ordinary_cleanup": 14,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 6,
+        "detected_losses": 2
+      },
+      "v3": {
+        "ordinary_cleanup": 15,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "qwen4000-common": {
+      "raw": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 21,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 4,
+        "detected_losses": 5
+      },
+      "v2": {
+        "ordinary_cleanup": 20,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 2,
+        "adversarial_preserve": 6,
+        "detected_losses": 2
+      },
+      "v3": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "qwen4000-best-dev": {
+      "raw": {
+        "ordinary_cleanup": 13,
+        "ordinary_preserve": 23,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v2": {
+        "ordinary_cleanup": 11,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 2,
+        "adversarial_preserve": 7,
+        "detected_losses": 1
+      },
+      "v3": {
+        "ordinary_cleanup": 13,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "minicpm2000-D1": {
+      "raw": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 22,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 3,
+        "detected_losses": 9
+      },
+      "v2": {
+        "ordinary_cleanup": 20,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v3": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "minicpm2000-D3": {
+      "raw": {
+        "ordinary_cleanup": 24,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 4,
+        "detected_losses": 4
+      },
+      "v2": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 3,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v3": {
+        "ordinary_cleanup": 24,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    },
+    "minicpm2000-D4": {
+      "raw": {
+        "ordinary_cleanup": 24,
+        "ordinary_preserve": 23,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 4,
+        "detected_losses": 5
+      },
+      "v2": {
+        "ordinary_cleanup": 22,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 5,
+        "detected_losses": 3
+      },
+      "v3": {
+        "ordinary_cleanup": 24,
+        "ordinary_preserve": 24,
+        "adversarial_cleanup": 4,
+        "adversarial_preserve": 8,
+        "detected_losses": 0
+      }
+    }
+  }
+}

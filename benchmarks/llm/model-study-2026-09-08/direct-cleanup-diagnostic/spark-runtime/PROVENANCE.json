@@ -1,0 +1,14 @@
+{
+  "repo": "https://github.com/XHToken/Spark-MLX-LLM",
+  "revision": "de2b4379fa1e2f2e1f99d84c83f0e008f651d86c",
+  "scope": "Reviewed official source for process-local isolated experiment; no installed runtime changes",
+  "files": {
+    "spark_mlx_llm/__init__.py": "1a1c1cc9cac55c8131f0afda12670d98db7335b0b55570579531613747fde015",
+    "spark_mlx_llm/registration.py": "a75e0542805e85568cd4ccd553a74bcfbbde3a1808813d5410c622e27f1cfcdc",
+    "spark_mlx_llm/loader.py": "d89dfa8f3490cae9ed0ecacda68a476fb661a7990b0c4180246853f2108bc4ae",
+    "spark_mlx_llm/model.py": "d95ad580bc9ddc5513c3159c41871627dc10f8e6b65972eca4069315a26d5f56",
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "pyproject.toml": "1fb8093a3886d66dc62409c81e92a3f5eabaf906d8c4f9e79e3bbb23d9026097",
+    "README.md": "9942bff4ead64f55f1ebf188fef747d4f7b9b637a415fe63d145cb2e98ede9ab"
+  }
+}

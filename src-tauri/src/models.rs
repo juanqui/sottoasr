@@ -15,14 +15,20 @@ fn default_llm_cleanup_status() -> LlmCleanupStatus {
 
 /// Outcome of the LLM cleanup step for a single transcription.
 ///
-/// Serialized as an externally-tagged enum so the frontend can discriminate on
+/// Serialized as an adjacently tagged enum so the frontend can discriminate on
 /// `kind` and read the corresponding `detail` payload. See
 /// `docs/specs/2026-04-11-llm-cleanup-reliability.md` §4.4.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", content = "detail", rename_all = "snake_case")]
 pub enum LlmCleanupStatus {
-    /// Cleanup ran successfully. Payload is elapsed time in ms.
+    /// Accepted source deletions were applied to the delivered transcript.
     Applied { elapsed_ms: u64 },
+    /// Experimental guarded proposal, never used by automatic paste or Copy.
+    Suggested { elapsed_ms: u64 },
+    /// No edit was selected. Legacy entries also used this for detector skips.
+    NoChanges,
+    /// No edits passed the candidate/input-limit guards; inference did not run.
+    SkippedNoCandidates,
     /// Skipped because input was under 5 words.
     SkippedTooShort,
     /// Skipped because `llm_cleanup_enabled=false` in settings.
@@ -41,17 +47,23 @@ pub enum LlmCleanupStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transcription {
     pub id: String,
-    /// The final text (cleaned if LLM was used, raw otherwise)
+    /// Ordinary output: ASR with vocabulary and explicit dictionary corrections.
     pub text: String,
     pub duration_ms: u64,
     pub created_at: DateTime<Utc>,
     pub word_count: usize,
     #[serde(default)]
     pub cancelled: bool,
-    /// Raw ASR output before LLM cleanup (None if LLM was not used)
+    /// A microphone failure means this text covers only the captured prefix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture_error: Option<String>,
+    /// Original ASR output, retained whenever postprocessing changes the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_text: Option<String>,
-    /// Whether LLM cleanup was applied to this transcription
+    /// Optional experimental proposal. Review and explicit Copy are required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_suggestion: Option<String>,
+    /// Whether LLM cleanup was applied to this legacy transcription
     #[serde(default)]
     pub llm_applied: bool,
     /// Detailed cleanup outcome (see `LlmCleanupStatus`). Older entries that
@@ -67,6 +79,12 @@ pub enum AppStateEnum {
     Transcribing,
     CleaningUp,
     Pasting,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DictionaryEntry {
+    pub heard: String,
+    pub replacement: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,11 +111,23 @@ pub struct Settings {
     pub launch_at_login: bool,
     #[serde(default)]
     pub llm_cleanup_enabled: bool,
+    #[serde(default)]
+    pub dictionary: Vec<DictionaryEntry>,
+    #[serde(default)]
+    pub vocabulary: Vec<String>,
     #[serde(default = "default_true")]
     pub auto_check_updates: bool,
 }
 
 impl Settings {
+    pub fn normalize(&mut self) -> Result<(), String> {
+        if self.vocabulary.iter().any(|term| term.chars().any(char::is_control)) {
+            return Err("Vocabulary terms cannot contain control characters".into());
+        }
+        self.vocabulary.iter_mut().for_each(|term| *term = term.trim().to_owned());
+        self.validate()
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.push_to_talk_shortcut.trim().is_empty() {
             return Err("Push-to-talk shortcut cannot be empty".into());
@@ -108,20 +138,35 @@ impl Settings {
         if self.cancel_shortcut.trim().is_empty() {
             return Err("Cancel shortcut cannot be empty".into());
         }
-        if self.max_history < 10 || self.max_history > 10_000 {
-            return Err("max_history must be between 10 and 10,000".into());
+        // max_history is retained for file compatibility only. There is no
+        // retention control in Settings, so a legacy value must not prevent
+        // saving unrelated preferences or introduce a new deletion policy.
+        // Parse with the same native shortcut library used for registration.
+        // Modifier order/case and aliases such as Ctrl/Control must not bypass
+        // conflict detection, including alternates and the Settings shortcut.
+        let shortcuts = [
+            ("Push-to-talk", Some(self.push_to_talk_shortcut.as_str())),
+            ("Alternate push-to-talk", self.push_to_talk_shortcut_alt.as_deref()),
+            ("Toggle recording", Some(self.toggle_shortcut.as_str())),
+            ("Alternate toggle", self.toggle_shortcut_alt.as_deref()),
+            ("Cancel recording", Some(self.cancel_shortcut.as_str())),
+            ("Alternate cancel", self.cancel_shortcut_alt.as_deref()),
+            ("Open Settings", Some(self.open_settings_shortcut.as_str())),
+        ];
+        let mut registered = std::collections::HashMap::new();
+        for (label, shortcut) in shortcuts {
+            let Some(shortcut) = shortcut.filter(|value| !value.trim().is_empty()) else { continue; };
+            let parsed = shortcut.parse::<tauri_plugin_global_shortcut::Shortcut>()
+                .map_err(|error| format!("{label} shortcut is invalid: {error}"))?;
+            if label == "Push-to-talk" || label == "Alternate push-to-talk" {
+                crate::hotkeys::manager::ptt_virtual_key(shortcut)?;
+            }
+            if let Some(previous) = registered.insert(parsed, label) {
+                return Err(format!("{label} and {previous} shortcuts cannot be the same"));
+            }
         }
-        // Check for shortcut conflicts
-        if self.push_to_talk_shortcut == self.toggle_shortcut {
-            return Err("Push-to-talk and toggle shortcuts cannot be the same".into());
-        }
-        if self.push_to_talk_shortcut == self.cancel_shortcut {
-            return Err("Push-to-talk and cancel shortcuts cannot be the same".into());
-        }
-        if self.toggle_shortcut == self.cancel_shortcut {
-            return Err("Toggle and cancel shortcuts cannot be the same".into());
-        }
-        Ok(())
+        crate::dictionary::validate(&self.dictionary)?;
+        crate::asr::vocabulary::validate(&self.vocabulary)
     }
 }
 
@@ -144,6 +189,8 @@ impl Default for Settings {
             max_history: 500,
             launch_at_login: false,
             llm_cleanup_enabled: false,
+            dictionary: Vec::new(),
+            vocabulary: Vec::new(),
             auto_check_updates: true,
         }
     }
@@ -167,6 +214,8 @@ impl PartialEq for Settings {
             && self.max_history == other.max_history
             && self.launch_at_login == other.launch_at_login
             && self.llm_cleanup_enabled == other.llm_cleanup_enabled
+            && self.dictionary == other.dictionary
+            && self.vocabulary == other.vocabulary
             && self.auto_check_updates == other.auto_check_updates
     }
 }
@@ -179,7 +228,9 @@ impl PartialEq for Transcription {
             && self.created_at == other.created_at
             && self.word_count == other.word_count
             && self.cancelled == other.cancelled
+            && self.capture_error == other.capture_error
             && self.raw_text == other.raw_text
+            && self.cleanup_suggestion == other.cleanup_suggestion
             && self.llm_applied == other.llm_applied
             && self.llm_cleanup_status == other.llm_cleanup_status
     }
@@ -191,8 +242,14 @@ pub struct LlmStatus {
     pub unavailable_reason: Option<String>,
     pub downloaded: bool,
     pub downloading: bool,
+    #[serde(default)]
+    pub preparing: bool,
+    #[serde(default)]
+    pub setup_error: Option<String>,
     pub loaded: bool,
     pub model_name: String,
+    pub model_url: String,
+    pub download_size_mb: u64,
     pub model_path: Option<String>,
     #[serde(default)]
     pub update_available: bool,
@@ -236,27 +293,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_max_history_below_10() {
-        let s = Settings { max_history: 9, ..Default::default() };
-        assert!(s.validate().is_err());
-    }
-
-    #[test]
-    fn validate_rejects_max_history_above_10000() {
-        let s = Settings { max_history: 10_001, ..Default::default() };
-        assert!(s.validate().is_err());
-    }
-
-    #[test]
-    fn validate_accepts_max_history_boundary_10() {
-        let s = Settings { max_history: 10, ..Default::default() };
-        assert!(s.validate().is_ok());
-    }
-
-    #[test]
-    fn validate_accepts_max_history_boundary_10000() {
-        let s = Settings { max_history: 10_000, ..Default::default() };
-        assert!(s.validate().is_ok());
+    fn legacy_history_limit_does_not_block_unrelated_preferences() {
+        for limit in [0, 9, 500, 10_001, usize::MAX] {
+            let mut settings = Settings { max_history: limit, ..Default::default() };
+            settings.vocabulary = vec!["Qwen".into()];
+            settings.normalize().unwrap();
+            let saved = serde_json::to_string(&settings).unwrap();
+            let loaded: Settings = serde_json::from_str(&saved).unwrap();
+            assert_eq!(loaded.max_history, limit);
+            assert_eq!(loaded.vocabulary, ["Qwen"]);
+        }
     }
 
     #[test]
@@ -290,15 +336,13 @@ mod tests {
     }
 
     #[test]
-    fn validate_does_not_check_alt_shortcuts() {
-        // Alt shortcuts are optional alternates — the validate() function
-        // does not check them for conflicts.
+    fn validate_rejects_conflicting_alt_shortcuts() {
         let defaults = Settings::default();
         let s = Settings {
             push_to_talk_shortcut_alt: Some(defaults.toggle_shortcut.clone()),
             ..defaults
         };
-        assert!(s.validate().is_ok());
+        assert!(s.validate().is_err());
     }
 
     #[test]
@@ -328,6 +372,7 @@ mod tests {
         assert_eq!(s.max_history, 500);
         assert!(!s.launch_at_login);
         assert!(!s.llm_cleanup_enabled);
+        assert!(s.dictionary.is_empty());
         assert!(s.auto_check_updates);
     }
 
@@ -419,7 +464,9 @@ mod tests {
             created_at: Utc::now(),
             word_count: 2,
             cancelled: false,
+            capture_error: Some("Microphone disconnected".into()),
             raw_text: Some("hello uh world".into()),
+            cleanup_suggestion: None,
             llm_applied: true,
             llm_cleanup_status: LlmCleanupStatus::Applied { elapsed_ms: 1234 },
         };
@@ -439,8 +486,10 @@ mod tests {
         }"#;
         let t: Transcription = serde_json::from_str(json).unwrap();
         assert!(!t.cancelled);
+        assert!(t.capture_error.is_none());
         assert!(t.raw_text.is_none());
         assert!(!t.llm_applied);
+        assert!(t.cleanup_suggestion.is_none());
         assert_eq!(t.llm_cleanup_status, LlmCleanupStatus::Idle);
     }
 
@@ -453,12 +502,15 @@ mod tests {
             created_at: Utc::now(),
             word_count: 1,
             cancelled: false,
+            capture_error: None,
             raw_text: None,
+            cleanup_suggestion: None,
             llm_applied: false,
             llm_cleanup_status: LlmCleanupStatus::Idle,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(!json.contains("raw_text"));
+        assert!(!json.contains("cleanup_suggestion"));
     }
 
     #[test]
@@ -487,6 +539,9 @@ mod tests {
     fn llm_cleanup_status_round_trip() {
         let statuses = vec![
             LlmCleanupStatus::Applied { elapsed_ms: 1500 },
+            LlmCleanupStatus::Suggested { elapsed_ms: 1500 },
+            LlmCleanupStatus::NoChanges,
+            LlmCleanupStatus::SkippedNoCandidates,
             LlmCleanupStatus::SkippedTooShort,
             LlmCleanupStatus::Disabled,
             LlmCleanupStatus::Unavailable { reason: "no sidecar".into() },
@@ -499,5 +554,20 @@ mod tests {
             let deserialized: LlmCleanupStatus = serde_json::from_str(&json).unwrap();
             assert_eq!(s, deserialized);
         }
+    }
+
+    #[test]
+    fn shortcut_aliases_and_modifier_order_cannot_hide_a_conflict() {
+        let mut settings = Settings {
+            push_to_talk_shortcut: "Control+Shift+A".into(),
+            open_settings_shortcut: "shift+ctrl+KeyA".into(),
+            ..Default::default()
+        };
+        assert!(settings.validate().unwrap_err().contains("Open Settings"));
+        settings.open_settings_shortcut.clear();
+        settings.toggle_shortcut_alt = Some("NotAnActualKey".into());
+        assert!(settings.validate().unwrap_err().contains("Alternate toggle"));
+        settings.toggle_shortcut_alt = None;
+        assert!(settings.validate().is_ok());
     }
 }

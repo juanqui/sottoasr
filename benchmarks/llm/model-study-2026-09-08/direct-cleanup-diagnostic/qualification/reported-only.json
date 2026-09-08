@@ -1,0 +1,11 @@
+[
+  {
+    "id": "reported_sentence",
+    "raw": "This is a test to see um if this can um remove all the um uh yeah, those things from the sentences.",
+    "expected": "This is a test to see if this can remove all the yeah, those things from the sentences.",
+    "acceptable_outputs": [
+      "This is a test to see if this can remove all the yeah, those things from the sentences.",
+      "This is a test to see if this can remove all those things from the sentences."
+    ]
+  }
+]

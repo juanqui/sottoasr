@@ -1,0 +1,422 @@
+[
+  {
+    "id": "samantha_qwen_name",
+    "file": "samantha_qwen_name.wav",
+    "voice": "Samantha",
+    "spoken": "We are evaluating Qwen for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "samantha_qwen_kwen",
+    "file": "samantha_qwen_kwen.wav",
+    "voice": "Samantha",
+    "spoken": "We are evaluating Kwen for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "samantha_qwen_kwin",
+    "file": "samantha_qwen_kwin.wav",
+    "voice": "Samantha",
+    "spoken": "We are evaluating Kwin for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "samantha_version",
+    "file": "samantha_version.wav",
+    "voice": "Samantha",
+    "spoken": "Please compare Qwen three point eight Flash Next with the previous model.",
+    "terms": [
+      "Qwen",
+      "Qwen3.8-Flash-Next"
+    ],
+    "negative": false,
+    "expected": "Please compare Qwen3.8-Flash-Next with the previous model."
+  },
+  {
+    "id": "samantha_version_kwen",
+    "file": "samantha_version_kwen.wav",
+    "voice": "Samantha",
+    "spoken": "Please compare Kwen three point eight Flash Next with the previous model.",
+    "terms": [
+      "Qwen",
+      "Qwen3.8-Flash-Next"
+    ],
+    "negative": false,
+    "expected": "Please compare Qwen3.8-Flash-Next with the previous model."
+  },
+  {
+    "id": "samantha_names",
+    "file": "samantha_names.wav",
+    "voice": "Samantha",
+    "spoken": "NVIDIA Parakeet runs inside Sotto A S R using Fluid Audio.",
+    "terms": [
+      "NVIDIA",
+      "Parakeet",
+      "SottoASR",
+      "FluidAudio"
+    ],
+    "negative": false,
+    "expected": "NVIDIA Parakeet runs inside SottoASR using FluidAudio."
+  },
+  {
+    "id": "samantha_frameworks",
+    "file": "samantha_frameworks.wav",
+    "voice": "Samantha",
+    "spoken": "Core M L and M L X support local inference on the Mac.",
+    "terms": [
+      "CoreML",
+      "MLX"
+    ],
+    "negative": false,
+    "expected": "CoreML and MLX support local inference on the Mac."
+  },
+  {
+    "id": "samantha_software",
+    "file": "samantha_software.wav",
+    "voice": "Samantha",
+    "spoken": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tauri.",
+    "terms": [
+      "Kubernetes",
+      "PostgreSQL",
+      "Tauri"
+    ],
+    "negative": false,
+    "expected": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tauri."
+  },
+  {
+    "id": "samantha_claude",
+    "file": "samantha_claude.wav",
+    "voice": "Samantha",
+    "spoken": "Claude helped me review the code before lunch.",
+    "terms": [
+      "Claude"
+    ],
+    "negative": false,
+    "expected": "Claude helped me review the code before lunch."
+  },
+  {
+    "id": "samantha_cloud",
+    "file": "samantha_cloud.wav",
+    "voice": "Samantha",
+    "spoken": "The cloud covered the sun while we walked outside.",
+    "terms": [],
+    "negative": true,
+    "expected": "The cloud covered the sun while we walked outside."
+  },
+  {
+    "id": "samantha_queen",
+    "file": "samantha_queen.wav",
+    "voice": "Samantha",
+    "spoken": "The queen visited the library and read a book.",
+    "terms": [],
+    "negative": true,
+    "expected": "The queen visited the library and read a book."
+  },
+  {
+    "id": "samantha_quinn",
+    "file": "samantha_quinn.wav",
+    "voice": "Samantha",
+    "spoken": "Quinn helped me review the code before lunch.",
+    "terms": [],
+    "negative": true,
+    "expected": "Quinn helped me review the code before lunch."
+  },
+  {
+    "id": "samantha_when",
+    "file": "samantha_when.wav",
+    "voice": "Samantha",
+    "spoken": "When can we review the code and finish the project?",
+    "terms": [],
+    "negative": true,
+    "expected": "When can we review the code and finish the project?"
+  },
+  {
+    "id": "samantha_ran",
+    "file": "samantha_ran.wav",
+    "voice": "Samantha",
+    "spoken": "I ran around the park and then walked home.",
+    "terms": [],
+    "negative": true,
+    "expected": "I ran around the park and then walked home."
+  },
+  {
+    "id": "samantha_sink",
+    "file": "samantha_sink.wav",
+    "voice": "Samantha",
+    "spoken": "Please leave the cups beside the sink and close the window.",
+    "terms": [],
+    "negative": true,
+    "expected": "Please leave the cups beside the sink and close the window."
+  },
+  {
+    "id": "samantha_nouns",
+    "file": "samantha_nouns.wav",
+    "voice": "Samantha",
+    "spoken": "The parakeet sat near the window and the queen smiled.",
+    "terms": [],
+    "negative": true,
+    "expected": "The parakeet sat near the window and the queen smiled."
+  },
+  {
+    "id": "samantha_ordinary",
+    "file": "samantha_ordinary.wav",
+    "voice": "Samantha",
+    "spoken": "Please keep the blue notebook beside the window and remember the silver telescope.",
+    "terms": [],
+    "negative": true,
+    "expected": "Please keep the blue notebook beside the window and remember the silver telescope."
+  },
+  {
+    "id": "samantha_negation",
+    "file": "samantha_negation.wav",
+    "voice": "Samantha",
+    "spoken": "Do not remove the final sentence or change the number thirty eight.",
+    "terms": [],
+    "negative": true,
+    "expected": "Do not remove the final sentence or change the number 38."
+  },
+  {
+    "id": "samantha_mixed",
+    "file": "samantha_mixed.wav",
+    "voice": "Samantha",
+    "spoken": "Quinn asked when the queen would test the Kwen model in the cloud.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "Quinn asked when the queen would test the Qwen model in the cloud."
+  },
+  {
+    "id": "samantha_repeat",
+    "file": "samantha_repeat.wav",
+    "voice": "Samantha",
+    "spoken": "Use Kwen, then restart Kwen, and compare Kwen with the old model.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "Use Qwen, then restart Qwen, and compare Qwen with the old model."
+  },
+  {
+    "id": "daniel_qwen_name",
+    "file": "daniel_qwen_name.wav",
+    "voice": "Daniel",
+    "spoken": "We are evaluating Qwen for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "daniel_qwen_kwen",
+    "file": "daniel_qwen_kwen.wav",
+    "voice": "Daniel",
+    "spoken": "We are evaluating Kwen for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "daniel_qwen_kwin",
+    "file": "daniel_qwen_kwin.wav",
+    "voice": "Daniel",
+    "spoken": "We are evaluating Kwin for local speech correction.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "We are evaluating Qwen for local speech correction."
+  },
+  {
+    "id": "daniel_version",
+    "file": "daniel_version.wav",
+    "voice": "Daniel",
+    "spoken": "Please compare Qwen three point eight Flash Next with the previous model.",
+    "terms": [
+      "Qwen",
+      "Qwen3.8-Flash-Next"
+    ],
+    "negative": false,
+    "expected": "Please compare Qwen3.8-Flash-Next with the previous model."
+  },
+  {
+    "id": "daniel_version_kwen",
+    "file": "daniel_version_kwen.wav",
+    "voice": "Daniel",
+    "spoken": "Please compare Kwen three point eight Flash Next with the previous model.",
+    "terms": [
+      "Qwen",
+      "Qwen3.8-Flash-Next"
+    ],
+    "negative": false,
+    "expected": "Please compare Qwen3.8-Flash-Next with the previous model."
+  },
+  {
+    "id": "daniel_names",
+    "file": "daniel_names.wav",
+    "voice": "Daniel",
+    "spoken": "NVIDIA Parakeet runs inside Sotto A S R using Fluid Audio.",
+    "terms": [
+      "NVIDIA",
+      "Parakeet",
+      "SottoASR",
+      "FluidAudio"
+    ],
+    "negative": false,
+    "expected": "NVIDIA Parakeet runs inside SottoASR using FluidAudio."
+  },
+  {
+    "id": "daniel_frameworks",
+    "file": "daniel_frameworks.wav",
+    "voice": "Daniel",
+    "spoken": "Core M L and M L X support local inference on the Mac.",
+    "terms": [
+      "CoreML",
+      "MLX"
+    ],
+    "negative": false,
+    "expected": "CoreML and MLX support local inference on the Mac."
+  },
+  {
+    "id": "daniel_software",
+    "file": "daniel_software.wav",
+    "voice": "Daniel",
+    "spoken": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tauri.",
+    "terms": [
+      "Kubernetes",
+      "PostgreSQL",
+      "Tauri"
+    ],
+    "negative": false,
+    "expected": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tauri."
+  },
+  {
+    "id": "daniel_claude",
+    "file": "daniel_claude.wav",
+    "voice": "Daniel",
+    "spoken": "Claude helped me review the code before lunch.",
+    "terms": [
+      "Claude"
+    ],
+    "negative": false,
+    "expected": "Claude helped me review the code before lunch."
+  },
+  {
+    "id": "daniel_cloud",
+    "file": "daniel_cloud.wav",
+    "voice": "Daniel",
+    "spoken": "The cloud covered the sun while we walked outside.",
+    "terms": [],
+    "negative": true,
+    "expected": "The cloud covered the sun while we walked outside."
+  },
+  {
+    "id": "daniel_queen",
+    "file": "daniel_queen.wav",
+    "voice": "Daniel",
+    "spoken": "The queen visited the library and read a book.",
+    "terms": [],
+    "negative": true,
+    "expected": "The queen visited the library and read a book."
+  },
+  {
+    "id": "daniel_quinn",
+    "file": "daniel_quinn.wav",
+    "voice": "Daniel",
+    "spoken": "Quinn helped me review the code before lunch.",
+    "terms": [],
+    "negative": true,
+    "expected": "Quinn helped me review the code before lunch."
+  },
+  {
+    "id": "daniel_when",
+    "file": "daniel_when.wav",
+    "voice": "Daniel",
+    "spoken": "When can we review the code and finish the project?",
+    "terms": [],
+    "negative": true,
+    "expected": "When can we review the code and finish the project?"
+  },
+  {
+    "id": "daniel_ran",
+    "file": "daniel_ran.wav",
+    "voice": "Daniel",
+    "spoken": "I ran around the park and then walked home.",
+    "terms": [],
+    "negative": true,
+    "expected": "I ran around the park and then walked home."
+  },
+  {
+    "id": "daniel_sink",
+    "file": "daniel_sink.wav",
+    "voice": "Daniel",
+    "spoken": "Please leave the cups beside the sink and close the window.",
+    "terms": [],
+    "negative": true,
+    "expected": "Please leave the cups beside the sink and close the window."
+  },
+  {
+    "id": "daniel_nouns",
+    "file": "daniel_nouns.wav",
+    "voice": "Daniel",
+    "spoken": "The parakeet sat near the window and the queen smiled.",
+    "terms": [],
+    "negative": true,
+    "expected": "The parakeet sat near the window and the queen smiled."
+  },
+  {
+    "id": "daniel_ordinary",
+    "file": "daniel_ordinary.wav",
+    "voice": "Daniel",
+    "spoken": "Please keep the blue notebook beside the window and remember the silver telescope.",
+    "terms": [],
+    "negative": true,
+    "expected": "Please keep the blue notebook beside the window and remember the silver telescope."
+  },
+  {
+    "id": "daniel_negation",
+    "file": "daniel_negation.wav",
+    "voice": "Daniel",
+    "spoken": "Do not remove the final sentence or change the number thirty eight.",
+    "terms": [],
+    "negative": true,
+    "expected": "Do not remove the final sentence or change the number 38."
+  },
+  {
+    "id": "daniel_mixed",
+    "file": "daniel_mixed.wav",
+    "voice": "Daniel",
+    "spoken": "Quinn asked when the queen would test the Kwen model in the cloud.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "Quinn asked when the queen would test the Qwen model in the cloud."
+  },
+  {
+    "id": "daniel_repeat",
+    "file": "daniel_repeat.wav",
+    "voice": "Daniel",
+    "spoken": "Use Kwen, then restart Kwen, and compare Kwen with the old model.",
+    "terms": [
+      "Qwen"
+    ],
+    "negative": false,
+    "expected": "Use Qwen, then restart Qwen, and compare Qwen with the old model."
+  }
+]

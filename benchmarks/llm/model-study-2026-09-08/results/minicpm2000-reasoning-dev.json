@@ -1,0 +1,252 @@
+{
+  "summary": {
+    "label": "minicpm2000",
+    "load_s": 1.9650434579816647,
+    "cases": 8,
+    "exact": 4,
+    "harmful": 3,
+    "safe_useful_cases": 3,
+    "fallbacks": 0,
+    "median_judgment_s": 1.3970642499625683,
+    "max_case_s": 4.332930499978829,
+    "peak_metal_bytes": 2067552792,
+    "prompt_sha256": "58b57bede20ab2806ebc6639975629957fbeec60adff0bbd07173cb84fc8955b"
+  },
+  "rows": [
+    {
+      "case_id": "dev_01",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The first I is a duplicate subject that should be removed.\nDecision: DELETE",
+      "elapsed_s": 1.4704113340121694,
+      "generation_tokens": 19
+    },
+    {
+      "case_id": "dev_01",
+      "id": 1,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The repeated I is a typo; the the is the correct article.\nDecision: DELETE",
+      "elapsed_s": 1.410146292007994,
+      "generation_tokens": 22
+    },
+    {
+      "case_id": "dev_01",
+      "id": 2,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The um is a filler word that does not affect the meaning of the statement.\nDecision: DELETE",
+      "elapsed_s": 1.4314204579568468,
+      "generation_tokens": 23
+    },
+    {
+      "case_id": "dev_02",
+      "id": 0,
+      "gold_delete": false,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The um is a filler word that does not affect the meaning of the token name.\nDecision: DELETE",
+      "elapsed_s": 1.4406489999964833,
+      "generation_tokens": 24
+    },
+    {
+      "case_id": "dev_03",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The uh is a filler word that does not affect the core instruction.\nDecision: DELETE",
+      "elapsed_s": 1.3450887500075623,
+      "generation_tokens": 21
+    },
+    {
+      "case_id": "dev_03",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The a is the letter the user must type, and it is emphasized by the instruction.\nDecision: KEEP",
+      "elapsed_s": 1.3551433329703286,
+      "generation_tokens": 24
+    },
+    {
+      "case_id": "dev_04",
+      "id": 0,
+      "gold_delete": false,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The Portuguese word um means one; removing it alters the count.\nDecision: DELETE",
+      "elapsed_s": 1.3536961660138331,
+      "generation_tokens": 20
+    },
+    {
+      "case_id": "dev_04",
+      "id": 1,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The Portuguese word um means one; removing it alters the quantity.\nDecision: KEEP",
+      "elapsed_s": 1.3801715840236284,
+      "generation_tokens": 19
+    },
+    {
+      "case_id": "dev_05",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The uh is a filler word that does not contribute to the meaning.\nDecision: DELETE",
+      "elapsed_s": 1.4398630000068806,
+      "generation_tokens": 21
+    },
+    {
+      "case_id": "dev_05",
+      "id": 1,
+      "gold_delete": true,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The to is a necessary connector linking the need to the action.\nDecision: KEEP",
+      "elapsed_s": 1.3970642499625683,
+      "generation_tokens": 19
+    },
+    {
+      "case_id": "dev_06",
+      "id": 0,
+      "gold_delete": false,
+      "delete": false,
+      "valid": true,
+      "raw_generation": "Reason: The and is the conjunction linking the words to be repeated.\nDecision: KEEP",
+      "elapsed_s": 1.3713577080052346,
+      "generation_tokens": 18
+    },
+    {
+      "case_id": "dev_08",
+      "id": 0,
+      "gold_delete": true,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The first I is an accidental repetition of the sentence subject.\nDecision: DELETE",
+      "elapsed_s": 1.335340834048111,
+      "generation_tokens": 19
+    },
+    {
+      "case_id": "dev_08",
+      "id": 1,
+      "gold_delete": false,
+      "delete": true,
+      "valid": true,
+      "raw_generation": "Reason: The erm is a filler word that does not affect the meaning of the statement.\nDecision: DELETE",
+      "elapsed_s": 1.4024577499949373,
+      "generation_tokens": 23
+    }
+  ],
+  "cases": [
+    {
+      "id": "dev_01",
+      "category": "development",
+      "output": "I bought the wrong charger, this morning.",
+      "selected_ids": [
+        0,
+        1,
+        2
+      ],
+      "exact": true,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 4.332930499978829,
+      "fallback": false
+    },
+    {
+      "id": "dev_02",
+      "category": "development",
+      "output": "The token should remain because it is the literal name of this field.",
+      "selected_ids": [
+        0
+      ],
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 1.44282050000038,
+      "fallback": false
+    },
+    {
+      "id": "dev_03",
+      "category": "development",
+      "output": "Please type a a into the box without removing either letter.",
+      "selected_ids": [
+        0
+      ],
+      "exact": true,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 2.704423290968407,
+      "fallback": false
+    },
+    {
+      "id": "dev_04",
+      "category": "development",
+      "output": "Há e apenas um, sensor conectado ao computador.",
+      "selected_ids": [
+        0
+      ],
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 2.7393073749844916,
+      "fallback": false
+    },
+    {
+      "id": "dev_05",
+      "category": "development",
+      "output": "We need to to check the same result again.",
+      "selected_ids": [
+        0
+      ],
+      "exact": false,
+      "harmful": false,
+      "changed": true,
+      "elapsed_s": 2.8411223749862984,
+      "fallback": false
+    },
+    {
+      "id": "dev_06",
+      "category": "development",
+      "output": "Repeat the words and and as a literal sequence.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 1.3730340000474826,
+      "fallback": false
+    },
+    {
+      "id": "dev_07",
+      "category": "development",
+      "output": "The name Um, belongs to the customer in this ticket.",
+      "selected_ids": [],
+      "exact": true,
+      "harmful": false,
+      "changed": false,
+      "elapsed_s": 5.1915994845330715e-05,
+      "fallback": false
+    },
+    {
+      "id": "dev_08",
+      "category": "development",
+      "output": "I wrote the word in the glossary yesterday.",
+      "selected_ids": [
+        0,
+        1
+      ],
+      "exact": false,
+      "harmful": true,
+      "changed": true,
+      "elapsed_s": 2.7424472919665277,
+      "fallback": false
+    }
+  ]
+}

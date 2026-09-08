@@ -2,6 +2,82 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.8.3] — 2026-09-08
+
+### Changed
+- Preload and prewarm enabled MiniCPM cleanup at startup and during Settings preparation.
+- Keep the resident model ready after a one-time synthetic warmup; disabled cleanup runs no warmup.
+
+### Infrastructure
+- Run default-backend tests and full macOS packaging on pull requests.
+- Update compatible Rust dependencies to resolve release-audit vulnerabilities.
+- Build signed draft releases on main updates and version tags; allow signed verification builds without publishing.
+
+## [0.8.2] — 2026-09-08
+
+### Changed
+- Use pinned MiniCPM5 2B with MLX 4-bit for optional local transcript cleanup.
+- Apply validated filler/repeat removals automatically and keep the original in History.
+- Explain automatic cleanup and model preparation in Dictation settings.
+
+### Fixed
+- Cleanup no longer leaves the original in the ordinary paste path after accepting an edit.
+- Short transcripts reach cleanup; rejected or incomplete proposals retain the full source.
+- Protect vocabulary, dictionary terms, quoted text, identifiers and required words during cleanup.
+- Stale cleanup jobs cannot overwrite the current cleanup status.
+
+### Infrastructure
+- Add direct-text protocol, bounded source validation and pinned model integrity checks.
+- Local test release: model comparison and known semantic limitations remain documented.
+
+## [0.8.1] — 2026-09-08
+
+### Fixed
+
+- **Settings close button** — Permit the Settings window's actual Tauri close handler to finish closing. Unsaved drafts still offer Keep editing, Discard and Save; failed saves keep the window open.
+- **Bare hesitation detection** — Standalone lowercase `um`, `uh`, `uhm` and `erm` reach cleanup inference even when ASR omits commas. Suggestions remain separate from ordinary dictation.
+- **Cleanup feedback** — Distinguish a skipped model from unchanged output in History, and clear the setup reminder after saving activation or turning cleanup off.
+
+### Infrastructure
+
+- **Close and cleanup regressions** — Exercise the installed Tauri SDK's implicit destruction call, the reported dictation, quoted/identifier boundaries and harmful multilingual suggestions.
+
+### Changed
+
+- **Cleanup prompt** — Clarify independent candidate occurrences and bare hesitations. Safe useful suggestions improved from 31/40 to 37/40 on known regression edit cases; independent validation still found harmful deletions. The reported multi-filler sentence remains only partially cleaned, so suggestions remain experimental.
+
+## [0.8.0] — 2026-09-08
+
+Acoustic vocabulary, organized Settings, responsive history and recording recovery, with reviewed local cleanup suggestions.
+
+### Added
+
+- **Words you use** — Save correctly spelled names in Settings → Vocabulary. A separate local CoreML model checks them against audio; the conservative guard preserves uncertain cases. Saving the first words prepares its ~103 MB resource automatically. Versioned identifiers currently need exact replacements.
+- **Exact replacements** — Whole-word spelling aliases work independently of AI, protect URLs/email/code, and preserve original ASR text for Raw/Diff.
+- **Reviewable cleanup suggestions** — Optional stock LFM2.5-350M MLX 4-bit inference (~227 MB) proposes constrained deletions in History. Compare the suggestion and explicitly copy it; ordinary paste/Copy use the transcript. Expanded tests rejected automatic cleanup, so no tested model is advertised as a validated automatic editor.
+- **Recording recovery** — Device errors preserve captured audio, mark partial transcripts Interrupted, and avoid automatically pasting incomplete text. Inference/history failures retain a private temporary WAV with recovery actions.
+
+### Changed
+
+- **Settings redesign** — General, Dictation, Vocabulary and Advanced sections, sticky Save/Cancel, keyboard navigation, truthful load/save errors and unsaved-change handling.
+- **One-action cleanup setup** — The switch remains usable before download and prepares runtime/model with progress, retry and cancellation. Cleanup defaults off and enables only after preparation and Save.
+- **Responsive UI** — Render 50 history rows at a time while searching all entries. Fixed-size waveform state, no hidden idle animation, and Reduce Motion support. Synthetic 5,000-entry clear-search time fell from385–456ms to32–34ms; these are browser measurements, not native WebKit timings.
+- **Measured Mac inference** — Retain Parakeet TDT v3 and CPU+ANE after same-weight compute tests and comparisons with Qwen3-ASR, Unified EN and Granite Speech5.0. Keep optional cleanup on the tested MLX runtime. No measured wattage claim.
+
+### Fixed
+
+- **Recording endings and concurrency** — Pin FluidAudio0.15.6 with the final-window fix, stop callbacks before draining, check WAV writes/finalization, move large audio finalization off async workers, and guard stale stop/cancel generations.
+- **Cache safety** — Check the SDK's actual v3 cache/artifacts and load existing CoreML models without the SDK's destructive retry recovery. Repair missing vocabulary tokenizer metadata without removing weights.
+- **Reliable state and storage** — Atomic private settings/history writes, recoverable failed saves, durable history eviction acknowledgements, rollback-aware shortcuts and revisioned overlay snapshots. Automatic hides cannot erase a newer recovery error.
+- **Native lifecycle** — Stay menu-bar-only while opening windows, defer quit/restart during dictation, preserve owned subprocesses until bounded cleanup, keep clipboard operations off the async executor, and report activation/permission/update failures accurately.
+- **CSV export** — Preserve multiline text and append suggestion metadata; quote cells and mark formula-looking text for spreadsheet import. Stored history remains unchanged.
+
+### Infrastructure
+
+- **Reproducible measurements** — Preserve synthetic ASR fixtures, 14 generative cleanup checkpoint identities plus an encoder diagnostic, multiple independent validation sets, UI benchmarks, and failed experiments. The earlier24/25 cleanup result is explicitly superseded by broader preservation failures.
+- **Five sequential application reviews** — Audio/ASR, cleanup/vocabulary, UI, persistence/clipboard, lifecycle/packaging, privacy and accessibility reviewed with improvements between every pass; evidence and physical-test limits are recorded in the audit.
+- **Local0.8.0 build** — Consistent version/badge metadata and bundled sidecar; signed local installation for testing, with no public release or git commit implied.
+
 ## [0.7.6] — 2026-06-14
 
 Auto-check for AI model updates and show the tray icon indicator when a new model version is available. Users who enable LLM cleanup now get passive notification of model improvements instead of having to check manually from Settings.

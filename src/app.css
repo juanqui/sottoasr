@@ -11,7 +11,7 @@
   /* Text hierarchy */
   --text-bright: #f0f0f0;
   --text: #c8c8c8;
-  --text-dim: #777777;
+  --text-dim: #a0a0a0;
 
   /* Borders */
   --border: #2e2e2e;
@@ -134,4 +134,13 @@ body.settings #app {
 ::selection {
   background: rgba(59, 130, 246, 0.3);
   color: var(--text-bright);
+}
+
+/* Status text and progress values remain current without decorative motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
