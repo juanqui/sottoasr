@@ -17,10 +17,11 @@ Build output: `website`. This plain HTML/CSS/JavaScript site is separate from th
 Tauri frontend; `npm run build` does not deploy it.
 
 The dashboard confirms automatic production deployments are enabled. On
-September 8 it also reported that the Git account was disconnected. Restoring
-that connection requires GitHub account verification and access to this existing
-repository. Do not assume a pushed change deployed: check Cloudflare's deployment
-status and the served page. Keep the current domain and main-branch routing.
+September 8 it reported a disconnected Git account; after the account holder
+completed GitHub verification, the warning cleared and the existing repository
+connection remained intact. No installation was removed and no repository
+permissions were changed. Do not assume a pushed change deployed: check
+Cloudflare's deployment status and the served page. Keep the current domain and main-branch routing.
 
 ## 2. Release synchronization
 

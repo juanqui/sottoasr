@@ -53,7 +53,7 @@ One bounded public API request per page load. No new backend, hosting service or
 
 - [x] Implement release-aware badge and correct model copy.
 - [x] Add website checks and document actual hosting/release behavior.
-- [ ] Verify browser rendering, fallback cases and build; update PR.
+- [x] Verify browser rendering, fallback cases and build; update PR.
 - [ ] Restore existing Git connection and verify Cloudflare preview deployment.
 
 ## 12. Implementation Status
@@ -65,3 +65,5 @@ Review 2 — Completeness: keep both fallback links functional, hide only the nu
 Review 3 — Actionability: preserve the existing version-bump badge literal, use the current Node/jsdom tooling for focused DOM tests, and run those checks through both existing CI workflows without changing app builds or release publication policy. Approved for implementation.
 
 Local verification: four real-HTML/jsdom tests pass, including nine invalid/incomplete release variants and three failure paths. Configuration assertions and Vite build pass. Chrome renders the live API result v0.7.4 and both matching release links; screenshot confirms download layout. GitHub sudo verification is pending for installation 118245048, so Git connection repair and Cloudflare preview remain unverified.
+
+Connection follow-up: account-holder GitHub verification completed. GitHub installation 118245048 is active with its existing repository access. Cloudflare no longer reports a disconnected account, and main/website automatic production routing is unchanged. A fresh documentation commit will verify preview delivery without touching the GitHub installation or publishing the app.
