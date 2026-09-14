@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Archived benchmark for the former fine-tuned cleanup model.
 
-Current production uses sparse deletion IDs: use run_sparse.py instead.
+Current production uses the batched stop-path sidecar: smoke it via
+benchmarks/llm/release-smoke/run_bundled_sidecar.py against a built bundle.
 The legacy prompt, budget, and scores below reproduce historical experiments;
 they no longer match the production sidecar.
 

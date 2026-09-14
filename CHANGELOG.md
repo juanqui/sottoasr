@@ -2,6 +2,31 @@
 
 All notable changes to SottoASR are documented in this file.
 
+
+## [0.9.1] — 2026-09-13
+
+### Fixed
+- Cleanup no longer silently skips capitalization fixes in later sentences: a masked window could report "nothing to do" whenever a dictation had no filler words before the second sentence, so all its windows went undispatched and the intended edit was lost without any status.
+- When several rolling windows contain the same stretch of speech, each window now derives its own edit authority from the shared answer, so a correction that belongs to a later overlapping window is no longer dropped.
+- A model request interrupted mid-generation can no longer return a short answer: every requested item is always answered (completed, timed out, or failed) instead of the batch quietly losing entries.
+
+### Changed
+- Stop-time cleanup for long dictations is measurably faster: settled window answers are now requested from the model in native batches of up to sixteen, and per-window work is skipped whenever the source itself contains nothing that could legally be edited. Timings were qualified on paced multi-minute replays through the shipped pipeline.
+- A cleanup failure or timeout in one window keeps only that window raw; later batches still run, and surviving edits are still applied.
+
+## [0.9.0] — 2026-09-13
+
+### Added
+- Incremental voice correction: during a recording, rolling audio windows are transcribed and cleaned with small bounded LLM requests, and settled answers are replayed against the final transcript at stop. Long dictations are corrected instead of refused for length, and no single cleanup request can exceed its bounded size.
+
+### Changed
+- Cleanup validation now adjudicates one composed deletion vector over the final transcript and reconstructs the result only from the original bytes; independently invalid edits are dropped per window instead of losing the whole transcript, and the previous whole-text size limits no longer apply to composed output.
+- A clean model timeout (the sidecar answered with a timeout status) retains the healthy resident sidecar for later requests; transport- and process-level faults still retire and restart it.
+- Cancel and stop share one lifecycle: the microphone is released before any cleanup wait, and the correction tasks are joined before the final pass.
+
+### Infrastructure
+- Permanent regression coverage in the correction module: window planning, cached-authority replay and supersession, exact-key reuse at known offsets, gate-term drift invalidation, per-window failure fallback; capture-side retention/ordering tests in the audio module.
+
 ## [0.8.4] — 2026-09-08
 
 ### Added

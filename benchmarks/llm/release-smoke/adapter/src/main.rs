@@ -21,8 +21,10 @@ fn main() {
             if language_skip {
                 serde_json::json!({"accepted":false,"language_skip":true,"output":source,"reason":"reliable_non_english"})
             } else {
-                match validation::validate_cleanup(source, proposal, &terms) {
-                    Ok(output) => serde_json::json!({"accepted":true,"language_skip":false,"output":output}),
+                // 0.9.x API cutover: `validate_cleanup` became
+                // `validate_cleanup_with_edits` (returns output + deletions).
+                match validation::validate_cleanup_with_edits(source, proposal, &terms) {
+                    Ok(edits) => serde_json::json!({"accepted":true,"language_skip":false,"output":edits.output}),
                     Err(reason) => serde_json::json!({"accepted":false,"language_skip":false,"output":source,"reason":reason}),
                 }
             }

@@ -2,9 +2,11 @@
 """Local MiniCPM transcript proposals; Rust validates source-derived edits.
 
 One bounded UTF-8 JSON request/response per line. Only explicit preparation can
-contact Hugging Face. Model state persists; transcript-derived caches do not.
+contact Hugging Face. Model state and the immutable public head cache persist;
+transcript-derived caches do not. Stop-path work arrives only as cleanup_batch.
 """
 
+import copy
 import hashlib
 import importlib.metadata
 import json
@@ -21,9 +23,15 @@ MODEL_NAME = "MiniCPM5 2B (official, 4-bit)"
 MODEL_REVISION = "32f8dd5df1188512a20413f1297083238306634c"
 PROMPT_SHA256 = "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f"
 MAX_TEXT_BYTES = 32_000
-MAX_LINE_BYTES = 256 * 1024
+# Per-item batch input cap (planner MAX_REQUEST_BYTES_SOFT), enforced server-side.
+MAX_INPUT_BYTES = 4_096
+MAX_BATCH_TEXTS = 16
+# Static framing budgets (spec §4.5): they dominate every valid 16-text batch.
+MAX_REQUEST_LINE_BYTES = 1_048_576
+MAX_RESPONSE_LINE_BYTES = 4_194_304
 REQUEST_TIMEOUT_SECONDS = 10
 WARMUP_TEXT = "Please um keep this readiness check local."
+WARMUP_TEXT_SECOND = "Please um keep the second readiness check local too."
 VERIFICATION_FILE = "sotto-verified.json"
 RUNTIME_PINS = {"mlx": "0.32.2", "mlx-lm": "0.31.3", "transformers": "5.3.0", "huggingface-hub": "1.7.2"}
 MODEL_FILES = {
@@ -67,6 +75,13 @@ PROMPT = json.loads(r'''{
 _model = _tokenizer = _sampler = None
 _context_limit = 0
 _warmed = False
+# Immutable batch substrate, built once inside warm_model() before the warmup
+# generation: the public prompt head ids, its advanced prompt cache (a LIST of
+# per-layer caches; batch merge copies it, never mutates it) and an empty
+# streaming-detokenizer template that is copy.copy'd + reset() per batch item.
+_head_ids = None
+_prefix_cache = None
+_detok_template = None
 
 
 class CleanupError(Exception):
@@ -197,58 +212,202 @@ def build_prompt(text):
                                           tokenize=False, enable_thinking=False)
 
 
-def validate_text(text):
+def prompt_ids_for(text):
+    prompt = build_prompt(text)
+    # Exactly match qualification and mlx-lm's string-prompt BOS handling.
+    add_special = _tokenizer.bos_token is None or not prompt.startswith(_tokenizer.bos_token)
+    return _tokenizer.encode(prompt, add_special_tokens=add_special)
+
+
+def validate_batch_text(text):
+    """Per-item batch input contract (§4.1/§4.5): text within MAX_INPUT_BYTES."""
     if not isinstance(text, str):
-        raise CleanupError("invalid_text", "Cleanup input must be text.")
+        raise CleanupError("invalid_request", "Cleanup batch entries must be text.")
     try:
         size = len(text.encode("utf-8"))
     except UnicodeError:
-        raise CleanupError("invalid_text", "Cleanup text must be valid UTF-8.") from None
-    if size > MAX_TEXT_BYTES:
-        raise CleanupError("text_limit", "Cleanup text exceeds the supported size; original text preserved.")
+        raise CleanupError("invalid_request", "Cleanup batch text must be valid UTF-8.") from None
+    if size > MAX_INPUT_BYTES:
+        raise CleanupError("invalid_request", "Cleanup batch text exceeds the supported size.")
     return size
-
-
-def parse_generation(output, finish_reason):
-    if finish_reason != "stop":
-        raise CleanupError("incomplete_generation", "Cleanup did not finish; original text preserved.")
-    validate_text(output)
-    return output
 
 
 def deadline_expired(_signal, _frame):
     raise TimeoutError()
 
 
-def cleanup_text(text):
-    validate_text(text)
-    load_model()
-    import mlx.core as mx
-    from mlx_lm import stream_generate
+def build_head():
+    """Materialize the immutable batch substrate once, before any warmup batch.
 
+    The head is the token-common prefix of two distinct-sentinel prompt
+    encodings of the frozen prompt — the transcript-free public prefix,
+    COMPUTED (not length-pinned: 365 is a measurement, and refusing service
+    on an input-size drift would be a refusal policy, not an identity
+    invariant — qualified model/config/tokenizer checks already pin the
+    prompt). It is advanced into _prefix_cache with a max_tokens=0 pass
+    (proven run_all67.py:150-161). Per-row head matching in
+    run_batch_generation keeps generation correct for any computed head.
+    """
+    global _head_ids, _prefix_cache, _detok_template
+    if _head_ids is not None:
+        return
+    import mlx.core as mx
+    from mlx_lm.generate import generate_step
+    from mlx_lm.models import cache as mx_cache
+
+    first = prompt_ids_for("AAAAAAAA sentinel one")
+    second = prompt_ids_for("BBBBBBBB sentinel two")
+    common = 0
+    while common < min(len(first), len(second)) and first[common] == second[common]:
+        common += 1
+    head_ids = first[:common]
+    prefix_cache = mx_cache.make_prompt_cache(_model)
+    for _ in generate_step(mx.array(head_ids), _model, sampler=_sampler,
+                           max_tokens=0, prompt_cache=prefix_cache):
+        pass
+    mx.eval([layer.state for layer in prefix_cache])
+    mx.synchronize()
+    _head_ids, _prefix_cache = head_ids, prefix_cache
+    _detok_template = _tokenizer.detokenizer
+    log(f"Built immutable batch head ({len(head_ids)} tokens)")
+
+
+def _over_deadline(started):
+    """Monotonic deadline check. Native work can defer the Python alarm
+    signal indefinitely, so every seal re-checks the clock directly."""
+    return time.perf_counter() - started > REQUEST_TIMEOUT_SECONDS
+
+
+def stop_item_result(slot, started):
+    """Finalize one EOS-completed item. Cap on the TALLY first; the clock is
+    the LAST check before the success seal — nothing observable may happen
+    after it (spec §4.1)."""
+    detok = slot["detok"]
+    before = len(detok.text)  # property: pure length read, no decode
+    detok.finalize()
+    # finalize() can still append bytes: charge them to the slot's streaming
+    # tally (the same per-token accounting) instead of re-encoding the whole
+    # text on every seal.
+    slot["bytes"] += len(detok.text[before:].encode("utf-8"))
+    if slot["bytes"] > MAX_TEXT_BYTES:
+        return {"index": slot["index"], "status": "failed", "error_code": "text_limit"}
+    # CLOCK LAST: immediately before the seal, so no finalize/cap work can
+    # be charged past the deadline after it has passed.
+    if _over_deadline(started):
+        return {"index": slot["index"], "status": "timeout"}
+    text = detok.text  # frozen normalization: raw detokenizer text,
+    # exactly what the serial parse_generation returned — never stripped.
+    return {"index": slot["index"], "status": "ok", "text": text,
+            "elapsed_ms": int((time.perf_counter() - started) * 1000)}
+
+
+def run_batch_generation(texts):
+    """One native BatchGenerator dispatch; exactly one result per input index.
+
+    The alarm bounds the whole batch generation (same semantics the old
+    per-request alarm had, now over ≤16 windows). Every result slot is
+    preallocated before any alarm-able work, so an alarm strike during
+    preprocessing, generation, or a sibling's finalization can never produce
+    a short or duplicate-index response — unsealed slots seal as timeout on
+    the deadline sweep. Items that reached EOS before the deadline seal as
+    ok; no in-request head rebuild exists: warm_model() built the substrate
+    before this ran.
+    """
+    import mlx.core as mx
+    from mlx_lm.generate import BatchGenerator
+    from mlx_lm.models import cache as mx_cache
+
+    results = [None] * len(texts)
     started = time.perf_counter()
-    pieces, last, output_bytes = [], None, 0
+    rows, slots = [], {}
     generator = None
+    sealed = False
     previous = signal.signal(signal.SIGALRM, deadline_expired)
     try:
         signal.setitimer(signal.ITIMER_REAL, REQUEST_TIMEOUT_SECONDS)
         mx.random.seed(42)
-        prompt = build_prompt(text)
-        # Exactly match qualification and mlx-lm's string-prompt BOS handling.
-        add_special = _tokenizer.bos_token is None or not prompt.startswith(_tokenizer.bos_token)
-        prompt_ids = _tokenizer.encode(prompt, add_special_tokens=add_special)
-        budget = min(8192, max(128, 2 * len(_tokenizer.encode(text)) + 32))
-        if len(prompt_ids) + budget > _context_limit:
-            raise CleanupError("context_limit", "Cleanup input exceeds model context; original text preserved.")
-        generator = stream_generate(_model, _tokenizer, prompt=prompt_ids,
-                                    max_tokens=budget, sampler=_sampler)
-        for response in generator:
-            output_bytes += len(response.text.encode("utf-8"))
-            if output_bytes > MAX_TEXT_BYTES:
-                raise CleanupError("text_limit", "Cleanup output exceeds the supported size; original text preserved.")
-            pieces.append(response.text)
-            last = response
-        proposal = parse_generation("".join(pieces), last.finish_reason if last else None)
+        for index, text in enumerate(texts):
+            # Frozen boundary: budget is computed on the KEY TEXT, and the
+            # context guard checks the FULL prompt (head included) + budget.
+            budget = min(8192, max(128, 2 * len(_tokenizer.encode(text)) + 32))
+            prompt_ids = prompt_ids_for(text)
+            if len(prompt_ids) + budget > _context_limit:
+                results[index] = {"index": index, "status": "failed",
+                                  "error_code": "context_limit"}
+                continue
+            matched = prompt_ids[:len(_head_ids)] == _head_ids
+            rows.append({"index": index, "budget": budget, "matched": matched,
+                         "prompt": prompt_ids[len(_head_ids):] if matched else prompt_ids})
+        if rows:
+            # Exact proven call shape: stop SEQUENCES [eos] (elements are ints,
+            # never list(eos)); no ctor max_tokens; both batch sizes explicit.
+            generator = BatchGenerator(_model,
+                                       stop_tokens=[[eos] for eos in _tokenizer.eos_token_ids],
+                                       sampler=_sampler,
+                                       completion_batch_size=len(rows),
+                                       prefill_batch_size=len(rows),
+                                       prefill_step_size=64)
+            if all(row["matched"] for row in rows):
+                # Safe to share one cache object: the batch merge COPIES it.
+                caches = [_prefix_cache] * len(rows)
+            else:
+                # A prefix-token miss keeps the model judgment unchanged; it
+                # just skips the shared-prefix optimization for that row.
+                caches = [_prefix_cache if row["matched"] else mx_cache.make_prompt_cache(_model)
+                          for row in rows]
+            uids = generator.insert([row["prompt"] for row in rows],
+                                    max_tokens=[row["budget"] for row in rows],
+                                    caches=caches)
+            for uid, row in zip(uids, rows):
+                detok = copy.copy(_detok_template)
+                detok.reset()
+                slots[uid] = {"index": row["index"], "detok": detok, "bytes": 0}
+            eos_ids = set(_tokenizer.eos_token_ids)
+            while True:
+                if _over_deadline(started):
+                    sealed = True  # deferred signal: seal at this checkpoint
+                    break
+                batch = generator.next_generated()
+                if not batch:
+                    break
+                for response in batch:
+                    slot = slots.get(response.uid)
+                    if slot is None:
+                        continue  # removed or sealed uid; never re-accepted
+                    reason = response.finish_reason
+                    if reason == "stop" or (reason == "length" and int(response.token) in eos_ids):
+                        # EOS-at-budget normalization (§4.2): a LENGTH flag on
+                        # a complete single-token EOS stop is a real stop.
+                        # Compute + SEAL first, delete after: an alarm strike
+                        # mid-finalize can never lose this index, and the
+                        # final clock check inside stop_item_result re-asserts
+                        # deadline precedence after finalize/encode work. A
+                        # completed uid needs no generator.remove — it is
+                        # already closed inside the generator.
+                        results[slot["index"]] = stop_item_result(slot, started)
+                        del slots[response.uid]
+                    elif reason is not None:
+                        # True truncation / abort: never propose a partial.
+                        results[slot["index"]] = {"index": slot["index"],
+                                                  "status": "failed",
+                                                  "error_code": "incomplete_generation"}
+                        del slots[response.uid]
+                    else:
+                        detok = slot["detok"]
+                        detok.add_token(int(response.token))
+                        slot["bytes"] += len(detok.last_segment.encode("utf-8"))
+                        if slot["bytes"] > MAX_TEXT_BYTES:
+                            # Per-item isolation: cut this UID, siblings run
+                            # on — and a mid-generation cap breach must not
+                            # sink the whole batch. Seal BEFORE the
+                            # potentially interruptible remove/del.
+                            results[slot["index"]] = {"index": slot["index"],
+                                                      "status": "failed",
+                                                      "error_code": "text_limit"}
+                            generator.remove([response.uid])
+                            del slots[response.uid]
+    except TimeoutError:
+        sealed = True
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
@@ -258,22 +417,38 @@ def cleanup_text(text):
         finally:
             generator = None
             mx.clear_cache()
-    elapsed = time.perf_counter() - started
-    # Native work can defer Python signals; never accept an over-deadline result.
-    if elapsed > REQUEST_TIMEOUT_SECONDS:
-        raise TimeoutError()
-    return proposal, int(elapsed * 1000)
+    # Deadline precedence: sealed (alarm strike or deferred detection) turns
+    # EVERY unsealed slot into a timeout; a natural end that left slots
+    # unsealed is a generation failure for those items. After this sweep
+    # `results` has exactly len(texts) entries, all sealed, in input order.
+    timed_out = sealed or _over_deadline(started)
+    for index, result in enumerate(results):
+        if result is None:
+            results[index] = ({"index": index, "status": "timeout"} if timed_out else
+                              {"index": index, "status": "failed",
+                               "error_code": "incomplete_generation"})
+    return results
 
 
 def warm_model():
-    """Warm native generation once with public synthetic data, then discard it."""
+    """Load, build the batch head once, then warm the real batch path.
+
+    Build ORDER is normative (§4.2/E6): weights resident → head cache + detok
+    template → ONE batch warmup generation through the head → warmed. The
+    cold-first-dispatch cost therefore never lands inside a batch alarm.
+    """
     global _warmed
     if _model is not None and _warmed:
         return False
     _warmed = False
-    # cleanup_text loads if needed, requires completion, and frees its request
-    # cache. It does not call this helper, so direct cleanup cannot recurse.
-    cleanup_text(WARMUP_TEXT)
+    load_model()
+    build_head()
+    results = run_batch_generation([WARMUP_TEXT, WARMUP_TEXT_SECOND])
+    # A vacuous loop over an empty/thin result list would silently mark a
+    # dead batch path warm; assert the full contract before claiming it.
+    if len(results) != 2 or any(result.get("status") != "ok" for result in results):
+        raise CleanupError("incomplete_generation",
+                           "Warmup generation did not finish; original text preserved.")
     _warmed = True
     return True
 
@@ -300,12 +475,21 @@ def handle_request(request):
         did_warm = warm_model()
         return {"ok": True, "model_id": MODEL_ID, "revision": MODEL_REVISION,
                 "prompt_sha256": PROMPT_SHA256, "warmed": True, "did_warm": did_warm}
-    if action == "cleanup":
-        source = request.get("text")
-        validate_text(source)
+    if action == "cleanup_batch":
+        entries = request.get("texts")
+        if not isinstance(entries, list):
+            raise CleanupError("invalid_request", "Cleanup batch requires a list of texts.")
+        if len(entries) > MAX_BATCH_TEXTS:
+            raise CleanupError("invalid_request", "Cleanup batch carries at most 16 texts.")
+        if not entries:
+            # Defined no-op handled BEFORE any model or generator work (E5).
+            return {"ok": True, "results": []}
+        for entry in entries:
+            validate_batch_text(entry)
+        # Ensure-warm runs OUTSIDE and before the generation alarm (E6): cold
+        # startup belongs to load/outer timers, never to a batch deadline.
         warm_model()
-        text, elapsed = cleanup_text(source)
-        return {"ok": True, "text": text, "finish_reason": "stop", "elapsed_ms": elapsed}
+        return {"ok": True, "results": run_batch_generation(entries)}
     if action == "quit":
         return {"ok": True}
     raise CleanupError("invalid_action", "Unknown cleanup action.")
@@ -329,17 +513,17 @@ def safe_response(request):
 
 def encode_response(response):
     encoded = (json.dumps(response, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
-    if len(encoded) > MAX_LINE_BYTES:
+    if len(encoded) > MAX_RESPONSE_LINE_BYTES:
         encoded = b'{"ok":false,"error_code":"response_limit","error":"Cleanup response exceeded the protocol limit."}\n'
     return encoded
 
 
 def serve(source, destination):
     while True:
-        line = source.readline(MAX_LINE_BYTES + 1)
+        line = source.readline(MAX_REQUEST_LINE_BYTES + 1)
         if not line:
             return
-        if len(line) > MAX_LINE_BYTES or not line.endswith(b"\n"):
+        if len(line) > MAX_REQUEST_LINE_BYTES or not line.endswith(b"\n"):
             destination.write(encode_response({"ok": False, "error_code": "request_limit", "error": "Cleanup request exceeded the protocol limit or ended early."}))
             destination.flush()
             return  # Do not parse a remainder as a second request.

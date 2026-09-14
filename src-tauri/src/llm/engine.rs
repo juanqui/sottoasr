@@ -16,17 +16,56 @@ pub fn next_job_id() -> u64 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
 
+/// One cleaned-text proposal returned by a batch, typed per item.
+/// `Proposal(Some(""))` is a VALID reply (a fully-erased segment, spec E1) —
+/// success is never tested by truthiness; `Proposal(None)` means the item
+/// answered ok without a usable text and is treated as a per-item failure.
+/// `TimedOut`/`Failed` keep their region's raw text but say nothing about the
+/// endpoint's health: a valid response carrying these RETAINS the handle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BatchItem {
+    Proposal(Option<String>),
+    TimedOut,
+    Failed(String),
+}
+
+/// Largest batch the endpoint accepts and the client's chunk size (spec §2).
+pub const BATCH_CAP: usize = 16;
+
+/// One item's raw-input budget in bytes (the planner's window cap, enforced
+/// server-side per item as new work — spec §4.5). Distinct from the output
+/// cap: cleanup never returns more bytes than the source carried (the
+/// source-side bound lives in `validation::MAX_CLEANUP_BYTES` — spec: there
+/// is no separate MAX_TEXT_BYTES in Rust).
+pub const MAX_ITEM_BYTES: usize = 4_096;
+
+/// Batch framing (spec §4.5): chosen so the caps statically dominate every
+/// valid planned batch — request ≤ 16 × (4 096 B raw × 6 JSON-escape +
+/// field overhead) ≈ 0.4 MB; response ≤ 16 × (32 000 B raw × 6 + metadata)
+/// ≈ 3.1 MB. Readers guard at limit+1 bytes; no eager cap-sized allocation.
+/// Mirrored in sidecar/llm_cleanup.py.
+pub const MAX_REQUEST_LINE_BYTES: u64 = 1024 * 1024;
+pub const MAX_RESPONSE_LINE_BYTES: u64 = 4 * 1024 * 1024;
+
 /// Trait for LLM transcript cleanup backends.
 /// Production: Python sidecar via stdin/stdout JSON protocol.
-/// Tests: returns an untrusted complete text proposal.
+/// Tests: return untrusted batched proposals; the source validator
+/// authorizes reconstruction separately.
 pub trait LlmBackend: Send {
     fn is_alive(&mut self) -> bool { true }
-    /// Propose cleanup; the source validator authorizes reconstruction separately.
-    fn cleanup(&mut self, text: &str) -> Result<String, String>;
+    /// Head-batch cleanup: one request for 1..=16 texts, one typed
+    /// [`BatchItem`] per input. REQUIRED — no default: a default looping
+    /// a serial single-text call would be a prohibited compatibility shim,
+    /// and no serial path exists anywhere after the cutover (spec §4.1).
+    /// `Err(String)` is the whole-request protocol/transport channel
+    /// (bad JSON, index-set mismatch, over-cap line, EOF, pipe death): the
+    /// caller MUST see these to retire the handle. Per-item
+    /// `BatchOutcome`-style failures are `Ok` entries, never `Err`.
+    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String>;
 
     /// Send a raw JSON request and return the raw JSON response.
     /// Used by `commands/llm.rs` for protocol-level operations like
-    /// `check_update` that bypass the typed `cleanup()` API.
+    /// `check_update` that bypass the typed batch API.
     fn request_raw(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Shut down the backend. Default is a no-op.
@@ -48,13 +87,14 @@ pub struct LlmEngine {
 // We manage the sidecar as a single-owner resource behind TokioMutex.
 // Child handles and the response receiver are Send; no unsafe implementation needed.
 
-const MAX_RESPONSE_BYTES: u64 = 256 * 1024;
-
 fn request_timeout(request: &serde_json::Value) -> Duration {
     Duration::from_secs(match request.get("action").and_then(|v| v.as_str()) {
         Some("download") => 900,
         Some("load") => 15,
-        Some("cleanup") => 15, // Ten-second generation budget plus protocol overhead.
+        // CRITICAL (spec §4.1): the batch action MUST map here. An unmapped
+        // action silently gets the 5 s default, which retires the sidecar
+        // mid-batch — measured 6.6 s for a real production 16-batch.
+        Some("cleanup_batch") => 15, // Ten-second generation budget + overhead.
         Some("check_update") => 10,
         _ => 5,
     })
@@ -74,7 +114,7 @@ fn response_reader(
                 let mut bytes = Vec::new();
                 let response = match reader
                     .by_ref()
-                    .take(MAX_RESPONSE_BYTES)
+                    .take(MAX_RESPONSE_LINE_BYTES)
                     .read_until(b'\n', &mut bytes)
                 {
                     Ok(0) => Err("Sidecar closed stdout (process may have crashed)".into()),
@@ -189,7 +229,7 @@ impl LlmEngine {
         let mut line =
             serde_json::to_string(req).map_err(|e| format!("JSON serialize failed: {}", e))?;
         line.push('\n');
-        if line.len() as u64 > MAX_RESPONSE_BYTES {
+        if line.len() as u64 > MAX_REQUEST_LINE_BYTES {
             return Err("Cleanup request exceeds protocol limit".into());
         }
 
@@ -360,49 +400,173 @@ pub fn validate_loaded_model(response: &serde_json::Value) -> Result<(), String>
     Ok(())
 }
 
-fn cleanup_proposal(response: &serde_json::Value) -> Result<String, String> {
-    if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-        // These failures can leave native generation in a permanently bad state.
-        // Do not keep reusing that process just because its JSON pipe still works.
-        if matches!(response["error_code"].as_str(),
-            Some("operation_failed" | "timeout" | "model_identity" | "runtime_setup" | "model_setup")) {
-            return Err(format!("Cleanup runtime requires restart ({}); original text preserved",
-                response["error_code"].as_str().unwrap_or("unknown")));
+/// Stable sentinel for a *responded* deadline miss: the sidecar observed its
+/// own generation deadline, cancelled the generator, and reported a clean
+/// error line. On the current build/machine that response class was followed
+/// by healthy reuse of the same process (docs/journals/2026-09-12-correction-
+/// baseline-experiments.md §4, with its caveats), so — unlike pipe death —
+/// this must not retire the resident handle. Deliberately avoids the substring
+/// "timed out" so the zombie heuristic below cannot re-classify it.
+pub const RESPONDED_TIMEOUT_ERROR: &str =
+    "Cleanup deadline reached; original text preserved";
+
+/// True when cleanup failed with the sidecar's own deadline response.
+pub fn is_responded_timeout(err: &str) -> bool {
+    err == RESPONDED_TIMEOUT_ERROR
+}
+
+/// Interpret one `cleanup_batch` response against the `n` texts it answers.
+/// `Ok` holds exactly one item per input, in input order. `Err((retire,
+/// reason))` splits the two whole-request channels the caller must
+/// distinguish (spec §4.1):
+/// - `retire = true` — the response is UNTRUSTWORTHY (no `results` array,
+///   count ≠ n, non-int/duplicate/out-of-range index, `ok` item without a
+///   string `text`, unknown status, over-cap line): the endpoint may emit
+///   anything next, so the process is killed and restarted on next use.
+/// - `retire = false` — a TYPED endpoint answer (outer `invalid_request`
+///   for an over-cap or malformed request the sidecar declined, the
+///   responded generation `timeout`, ordinary failed codes): a valid JSON
+///   line from a healthy process; the resident handle stays.
+///
+/// Per-item failures/timeouts are `Ok` entries, never `Err`.
+pub fn parse_batch_response(
+    response: &serde_json::Value,
+    n: usize,
+) -> Result<Vec<BatchItem>, (bool, String)> {
+    // The `ok` discriminator must be an EXPLICIT JSON boolean. Absent,
+    // null, `"true"`, `1` — any of these is a malformed line from an
+    // endpoint whose protocol behavior is unknown: retire, never guess.
+    let ok = match response.get("ok") {
+        Some(serde_json::Value::Bool(ok)) => *ok,
+        _ => return Err((true, "batch response ok flag is missing or not boolean".into())),
+    };
+    if !ok {
+        // A typed failure additionally requires BOTH schema halves: a
+        // recognized error_code AND a string `error` message (the sidecar's
+        // `safe_response` always emits both). A failure line with an
+        // unknown/missing/non-string half is malformed, not a decline.
+        let code = match response.get("error_code") {
+            Some(serde_json::Value::String(code)) => code.as_str(),
+            _ => {
+                return Err((
+                    true,
+                    "failure response carries no string error_code".into(),
+                ))
+            }
+        };
+        let reason = match response.get("error") {
+            Some(serde_json::Value::String(reason)) => reason.as_str(),
+            _ => {
+                return Err((
+                    true,
+                    format!("failure response for {code} carries no string error"),
+                ))
+            }
+        };
+        return Err(match code {
+            // Protocol-healthy responded deadline — the retention sentinel,
+            // never the zombie class (deliberately avoids "timed out").
+            "timeout" => (false, RESPONDED_TIMEOUT_ERROR.to_string()),
+            // A line over the framing cap desyncs the stream by definition
+            // (the sidecar stops serving after request_limit; response_limit
+            // replaced a batch whose bytes we never saw).
+            "request_limit" | "response_limit" => (
+                true,
+                format!("Cleanup {code}: sidecar line exceeded the protocol cap"),
+            ),
+            "operation_failed" | "model_identity" | "model_verification" | "runtime_setup"
+            | "model_setup" => (
+                true,
+                format!("Cleanup runtime requires restart ({code}); original text preserved"),
+            ),
+            other => (
+                false,
+                {
+                    // The reason comes from the endpoint; keep it readable but
+                    // never let it masquerade as a retire prefix (the `other`
+                    // code is authoritative for the status class).
+                    format!("Cleanup endpoint declined: {reason} [{other}]")
+                },
+            ),
+        });
+    }
+    let Some(results) = response.get("results").and_then(serde_json::Value::as_array) else {
+        return Err((true, "batch response carries no results array".into()));
+    };
+    if results.len() != n {
+        return Err((
+            true,
+            format!("batch response has {} results for {n} texts", results.len()),
+        ));
+    }
+    let mut items: Vec<Option<BatchItem>> = vec![None; n];
+    for entry in results {
+        let Some(index) = entry.get("index").and_then(serde_json::Value::as_u64) else {
+            return Err((true, "batch result carries a non-integer index".into()));
+        };
+        let Ok(index) = usize::try_from(index) else {
+            return Err((true, "batch result index out of range".into()));
+        };
+        if index >= n {
+            return Err((
+                true,
+                format!("batch result index {index} outside 0..{n}"),
+            ));
         }
-        return Err(response
-            .get("error")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("Cleanup failed; original text preserved")
-            .to_string());
+        if items[index].is_some() {
+            return Err((true, format!("batch result index {index} is duplicated")));
+        }
+        items[index] = Some(match entry.get("status").and_then(serde_json::Value::as_str) {
+            Some("ok") => {
+                let Some(text) = entry.get("text").and_then(serde_json::Value::as_str) else {
+                    return Err((true, "ok batch result carries no text".into()));
+                };
+                // Trust-but-verify the endpoint's own output cap (spec E1:
+                // "" is a VALID proposal; oversize is demoted per-item, not
+                // batch-wide — the source validator remains the authority).
+                if text.len() > crate::llm::validation::MAX_CLEANUP_BYTES {
+                    BatchItem::Failed("proposal_limit".into())
+                } else {
+                    BatchItem::Proposal(Some(text.to_string()))
+                }
+            }
+            Some("timeout") => BatchItem::TimedOut,
+            Some("failed") => BatchItem::Failed(
+                entry
+                    .get("error_code")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("failed")
+                    .to_string(),
+            ),
+            _ => return Err((true, "batch result carries an unknown status".into())),
+        });
     }
-    if response
-        .get("finish_reason")
-        .and_then(serde_json::Value::as_str)
-        != Some("stop")
-    {
-        return Err("Cleanup did not finish; original text preserved".into());
+    // `results.len() == n` + unique in-range indices already prove the set is
+    // a permutation of 0..n-1; this is the belt, not the authority.
+    if items.iter().any(Option::is_none) {
+        return Err((true, "batch result index set is not a permutation".into()));
     }
-    let text = response
-        .get("text")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("Cleanup returned no text proposal")?;
-    if text.len() > crate::llm::validation::MAX_CLEANUP_BYTES {
-        return Err("Cleanup proposal exceeds byte limit".into());
-    }
-    Ok(text.to_string())
+    Ok(items.into_iter().map(Option::unwrap).collect())
 }
 
 impl LlmBackend for LlmEngine {
     fn is_alive(&mut self) -> bool {
         matches!(self.child.lock().try_wait(), Ok(None))
     }
-    fn cleanup(&mut self, text: &str) -> Result<String, String> {
-        let response = self.request(&serde_json::json!({"action": "cleanup", "text": text}))?;
-        let result = cleanup_proposal(&response);
-        if result.as_ref().err().is_some_and(|error| is_zombie_error(error)) {
-            self.quit();
+
+    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+        let response =
+            self.request(&serde_json::json!({"action": "cleanup_batch", "texts": texts}))?;
+        match parse_batch_response(&response, texts.len()) {
+            Ok(items) => Ok(items),
+            Err((true, reason)) => {
+                // Untrustworthy endpoint: terminate now and clear the
+                // registered PID so the next use respawns (spec §4.1).
+                self.quit();
+                Err(format!("Sidecar protocol closed: {reason}"))
+            }
+            Err((false, reason)) => Err(reason),
         }
-        result
     }
 
     fn request_raw(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -781,6 +945,8 @@ const SPAWN_MAX_ATTEMPTS: u32 = 2;
 /// Python subprocess has died (broken pipe / EOF on stdout)? These errors
 /// come from `LlmEngine::request()` when writing to or reading from a dead
 /// child process. A zombie handle cannot be recovered — it must be dropped.
+/// A *responded* deadline (`RESPONDED_TIMEOUT_ERROR`) is protocol-healthy and
+/// intentionally does not match: that handle is reused (see `is_responded_timeout`).
 pub fn is_zombie_error(err: &str) -> bool {
     let e = err.to_ascii_lowercase();
     e.contains("broken pipe")
@@ -943,26 +1109,139 @@ pub fn model_config() -> &'static ModelConfig {
 mod tests {
     use super::*;
 
+    fn batch_ok(texts: usize) -> serde_json::Value {
+        let results: Vec<serde_json::Value> = (0..texts)
+            .map(|i| serde_json::json!({"index": i, "status": "ok", "text": "", "elapsed_ms": 1}))
+            .collect();
+        serde_json::json!({"ok": true, "results": results})
+    }
+
     #[test]
-    fn completed_text_protocol_rejects_partial_and_oversized_responses() {
+    fn batch_parser_accepts_the_wire_shape_and_empty_proposal() {
+        // E1: "" is a VALID proposal (the fully-erasing 1-word case).
+        let items = parse_batch_response(&batch_ok(1), 1).unwrap();
+        assert!(matches!(&items[0], BatchItem::Proposal(Some(s)) if s.is_empty()));
+        // Per-item status union.
+        let resp = serde_json::json!({"ok":true,"results":[
+            {"index":0,"status":"timeout"},
+            {"index":1,"status":"failed","error_code":"incomplete_generation"},
+            {"index":2,"status":"ok","text":"clean"}]});
+        let items = parse_batch_response(&resp, 3).unwrap();
+        assert!(matches!(items[0], BatchItem::TimedOut));
+        assert!(matches!(&items[1], BatchItem::Failed(c) if c == "incomplete_generation"));
+        assert!(matches!(&items[2], BatchItem::Proposal(Some(s)) if s == "clean"));
+        // Out-of-cap ok text demoted per-item, siblings unharmed.
+        let big = "x".repeat(crate::llm::validation::MAX_CLEANUP_BYTES + 1);
+        let resp = serde_json::json!({"ok":true,"results":[
+            {"index":0,"status":"ok","text":big},
+            {"index":1,"status":"ok","text":"ok"}]});
+        let items = parse_batch_response(&resp, 2).unwrap();
+        assert!(matches!(&items[0], BatchItem::Failed(c) if c == "proposal_limit"));
+        assert!(matches!(&items[1], BatchItem::Proposal(Some(s)) if s == "ok"));
         assert_eq!(
-            cleanup_proposal(&serde_json::json!({"ok":true,"text":"","finish_reason":"stop"}))
-                .unwrap(),
-            ""
-        );
-        for response in [
-            serde_json::json!({"ok":true,"text":"truncated", "finish_reason":"length"}),
-            serde_json::json!({"ok":true,"text":"partial"}),
-            serde_json::json!({"ok":true,"finish_reason":"stop"}),
-            serde_json::json!({"ok":true,"text":"é".repeat(32_000),"finish_reason":"stop"}),
-            serde_json::json!({"ok":false,"text":"partial","finish_reason":"stop"}),
-        ] {
-            assert!(cleanup_proposal(&response).is_err());
-        }
-        assert_eq!(
-            request_timeout(&serde_json::json!({"action":"cleanup"})),
+            request_timeout(&serde_json::json!({"action":"cleanup_batch","texts":[]})),
             Duration::from_secs(15)
         );
+    }
+
+    #[test]
+    fn batch_parser_splits_untrustworthy_and_typed_whole_request_errors() {
+        // Untrustworthy (retire = true): kill + respawn on next use.
+        for response in [
+            serde_json::json!({"ok": true}), // no results array
+            serde_json::json!({"ok":true,"results":[]}), // count ≠ n
+            serde_json::json!({"ok":true,"results":[
+                {"index":0,"status":"ok","text":"a"},
+                {"index":0,"status":"ok","text":"b"}]}), // duplicate index
+            serde_json::json!({"ok":true,"results":[{"index":1,"status":"ok","text":"a"}]}), // out of range
+            serde_json::json!({"ok":true,"results":[{"index":"0","status":"ok","text":"a"}]}), // non-int
+            serde_json::json!({"ok":true,"results":[{"index":0,"status":"ok"}]}), // ok without text
+            serde_json::json!({"ok":true,"results":[{"index":0,"status":"done"}]}), // unknown status
+            serde_json::json!({"ok":false,"error_code":"request_limit"}),
+            serde_json::json!({"ok":false,"error_code":"response_limit"}),
+            serde_json::json!({"ok":false,"error_code":"operation_failed"}),
+        ] {
+            let (retire, _) = parse_batch_response(&response, 1).unwrap_err();
+            assert!(retire, "must retire the endpoint for {response}");
+        }
+        // The `ok` discriminator itself: anything that is not an explicit
+        // JSON boolean is a malformed protocol line — retire, never guess.
+        for response in [
+            serde_json::json!({}), // no discriminator at all
+            serde_json::json!([]), // not an object
+            serde_json::json!({"ok": "true", "results": []}), // string, not bool
+            serde_json::json!({"ok": null, "results": []}),   // explicit null
+            serde_json::json!({"ok": 1, "results": []}),      // number, not bool
+            // A typed failure needs BOTH halves of the schema (safe_response
+            // always emits both); a half is as untrustworthy as none.
+            serde_json::json!({"ok": false}), // no code, no error
+            serde_json::json!({"ok": false, "error_code": "timeout"}), // no error message
+            serde_json::json!({"ok": false, "error_code": 7, "error": "x"}), // non-string code
+            serde_json::json!({"ok": false, "error": "boom"}), // code missing
+        ] {
+            let (retire, _) = parse_batch_response(&response, 1).unwrap_err();
+            assert!(retire, "must retire the endpoint for {response}");
+        }
+        // Typed (retire = false): handle reused. Full schema on the wire.
+        let (retire, reason) = parse_batch_response(
+            &serde_json::json!({"ok":false,"error_code":"timeout","error":"Cleanup request timed out"}),
+            1,
+        )
+        .unwrap_err();
+        assert!(!retire);
+        assert!(is_responded_timeout(&reason), "{reason}");
+        assert!(!is_zombie_error(&reason));
+        let (retire, reason) = parse_batch_response(
+            &serde_json::json!({"ok":false,"error_code":"invalid_request","error":"too many texts; maximum is 16"}),
+            1,
+        )
+        .unwrap_err();
+        assert!(!retire);
+        // A laundered endpoint reason can never masquerade as a retire prefix.
+        assert!(!is_zombie_error(&reason), "{reason}");
+        // An unknown code with a full schema is still a DECLINE (retained
+        // handle) — it is the missing/non-string half that retires.
+        let (retire, reason) = parse_batch_response(
+            &serde_json::json!({"ok":false,"error_code":"some_future_code","error":"whatever the endpoint says"}),
+            1,
+        )
+        .unwrap_err();
+        assert!(!retire, "known-shape unknown code is a decline");
+        assert!(!is_zombie_error(&reason), "{reason}");
+    }
+
+    /// Regression (2026-09-12, batched by design): the sidecar's own
+    /// `timeout` error_code classifies as a responded deadline (protocol-
+    /// healthy, handle reused); `operation_failed` keeps the restart
+    /// classification — proven over REAL subprocesses with the batched wire.
+    #[test]
+    fn responded_deadline_is_not_a_zombie_over_the_real_protocol() {
+        let source = "Please keep the final instruction.";
+        let mut engine = stub_engine(concat!(
+            "import json,sys\n",
+            "n=0\n",
+            "for line in sys.stdin:\n",
+            " n+=1\n",
+            " if n==1:\n",
+            "  print(json.dumps({'ok':False,'error_code':'timeout','error':'Cleanup timed out; original text preserved.'}),flush=True)\n",
+            " else:\n",
+            "  r=json.loads(line)\n",
+            "  print(json.dumps({'ok':True,'results':[{'index':i,'status':'ok','text':t} for i,t in enumerate(r.get('texts',[]))]}),flush=True)\n",
+        ));
+        let error = engine.cleanup_batch(&[source.to_string()]).unwrap_err();
+        assert!(is_responded_timeout(&error));
+        assert!(!is_zombie_error(&error));
+        // The process survived its own deadline and serves the next request.
+        let items = engine.cleanup_batch(&[source.to_string()]).unwrap();
+        assert!(matches!(&items[0], BatchItem::Proposal(Some(s)) if s == source));
+        assert!(engine.is_alive());
+
+        let mut failing = stub_engine(
+            "import json,sys\nfor line in sys.stdin:\n print(json.dumps({'ok':False,'error_code':'operation_failed','error':'Local cleanup runtime failed; it will restart for the next recording. Original text preserved.'}),flush=True)",
+        );
+        let error = failing.cleanup_batch(&[source.to_string()]).unwrap_err();
+        assert!(!is_responded_timeout(&error));
+        assert!(is_zombie_error(&error));
     }
 
     #[test]
@@ -1047,7 +1326,9 @@ mod tests {
     #[tokio::test]
     async fn runtime_fault_after_three_requests_retires_the_resident_process() {
         use crate::test_support::{MockAudioCapture, MockAsrEngine, MockPasteBackend};
-        let engine = stub_engine("import json,sys\nn=0\nfor line in sys.stdin:\n r=json.loads(line); n+=1\n print(json.dumps({'ok':True,'finish_reason':'stop','text':'Please keep the final instruction.'} if n<=3 else {'ok':False,'error_code':'operation_failed','error':'Local cleanup operation failed; original text preserved.'}),flush=True)");
+        // Batched wire: answer every text in the request, until the stub
+        // dies on the fourth request with the restart-class fault.
+        let engine = stub_engine("import json,sys\nn=0\nfor line in sys.stdin:\n r=json.loads(line); n+=1\n if n<=3:\n  print(json.dumps({'ok':True,'results':[{'index':i,'status':'ok','text':'Please keep the final instruction.'} for i in range(len(r['texts']))]}),flush=True)\n else:\n  print(json.dumps({'ok':False,'error_code':'operation_failed','error':'Local cleanup operation failed; original text preserved.'}),flush=True)");
         let pid = engine.registered_pid.as_ref().unwrap().clone();
         let mut state = AppState::new_with_backends(Box::new(MockAudioCapture::sine_wave()),
             Box::new(MockAsrEngine::with_text("unused")), Some(Box::new(engine)),
@@ -1065,7 +1346,7 @@ mod tests {
         assert!(!state.llm_loaded.load(Ordering::SeqCst));
         assert_eq!(pid.load(Ordering::SeqCst), 0);
         // A fresh process handles the next recording; no poisoned handle survives.
-        *state.llm_engine.lock().await = Some(Box::new(stub_engine("import json,sys\nfor line in sys.stdin:\n print(json.dumps({'ok':True,'finish_reason':'stop','text':'Please keep the final instruction.'}),flush=True)")));
+        *state.llm_engine.lock().await = Some(Box::new(stub_engine("import json,sys\nfor line in sys.stdin:\n r=json.loads(line)\n print(json.dumps({'ok':True,'results':[{'index':i,'status':'ok','text':'Please keep the final instruction.'} for i in range(len(r['texts']))]}),flush=True)")));
         let (_, status) = crate::llm::cleanup::run_cleanup(&state, source, &[]).await;
         assert!(matches!(status, crate::models::LlmCleanupStatus::Applied { .. }));
     }
@@ -1111,15 +1392,19 @@ mod tests {
 
     #[test]
     fn oversized_protocol_response_fails_without_unbounded_allocation() {
-        let mut engine = stub_engine(
-            "import sys,time; sys.stdout.write('x'*300000); sys.stdout.flush(); time.sleep(20)",
-        );
+        // The stub emits ONE line larger than MAX_RESPONSE_LINE_BYTES with no
+        // terminator: the bounded reader must cut it and close the protocol
+        // without ever allocating the whole oversized line unbounded.
+        let mut engine = stub_engine(&format!(
+            "import sys,time; sys.stdout.write('x'*{}); sys.stdout.flush(); time.sleep(20)",
+            MAX_RESPONSE_LINE_BYTES as usize + 16,
+        ));
         let result = engine.request_with_timeout(
             &serde_json::json!({"action":"status"}),
             Duration::from_secs(2),
         );
         let error = result.unwrap_err();
-        assert!(error.contains("protocol limit"));
+        assert!(error.contains("protocol limit"), "{error}");
         assert!(is_zombie_error(&error));
         assert!(engine.child.lock().try_wait().unwrap().is_some());
     }
@@ -1245,30 +1530,6 @@ mod tests {
         assert!(!is_zombie_error("Invalid JSON response"));
     }
 
-    /// Sanity-check that `build_venv_check_script()` is a single-line Python
-    /// statement with no indented blocks. Regression guard for a v0.7.2 bug
-    /// where a multi-line `format!` with `\` continuations collapsed the
-    /// Python indentation inside an `if:` block and produced an
-    /// IndentationError on every invocation.
-    #[test]
-    fn venv_check_script_is_single_line() {
-        let script = build_venv_check_script();
-        assert!(
-            !script.contains('\n'),
-            "venv check script must not contain newlines; got: {:?}",
-            script
-        );
-        assert!(
-            script.contains(MIN_MLX_LM),
-            "venv check script must reference MIN_MLX_LM ({}); got: {:?}",
-            MIN_MLX_LM,
-            script
-        );
-        // Basic shape: starts with import sys (Python version check) and ends with sys.exit.
-        assert!(script.starts_with("import sys"));
-        assert!(script.contains("import mlx_lm"));
-        assert!(script.contains("sys.exit"));
-    }
 
     /// Run `python3 -c "..."` against the real `build_venv_check_script()` to
     /// prove the generated Python actually parses and executes. We don't care

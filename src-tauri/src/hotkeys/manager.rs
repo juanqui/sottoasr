@@ -382,7 +382,8 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
     let _ = app.emit("recording-stopped", ());
     crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
 
-    let finished = match crate::audio::capture::finish_recording_capture(&state).await {
+    let finished = crate::audio::capture::finish_recording_capture(&state).await;
+    let finished = match finished {
         Ok(finished) => finished,
         Err(error) => {
             state.set_state(AppStateEnum::Idle);
@@ -395,6 +396,7 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
     let duration_ms = finished.duration_ms;
     let Some(temp_path) = finished.audio_path else {
         log::info!("Recording too short ({} samples)", finished.sample_count);
+        // Tasks already joined above; the cache is simply dropped.
         hide_overlay(app);
         state.set_state(AppStateEnum::Idle);
         crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
@@ -465,7 +467,8 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
                     state.set_state(AppStateEnum::CleaningUp);
                     crate::commands::overlay::publish_state(&app_clone, AppStateEnum::CleaningUp);
 
-                    let (cleaned, status) = run_cleanup(&state, &final_text, &protected_terms).await;
+                    let (cleaned, status) =
+                        run_cleanup(&state, &final_text, &protected_terms).await;
                     cleanup_status = status;
                     if matches!(cleanup_status, LlmCleanupStatus::Applied { .. }) {
                         final_text = cleaned;
@@ -658,7 +661,8 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
     let _ = app.emit("recording-cancelled", ());
     crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
 
-    let finished = match crate::audio::capture::finish_recording_capture(&state).await {
+    let finished = crate::audio::capture::finish_recording_capture(&state).await;
+    let finished = match finished {
         Ok(finished) => finished,
         Err(error) => {
             state.set_state(AppStateEnum::Idle);

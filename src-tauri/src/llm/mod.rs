@@ -1,4 +1,5 @@
 pub mod cleanup;
+pub mod correction;
 pub mod download;
 // Legacy policy retained for regression tests and its archived benchmark example.
 #[cfg(test)]

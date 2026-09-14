@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
-use focaccia::unicode_full_case_eq;
+pub use focaccia::unicode_full_case_eq;
 use regex::Regex;
 
 pub const MAX_CLEANUP_BYTES: usize = 32_000;
@@ -267,35 +267,103 @@ fn canonical_quotes(text: &str) -> String {
     output
 }
 
-type Repeat = Vec<Range<usize>>;
+/// One repeat run at a fixed block width: blocks are `start..start+width`,
+/// `start+width..start+2*width`, … while `< end`. Three usizes per run; the
+/// blocks are derived lazily so a run of k repetitions costs nothing per
+/// block.
+struct RepeatGroup {
+    width: usize,
+    start: usize,
+    end: usize,
+}
 
-fn repeat_groups(text: &str, tokens: &[Token<'_>]) -> Vec<Repeat> {
+impl RepeatGroup {
+    fn blocks(&self) -> impl Iterator<Item = Range<usize>> + '_ {
+        (self.start..self.end)
+            .step_by(self.width)
+            .map(|block| block..block + self.width)
+    }
+}
+
+/// Maximal validated repeat runs, width-major then start-ascending (the
+/// order callers' protections and authorizations were written against;
+/// distinct phases are never merged). For each width, every residue class is
+/// walked once over the adjacency `block(s) == block(s + width)`: a maximal
+/// true-run makes every covered start a repeat ending two blocks past the
+/// run, so no candidate scans to its own maximal end and no dominated suffix
+/// subgroup is materialized.
+fn repeat_groups(text: &str, tokens: &[Token<'_>]) -> Vec<RepeatGroup> {
+    let n = tokens.len();
+    // Prefix sums of non-ordinary gaps: `bad[end - 1] == bad[start]` is
+    // exactly `ordinary_gap(text, tokens, start, end - 1)` from the frozen
+    // scan.
+    let mut bad = vec![0usize; n];
+    for i in 0..n.saturating_sub(1) {
+        let ordinary = text[tokens[i].end..tokens[i + 1].start]
+            .chars()
+            .all(|c| matches!(c, ' ' | '\t' | ','));
+        bad[i + 1] = bad[i] + usize::from(!ordinary);
+    }
     let mut groups = Vec::new();
-    for size in 1..=4 {
-        if tokens.len() < 2 * size {
+    for width in 1..=4usize {
+        if n < 2 * width {
             continue;
         }
-        for start in 0..=tokens.len() - 2 * size {
-            if size == 1 && tokens[start].in_set(SINGLE_REPEAT_PROTECTED) {
+        let last_start = n - 2 * width;
+        let block_eq = |a: usize, b: usize| {
+            (0..width).all(|i| tokens[a + i].is(tokens[b + i].value))
+        };
+        // `end_of[s]`: exclusive end of the maximal equal-block run covering
+        // start `s` (0 = no repeat starts there).
+        let mut end_of = vec![0usize; last_start + 1];
+        for residue in 0..width {
+            let mut run_start = usize::MAX;
+            let mut k = residue;
+            while k <= last_start {
+                if block_eq(k, k + width) {
+                    if run_start == usize::MAX {
+                        run_start = k;
+                    }
+                } else if run_start != usize::MAX {
+                    for s in (run_start..k).step_by(width) {
+                        end_of[s] = k + width;
+                    }
+                    run_start = usize::MAX;
+                }
+                k += width;
+            }
+            if run_start != usize::MAX {
+                for s in (run_start..k).step_by(width) {
+                    end_of[s] = k + width;
+                }
+            }
+        }
+        // A start whose whole range lies inside an earlier EMITTED run of the
+        // same width and phase is dominated by it: same phase means its
+        // blocks are a subset, so any kept-sibling authorization or restart
+        // witness it could produce, the covering run produces too. `covered`
+        // records emitted runs only — a maximal run rejected by its own gap
+        // check (a sentence break inside) must never shadow the first
+        // gap-ordinary suffix run behind it.
+        let mut covered = vec![0usize; width];
+        for start in 0..=last_start {
+            if width == 1 && tokens[start].in_set(SINGLE_REPEAT_PROTECTED) {
                 continue;
             }
-            if size > 1 && (start + 1..start + size).all(|i| tokens[i].is(tokens[start].value)) {
+            if width > 1
+                && (start + 1..start + width).all(|i| tokens[i].is(tokens[start].value))
+            {
                 continue;
             }
-            let matches = |other: usize| {
-                other + size <= tokens.len()
-                    && (0..size).all(|i| tokens[start + i].is(tokens[other + i].value))
-            };
-            if !matches(start + size) {
+            let end = end_of[start];
+            if end == 0 || end <= covered[start % width] {
                 continue;
             }
-            let mut end = start + 2 * size;
-            while matches(end) {
-                end += size;
+            if bad[end - 1] != bad[start] {
+                continue;
             }
-            if ordinary_gap(text, tokens, start, end - 1) {
-                groups.push((start..end).step_by(size).map(|i| i..i + size).collect());
-            }
+            covered[start % width] = end;
+            groups.push(RepeatGroup { width, start, end });
         }
     }
     groups
@@ -331,7 +399,7 @@ fn restart_groups(text: &str, tokens: &[Token<'_>]) -> Vec<(Range<usize>, usize)
     groups
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Protection {
     Word,
     Exact,
@@ -422,7 +490,7 @@ fn protected_spans(
     text: &str,
     tokens: &[Token<'_>],
     terms: &[String],
-    repeats: &[Repeat],
+    repeats: &[RepeatGroup],
 ) -> Result<Vec<Protected>, String> {
     let mut spans: Vec<_> = quote_code_spans(text)
         .into_iter()
@@ -504,14 +572,12 @@ fn protected_spans(
         }
         let initial_restart = sentence_start(text, tokens, i)
             && repeats.iter().any(|group| {
-                group.iter().any(|block| {
-                    block.len() > 1
-                        && block.start == i
-                        && group.iter().any(|other| {
-                            other != block
-                                && tokens[other.start].value == token.value.to_lowercase()
-                        })
-                })
+                group.width > 1
+                    && group.blocks().any(|block| block.start == i)
+                    && group.blocks().any(|other| {
+                        other.start != i
+                            && tokens[other.start].value == token.value.to_lowercase()
+                    })
             });
         let common_initial_filler = sentence_start(text, tokens, i) && token.in_set(HESITATIONS);
         lock |=
@@ -612,6 +678,14 @@ fn reconstruct(
             && !text.contains('\n'))
         .then(|| (String::new(), Vec::new()));
     }
+    // The per-token suffix test inside the loop ("is everything from `i` on
+    // deleted?") is true exactly when `i` is past the last kept token; one
+    // rposition keeps reconstruction linear instead of O(tokens × flags).
+    // (All-deleted returned above, so a kept token always exists.)
+    let last_kept = deleted
+        .iter()
+        .rposition(|&d| !d)
+        .expect("not all tokens deleted");
     let pairs = paired_filler_dashes(text, tokens, deleted);
     let mut spans: Vec<_> = pairs.iter().map(|p| p.span.clone()).collect();
     for (i, token) in tokens.iter().enumerate().filter(|(i, _)| deleted[*i]) {
@@ -628,7 +702,7 @@ fn reconstruct(
         while end < text.len() && matches!(text.as_bytes()[end], b' ' | b'\t') {
             end += 1;
         }
-        if deleted[i..].iter().all(|&d| d) {
+        if i > last_kept {
             while start > 0 && matches!(text.as_bytes()[start - 1], b' ' | b'\t') {
                 start -= 1;
             }
@@ -716,13 +790,25 @@ pub fn validate(
     proposal: &str,
     protected_terms: &[String],
 ) -> Result<String, String> {
+    validate_inner(source, proposal, protected_terms).map(|(output, _)| output)
+}
+
+/// `validate` plus the accepted alignment's deletion authority: one flag per
+/// token of `word_spans(source)`, true = the frozen pass deleted that token.
+/// Case substitutions are baked into the returned output; callers replay the
+/// *output string* over the exact source bytes, never the flags alone.
+fn validate_inner(
+    source: &str,
+    proposal: &str,
+    protected_terms: &[String],
+) -> Result<(String, Vec<bool>), String> {
     if source.len().max(proposal.len()) > MAX_CLEANUP_BYTES {
         return Err("Input/output byte limit exceeded".into());
     }
     let tokens = tokenize(source);
     let proposed = tokenize(proposal);
     if source == proposal {
-        return Ok(source.to_string());
+        return Ok((source.to_string(), vec![false; tokens.len()]));
     }
     if tokens.is_empty() || tokens.len() > MAX_CLEANUP_WORDS || proposed.len() > tokens.len() {
         return Err("Word limit or word addition".into());
@@ -737,30 +823,18 @@ pub fn validate(
                 .any(|p| t.start < p.span.end && t.end > p.span.start)
         })
         .collect();
-    for protection in &protected {
-        if protection.kind == Protection::Word {
-            continue;
-        }
-        let value = &source[protection.span.clone()];
-        let changed = if protection.kind == Protection::Quote {
-            let value = canonical_quotes(value);
-            canonical_quotes(proposal).matches(&value).count()
-                < canonical_quotes(source).matches(&value).count()
-        } else {
-            proposal.matches(value).count() < source.matches(value).count()
-        };
-        if changed {
-            return Err("Protected span changed".into());
-        }
+    // Shared immutable-source literal guard: every Exact/Quote span must
+    // still satisfy its occurrence rule against the proposal (Word spans
+    // stay enforced token-wise by `locked` above, exactly as this loop
+    // always skipped them). One implementation for this helper, the deletion
+    // adjudicator, and the caps renderer.
+    if !LiteralGuard::from_protected(source, &protected).all_safe(proposal) {
+        return Err("Protected span changed".into());
     }
     let restarts = restart_groups(source, &tokens);
     let mut possible: Vec<_> = tokens.iter().map(|t| t.in_set(HESITATIONS)).collect();
     for group in &repeats {
-        for block in group {
-            for i in block.clone() {
-                possible[i] = true;
-            }
-        }
+        possible[group.start..group.end].fill(true);
     }
     for (group, _) in &restarts {
         for i in group.clone() {
@@ -815,7 +889,7 @@ pub fn validate(
             stack.push((i + 1, j + 1, kept));
         }
     }
-    let mut accepted = BTreeMap::<String, bool>::new();
+    let mut accepted = BTreeMap::<String, (bool, Vec<bool>)>::new();
     for kept in alignments {
         let mut deleted = vec![true; tokens.len()];
         for &i in &kept {
@@ -827,12 +901,9 @@ pub fn validate(
             .map(|(i, t)| deleted[i] && t.in_set(HESITATIONS))
             .collect();
         for group in &repeats {
-            if group.iter().any(|block| block.clone().all(|i| !deleted[i])) {
-                for block in group
-                    .iter()
-                    .filter(|block| (**block).clone().all(|i| deleted[i]))
-                {
-                    for i in block.clone() {
+            if group.blocks().any(|block| block.clone().all(|i| !deleted[i])) {
+                for block in group.blocks().filter(|block| block.clone().all(|i| deleted[i])) {
+                    for i in block {
                         allowed[i] = true;
                     }
                 }
@@ -880,33 +951,196 @@ pub fn validate(
         }
         let comma_match =
             punctuation_signature(&output, true) == punctuation_signature(&comparison, true);
-        *accepted.entry(output).or_default() |= comma_match;
+        match accepted.entry(output) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().0 |= comma_match;
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert((comma_match, deleted));
+            }
+        }
     }
     if accepted.is_empty() {
         return Err("Proposal requires protected/unsupported edits or punctuation changes".into());
     }
     if accepted.len() != 1 {
-        accepted.retain(|_, comma_match| *comma_match);
+        accepted.retain(|_, (comma_match, _)| *comma_match);
     }
     if accepted.len() != 1 {
         return Err("Ambiguous source reconstruction".into());
     }
-    Ok(accepted
-        .into_keys()
+    let (output, (_, deleted)) = accepted
+        .into_iter()
         .next()
-        .expect("one accepted reconstruction"))
+        .expect("one accepted reconstruction");
+    Ok((output, deleted))
 }
 
-/// Keep independently valid source deletions from a completed proposal, even
-/// when it also contains an unsupported rewrite. Generated words/punctuation
-/// never enter this fallback. The frozen validator remains the edit authority.
-pub fn validate_cleanup(
+/// Byte ranges of the word tokens in `text` — the same tokenizer the frozen
+/// validator uses, so token indices and deletion flags align across calls.
+pub fn word_spans(text: &str) -> Vec<Range<usize>> {
+    tokenize(text).into_iter().map(|t| t.start..t.end).collect()
+}
+
+/// Token indices where a new sentence starts, using the frozen
+/// `sentence_start` gap semantics verbatim (newline gap, or a whitespace-only
+/// [.!?] run before the token; index 0 included). Tokenization is the frozen
+/// tokenizer, so returned indices align with `word_spans(text)`.
+pub fn sentence_boundaries(text: &str) -> Vec<usize> {
+    let tokens = tokenize(text);
+    (0..tokens.len()).filter(|&i| sentence_start(text, &tokens, i)).collect()
+}
+
+/// The window planner's caps extraction: given the frozen validator's OWN
+/// authorized candidate (`candidate` accepted for `source` with exactly
+/// `deleted` token deletions), return the capitalization flips it baked into
+/// the candidate, as (source token index over `word_spans(source)`, letter).
+/// A flip must have the `initial_cap` shape the frozen pass permits (ASCII
+/// lowercase first byte → ASCII uppercase, remainder byte-identical); ANY
+/// other token-text difference rejects the extraction (`None`) so the window
+/// caches deletions only. Returns `None` if the candidate does not align
+/// with `deleted` at all.
+pub fn caps_flips(source: &str, candidate: &str, deleted: &[bool]) -> Option<Vec<(usize, char)>> {
+    let tokens = tokenize(source);
+    if tokens.len() != deleted.len() {
+        return None;
+    }
+    let out_tokens = tokenize(candidate);
+    let kept: Vec<usize> = (0..tokens.len()).filter(|&i| !deleted[i]).collect();
+    if out_tokens.len() != kept.len() {
+        return None;
+    }
+    let mut flips = Vec::new();
+    for (j, &i) in kept.iter().enumerate() {
+        let src = &source[tokens[i].start..tokens[i].end];
+        let out = out_tokens[j].value;
+        if src == out {
+            continue;
+        }
+        let first = *src.as_bytes().first()?;
+        if !first.is_ascii_lowercase() {
+            return None;
+        }
+        let upper = (first as char).to_ascii_uppercase();
+        if out != format!("{upper}{}", &src[1..]) {
+            return None;
+        }
+        flips.push((i, upper));
+    }
+    Some(flips)
+}
+
+/// Apply window-authorized capitalization flips against the WHOLE final
+/// text, using the original source as the immutable protection authority.
+/// Each flip is a (token index over `word_spans(source)`, letter) pair a
+/// frozen validator pass accepted inside its own window. A flip survives
+/// only if: the token is globally kept; the source token has the ASCII
+/// `initial_cap` shape and matches the recorded letter; its span overlaps no
+/// Exact/Quote protection of the ORIGINAL source (`Word` protections permit
+/// a sentence-initial capital exactly as the frozen pass does — proven
+/// oracle-equivalent by probe, docs/journals/2026-09-12); and
+/// `sentence_start` holds at the token's rank in the deletion-reconstructed
+/// output (fillers before a sentence start may be deleted, exposing the cap
+/// legally); and the WHOLE rendered text must still satisfy the shared
+/// `LiteralGuard` occurrence rules of the source's Exact/Quote protections —
+/// a flip that re-cases a literal another protection requires (e.g. a far
+/// standalone term "in" makes the "in" inside "inside" required) reverts on
+/// the spot while every other flip and the deletions stand. Surviving flips
+/// are applied descending by byte to the reconstructed deletion output —
+/// `source` itself is never mutated and no flip can capitalize inside quoted
+/// material the window could not see.
+pub fn authorized_caps(
+    source: &str,
+    deleted: &[bool],
+    flips: &[(usize, char)],
+    terms: &[String],
+) -> String {
+    let tokens = tokenize(source);
+    let fallback = source.to_string();
+    if tokens.len() != deleted.len() {
+        return fallback;
+    }
+    let Some((base, _)) = reconstruct(source, &tokens, deleted) else {
+        return fallback;
+    };
+    if flips.is_empty() {
+        return base;
+    }
+    let out_tokens = tokenize(&base);
+    let kept: Vec<usize> = (0..tokens.len()).filter(|&i| !deleted[i]).collect();
+    if out_tokens.len() != kept.len() {
+        // The reconstruction no longer mirrors the kept-token sequence;
+        // drop ALL caps fail-closed (the deletions themselves stand).
+        return base;
+    }
+    let repeats = repeat_groups(source, &tokens);
+    let Ok(protected) = protected_spans(source, &tokens, terms, &repeats) else {
+        return base;
+    };
+    let guard = LiteralGuard::from_protected(source, &protected);
+    let mut apply: Vec<(usize, char)> = Vec::new();
+    for &(token, letter) in flips {
+        let Some(t) = tokens.get(token) else { continue };
+        let Some(rank) = kept.binary_search(&token).ok() else { continue };
+        let value = &source[t.start..t.end];
+        let Some(&first) = value.as_bytes().first() else { continue };
+        if !first.is_ascii_lowercase() || (first as char).to_ascii_uppercase() != letter {
+            continue;
+        }
+        if protected.iter().any(|p| {
+            p.kind != Protection::Word && t.start < p.span.end && t.end > p.span.start
+        }) {
+            continue;
+        }
+        let out = &out_tokens[rank];
+        if out.value != value || !sentence_start(&base, &out_tokens, rank) {
+            continue;
+        }
+        apply.push((out.start, letter));
+    }
+    apply.sort_by_key(|(position, _)| std::cmp::Reverse(*position));
+    apply.dedup_by(|a, b| a.0 == b.0);
+    let mut output = base;
+    for (position, letter) in apply {
+        // ASCII first byte of a kept word token: exactly one byte wide.
+        let original = output.as_bytes()[position];
+        output.replace_range(position..position + 1, &letter.to_string());
+        // Same immutable-source literal guard as the deletion path, checked
+        // over the whole candidate after each flip: a flip that drops an
+        // Exact/Quote literal below its source occurrence count (e.g. a far
+        // standalone term "in" that makes the "in" inside "inside" required,
+        // or quote bytes canonicalised out of the quote) reverts on the
+        // spot; every other flip and the deletions stand. A whole-candidate
+        // check (not a local window) also catches two flips jointly erasing
+        // one occurrence of the same literal.
+        if !guard.all_safe(&output) {
+            output.replace_range(position..position + 1, &(original as char).to_string());
+        }
+    }
+    output
+}
+
+/// A validated cleanup result plus the frozen pass's edit authority.
+#[derive(Clone, Debug)]
+pub struct CleanupEdits {
+    /// Source-derived output text (reconstruction is the validator's, never
+    /// the proposal's).
+    pub output: String,
+    /// One flag per token of `word_spans(source)`: true = the accepted
+    /// alignment deleted that token. Case substitutions are already baked
+    /// into `output`; they need no separate representation because replay
+    /// replaces the *exact source bytes* with `output`.
+    pub deleted: Vec<bool>,
+}
+
+/// `validate` plus the token-level deletion set.
+pub fn validate_cleanup_with_edits(
     source: &str,
     proposal: &str,
     protected_terms: &[String],
-) -> Result<String, String> {
-    let reason = match validate(source, proposal, protected_terms) {
-        Ok(text) => return Ok(text),
+) -> Result<CleanupEdits, String> {
+    let reason = match validate_inner(source, proposal, protected_terms) {
+        Ok((output, deleted)) => return Ok(CleanupEdits { output, deleted }),
         Err(reason) => reason,
     };
     if source.len().max(proposal.len()) > MAX_CLEANUP_BYTES {
@@ -971,13 +1205,383 @@ pub fn validate_cleanup(
         return Err(reason);
     };
     // Composition can change literal/repeat context; validate the whole set.
-    let output = validate(source, &candidate, protected_terms)?;
-    Ok(output)
+    // The alignment's own deletion flags are the authority (composition can
+    // re-align repeated words), so return them, not `accepted`.
+    let (output, deleted) = validate_inner(source, &candidate, protected_terms)?;
+    Ok(CleanupEdits { output, deleted })
+}
+
+/// Rebuild a candidate by deleting the flagged tokens from `source` using the
+/// frozen validator's own erase/merge rules (trailing comma+space absorption,
+/// leading-space trimming, double-space collapse). `None` on a length
+/// mismatch between `deleted` and `word_spans(source)`.
+pub fn deletions_candidate(source: &str, deleted: &[bool]) -> Option<String> {
+    let tokens = tokenize(source);
+    if tokens.len() != deleted.len() {
+        return None;
+    }
+    reconstruct(source, &tokens, deleted).map(|(output, _)| output)
+}
+
+/// Immutable-source literal-preservation guard, the SAME rules `validate_inner`
+/// applies to a proposal: `Word` spans stay enforced token-wise (the frozen
+/// loop skips them), `Exact` values must still occur at least as often as in
+/// the raw source, `Quote` values in the candidate's canonical form against
+/// the canonical source count. `authorized_caps` and the deletion
+/// adjudication reconstruct (or re-case) text the token-overlap protections
+/// never see — gap-character terms (`.`, `,`, `...`), substring material
+/// inside a longer word, or quoted material can lose bytes that no deleted
+/// token overlaps — so both final renderers must pass here before their text
+/// is accepted. Spans are deduplicated per distinct (value, kind): two spans
+/// of one value are identical slices of the source, so their required counts
+/// agree and one item decides the verdict for all. Each required count is
+/// taken ONCE over the immutable source.
+struct GuardItem {
+    value: String,
+    quoted: bool,
+    need: usize,
+}
+
+struct LiteralGuard {
+    items: Vec<GuardItem>,
+}
+
+impl LiteralGuard {
+    /// Build from already-detected spans (the caps path has them for its
+    /// overlap vetoes; one detection serves both). Word spans are skipped
+    /// exactly as `validate_inner` skips them.
+    fn from_protected(source: &str, protected: &[Protected]) -> Self {
+        let mut items: Vec<GuardItem> = Vec::new();
+        let mut canon_source: Option<String> = None;
+        for protection in protected {
+            if protection.kind == Protection::Word {
+                continue;
+            }
+            let quoted = protection.kind == Protection::Quote;
+            let value = if quoted {
+                canonical_quotes(&source[protection.span.clone()])
+            } else {
+                source[protection.span.clone()].to_string()
+            };
+            if items
+                .iter()
+                .any(|g| g.value == value && g.quoted == quoted)
+            {
+                continue;
+            }
+            let need = if quoted {
+                let canon = canon_source.get_or_insert_with(|| canonical_quotes(source));
+                canon.matches(&value).count()
+            } else {
+                source.matches(value.as_str()).count()
+            };
+            items.push(GuardItem { value, quoted, need });
+        }
+        Self { items }
+    }
+
+    /// True iff one item still satisfies the frozen rule for its kind:
+    /// Exact values are counted raw; Quote values are counted in the
+    /// candidate's CANONICAL form against the canonical source count.
+    /// `canon` caches the candidate's canonical form across items.
+    fn item_ok(item: &GuardItem, output: &str, canon: &mut Option<String>) -> bool {
+        let have = if item.quoted {
+            let canonical = canon.get_or_insert_with(|| canonical_quotes(output));
+            canonical.matches(&item.value).count()
+        } else {
+            output.matches(item.value.as_str()).count()
+        };
+        have >= item.need
+    }
+
+    /// True iff every required literal still satisfies its frozen rule.
+    fn all_safe(&self, output: &str) -> bool {
+        let mut canon = None;
+        self.items.iter().all(|item| Self::item_ok(item, output, &mut canon))
+    }
+}
+
+/// One `protected_spans` pass serving both deletion vetoes: the token-hit
+/// mask and the deduplicated literal guard, computed together and cached.
+struct CachedProtections {
+    hit: Vec<bool>,
+    guard: LiteralGuard,
+}
+
+/// Per-token eligibility view of a [`DeletionContext`] (spec §4.3): both
+/// vectors align with `word_spans(source)` / the context's tokens.
+/// `possible[i]` proves a frozen-rule deletion candidate EXISTS at token
+/// `i`; `cap_opportunity[i]` marks a lowercase-start word at a caps-
+/// exposed position. Used ONLY to prove windows skippable.
+#[derive(Clone, Debug)]
+pub struct WorkMask {
+    pub possible: Vec<bool>,
+    pub cap_opportunity: Vec<bool>,
+}
+
+/// The (source, terms)-only analysis behind [`validate_deletions`], prepared
+/// once and reused for many deletion vectors over the same source. Tokenizing
+/// and the repeat/restart/protection parsing depend only on the source and the
+/// protected terms, never on the candidate flags; a composing caller (the
+/// incremental correction's terminal gate) adjudicates one vector per accepted
+/// window, so hoisting that work turns per-run cost into a single pass.
+///
+/// The fallible protection-pattern stage stays lazy: the frozen helper only
+/// reaches `protected_spans` after the length-mismatch, all-false, and
+/// all-true checks, and this context must reject (or accept) exactly when the
+/// frozen helper does — so a term-pattern budget failure surfaces only on
+/// vectors that would have reached that line, and the no-op all-false call
+/// keeps returning `source` even with an over-budget term set.
+pub struct DeletionContext<'a> {
+    source: &'a str,
+    terms: &'a [String],
+    tokens: Vec<Token<'a>>,
+    repeats: Vec<RepeatGroup>,
+    restarts: Vec<(Range<usize>, usize)>,
+    hesitation: Vec<bool>,
+    protections: OnceLock<Result<CachedProtections, String>>,
+}
+
+impl<'a> DeletionContext<'a> {
+    /// Analyze `source` for deletion vectors under `terms`. Infallible: the
+    /// only erroring stage (term patterns) is deferred to first use, matching
+    /// the frozen helper's precedence.
+    pub fn prepare(source: &'a str, terms: &'a [String]) -> Self {
+        let tokens = tokenize(source);
+        let repeats = repeat_groups(source, &tokens);
+        let restarts = restart_groups(source, &tokens);
+        let hesitation = tokens.iter().map(|t| t.in_set(HESITATIONS)).collect();
+        Self {
+            source,
+            terms,
+            tokens,
+            repeats,
+            restarts,
+            hesitation,
+            protections: OnceLock::new(),
+        }
+    }
+
+    fn protections(&self) -> Result<&CachedProtections, String> {
+        self.protections
+            .get_or_init(|| {
+                let protected =
+                    protected_spans(self.source, &self.tokens, self.terms, &self.repeats)?;
+                let hit = (0..self.tokens.len())
+                    .map(|i| {
+                        let t = self.tokens[i];
+                        protected
+                            .iter()
+                            .any(|p| t.start < p.span.end && t.end > p.span.start)
+                    })
+                    .collect();
+                Ok(CachedProtections {
+                    hit,
+                    guard: LiteralGuard::from_protected(self.source, &protected),
+                })
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// Adjudicate a deletion vector against the prepared source: identical
+    /// outcome to `validate_deletions(self.source, deleted, self.terms)` —
+    /// the group analysis is computed once and cached. An all-true vector is
+    /// NOT blanket-rejected here: exactly as in `validate_inner`, the
+    /// protected-hit / repeat-keep-one / restart-replacement / hesitation
+    /// admissibility rules run first, and the shared `reconstruct` admits a
+    /// wholly-unprotected-hesitation text to empty output (frozen legacy
+    /// contract) while substantive or protected content cannot satisfy
+    /// all-true admissibility.
+    pub fn adjudicate(&self, deleted: &[bool]) -> Result<String, String> {
+        if self.tokens.len() != deleted.len() {
+            return Err("Deletion vector length mismatch".into());
+        }
+        if deleted.iter().all(|&d| !d) {
+            return Ok(self.source.to_string());
+        }
+        let cached = self.protections()?;
+        if deleted
+            .iter()
+            .zip(&cached.hit)
+            .any(|(&d, &p)| d && p)
+        {
+            return Err("Protected token deleted".into());
+        }
+        let mut allowed: Vec<bool> = (0..self.tokens.len())
+            .map(|i| deleted[i] && self.hesitation[i])
+            .collect();
+        for group in &self.repeats {
+            if group.blocks().any(|block| block.clone().all(|i| !deleted[i])) {
+                for block in group.blocks().filter(|block| block.clone().all(|i| deleted[i])) {
+                    for i in block {
+                        allowed[i] = true;
+                    }
+                }
+            }
+        }
+        for (group, replacement) in &self.restarts {
+            if group.clone().all(|i| deleted[i]) && !deleted[*replacement] {
+                for i in group.clone() {
+                    allowed[i] = true;
+                }
+            }
+        }
+        if deleted
+            .iter()
+            .zip(&allowed)
+            .any(|(&d, &a)| d && !a)
+        {
+            return Err("Deletions require protected/unsupported edits".into());
+        }
+        let Some((output, _pairs)) = reconstruct(self.source, &self.tokens, deleted) else {
+            return Err("Deletion reconstruction failed".into());
+        };
+        // Immutable-source literal guard: the reconstructed text must keep
+        // every Exact/Quote literal occurrence the source has — the same
+        // comparison `validate_inner` runs against the proposal, and placed
+        // at the same point in the checks (protections detected → candidate
+        // literals). It catches bytes erased OUTSIDE every deleted token:
+        // gap-character terms (a terminal "." or "..." in an emptied or
+        // re-flowed text) and substring material that no token overlaps.
+        if !cached.guard.all_safe(&output) {
+            return Err("Protected span changed".into());
+        }
+        // Mirror validate_inner's output-token-count gate (dash-pair/merge
+        // surprises surface here rather than at the terminal validate). The
+        // count uses the tokenizer's own pattern — identical token definition,
+        // no Vec<Token> allocation per adjudicated run.
+        if word_pattern().find_iter(&output).count()
+            != self
+                .tokens
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !deleted[*i])
+                .count()
+        {
+            return Err("Deletion reconstruction token count mismatch".into());
+        }
+        Ok(output)
+    }
+
+    /// The batch planner's eligibility proof (spec §4.3): per source token,
+    /// `possible[i]` = a frozen-rule deletion candidate EXISTS at `i`
+    /// (hesitation ∪ repeat-member ∪ restart-member, minus protected-hit),
+    /// and `cap_opportunity[i]` = an ASCII-lowercase word a frozen
+    /// caps-pass could legitimately flip at a sentence start exposed
+    /// through fully-deletable fillers. Computed from THIS context's own
+    /// structures (one tokenization, cached protections) — the same
+    /// membership sets `adjudicate` consults; no second tokenizer, no new
+    /// policy.
+    /// A NECESSARY condition only — an OVER-APPROXIMATION of joint legality:
+    /// membership is per-token, so a marked window may still earn ZERO legal
+    /// edits once the joint repeat/restart/protection rules re-adjudicate
+    /// (e.g. deleting the last kept copy of a repeat block). What the mask
+    /// CAN prove is the absence direction: zero candidates ⇒ provably no
+    /// work ⇒ skippable. The terminal `adjudicate` remains the sole
+    /// authority for everything else. A protection-analysis failure returns
+    /// `Err` so the caller fails safe to ALL-active — never a silent no-work.
+    pub fn work_mask(&self) -> Result<WorkMask, String> {
+        let cached = self.protections()?;
+        let mut possible = self.hesitation.clone();
+        for group in &self.repeats {
+            for block in group.blocks() {
+                for i in block {
+                    possible[i] = true;
+                }
+            }
+        }
+        for (group, _replacement) in &self.restarts {
+            for i in group.clone() {
+                possible[i] = true;
+            }
+        }
+        for (item, &hit) in possible.iter_mut().zip(&cached.hit) {
+            if hit {
+                *item = false;
+            }
+        }
+        // Caps exposure walks the frozen sentence boundaries once (ordered
+        // cursor, O(tokens + boundaries)): exposure is ON at index 0 and
+        // re-armed at every boundary; it survives only while tokens are
+        // deletable, so the FIRST non-deletable lowercase-start word after
+        // an exposed filler is the legal cap target.
+        let boundaries = sentence_boundaries(self.source);
+        let mut cap_opportunity = vec![false; self.tokens.len()];
+        let mut expose = true;
+        let mut next = boundaries.iter().copied().filter(|&b| b > 0).peekable();
+        for i in 0..self.tokens.len() {
+            if next.peek() == Some(&i) {
+                expose = true;
+                next.next();
+            }
+            let value = &self.source[self.tokens[i].start..self.tokens[i].end];
+            if expose
+                && value
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_lowercase())
+            {
+                cap_opportunity[i] = true;
+            }
+            expose &= possible[i];
+        }
+        Ok(WorkMask {
+            possible,
+            cap_opportunity,
+        })
+    }
+}
+
+/// Adjudicate a KNOWN deletion-authority vector against `source` without any
+/// proposal alignment. Flags align with `word_spans(source)`. This mirrors
+/// the token-admissibility half of `validate_inner` for the case where the
+/// caller already owns exact source-token deletions (an incremental
+/// correction composing several independently-validated window authorities
+/// into one whole-transcript edit), so no LCS/DP alignment or word-count cap
+/// is needed or applied — the final text may legitimately exceed
+/// `MAX_CLEANUP_WORDS`. Accepts iff every deleted token is a hesitation, or
+/// a member of a fully-deleted repeat block whose group retains at least one
+/// fully-kept sibling block, or a member of a fully-deleted restart group
+/// whose replacement token is kept; no deleted token may overlap any
+/// protection span (any kind, including term/capital Word protections — the
+/// `locked` mask in `validate_inner` is an AND-not over all kinds); repeat
+/// and restart groups are computed on the FULL text because cross-window
+/// interactions are exactly what this gate exists to catch, and the
+/// reconstructed text must preserve every Exact/Quote literal occurrence of
+/// the source (the shared `LiteralGuard` check — a gap-character term whose
+/// bytes belong to no token can still be erased OUTSIDE every deleted token,
+/// which the token-overlap veto alone would miss; "Protected span changed").
+/// All-false flags
+/// return `source` unchanged; an all-true vector runs the same admissibility
+/// rules as any other (see `DeletionContext::adjudicate`). Returns the
+/// reconstructed candidate. Callers that need the full proposal-level
+/// authority (ambiguity, comma-signature) must still pass the result through
+/// `validate` — that comparison is proposal-relative and not reproducible
+/// here.
+pub fn validate_deletions(
+    source: &str,
+    deleted: &[bool],
+    protected_terms: &[String],
+) -> Result<String, String> {
+    DeletionContext::prepare(source, protected_terms).adjudicate(deleted)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test-local view of the public API: the frozen pass's output text.
+    /// (The production `validate_cleanup` wrapper was removed with the
+    /// bounded planner; tests observe `validate_cleanup_with_edits`.)
+    fn validate_cleanup(
+        source: &str,
+        proposal: &str,
+        protected_terms: &[String],
+    ) -> Result<String, String> {
+        validate_cleanup_with_edits(source, proposal, protected_terms)
+            .map(|edits| edits.output)
+    }
 
     #[test]
     fn keeps_safe_deletions_without_adopting_rewrites_or_added_punctuation() {
@@ -1110,5 +1714,241 @@ mod tests {
         assert_eq!(validate("ß um", "ß", &["ss um".into()]).unwrap(), "ß");
         assert!(validate("ı um", "ı", &["I um".into()]).is_err());
         assert!(validate("um\u{301} hi", "\u{301} hi", &["um".into()]).is_err());
+    }
+
+    /// The edit flags returned by `validate_cleanup_with_edits` are the
+    /// frozen pass's own deletions: replaying them through
+    /// `deletions_candidate` reproduces a source-valid reconstruction, and
+    /// equals the delivered output whenever no capitalization substitution is
+    /// involved. Every accepted fixture case must satisfy this.
+    #[test]
+    fn edit_flags_replay_the_frozen_deletions_across_the_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/cleanup-validation-v6.json"
+        ))
+        .unwrap();
+        let mut exact = 0;
+        let mut checked = 0;
+        for case in fixture["cases"].as_array().unwrap() {
+            let source = case["source"].as_str().unwrap();
+            let proposal = case["proposal"].as_str().unwrap();
+            let terms: Vec<String> =
+                serde_json::from_value(case["protected_terms"].clone()).unwrap();
+            let Ok(edits) = validate_cleanup_with_edits(source, proposal, &terms) else {
+                continue;
+            };
+            checked += 1;
+            assert_eq!(edits.deleted.len(), word_spans(source).len(), "case {case}");
+            let candidate = deletions_candidate(source, &edits.deleted)
+                .expect("flags replay through frozen reconstruction");
+            // Flags alone must yield a candidate the frozen pass accepts, and
+            // its revalidated form must agree with the delivered output.
+            let revalidated = validate(source, &candidate, &terms).unwrap();
+            assert!(
+                revalidated == edits.output || revalidated == candidate,
+                "case {case}: revalidation diverged"
+            );
+            if revalidated == edits.output {
+                exact += 1;
+            }
+        }
+        assert!(checked > 50, "fixture must yield accepted cases");
+        assert!(exact > 0, "at least one case replays without caps");
+    }
+
+    /// Driver contract (§4.4): a deletion subset confined to a target range
+    /// can be spliced out of a full-window edit set and revalidated against
+    /// the whole window; edits touching context are dropped by construction,
+    /// and mismatched flag vectors fail closed.
+    #[test]
+    fn target_subset_revalidates_in_full_window_context() {
+        let window = "As I said before, um we should um ship the report. Uh tomorrow, um yes.";
+        let proposal = "As I said before we should ship the report. Tomorrow yes.";
+        let edits = validate_cleanup_with_edits(window, proposal, &[]).unwrap();
+        let spans = word_spans(window);
+        // Target = second sentence *from its terminator boundary*: the driver
+        // attaches a leading hesitation to its sentence (spec §4.3), so the
+        // slice starts at "Uh".
+        let target = spans
+            .iter()
+            .position(|s| &window[s.clone()] == "Uh")
+            .unwrap();
+        let subset: Vec<bool> = edits
+            .deleted
+            .iter()
+            .enumerate()
+            .map(|(i, &d)| d && target <= i && i < spans.len())
+            .collect();
+        let candidate = deletions_candidate(window, &subset).unwrap();
+        // Target-side deletions (Uh, um) replay; the capital substitution is
+        // NOT part of the flags (it lives in `edits.output` only — the driver
+        // stores output strings, so this lowercase intermediate is expected).
+        assert_eq!(
+            candidate,
+            "As I said before, um we should um ship the report. tomorrow, yes."
+        );
+        // Context-side deletions ("before, um", "we should um") stayed raw.
+        assert!(candidate.contains("before, um we should um ship"));
+        assert!(validate(window, &candidate, &[]).is_ok());
+        assert!(deletions_candidate(window, &[true; 3]).is_none());
+    }
+
+    /// Observable protection behavior (no internal kind classification is
+    /// asserted — only what an admitted/rejected deletion vector and the
+    /// caps replay make visible): a multi-word term literal cannot be
+    /// deleted even though both words are hesitations; quoted material —
+    /// paired or unpaired-to-end-of-text — cannot be edited; and a sentence-
+    /// initial Word-locked negation CAN ride a validator-authorized capital
+    /// while an Exact locked capital (and anything in quotes) may not.
+    #[test]
+    fn protection_seams_observed_through_admission_and_caps() {
+        // Term lock: "um um" as a literal term outlives the hesitation rule.
+        let terms = vec!["um um".to_string()];
+        let text = "say um um then go";
+        let spans = word_spans(text);
+        let mut flags = vec![false; spans.len()];
+        flags[1] = true; // first "um" of the literal
+        assert!(validate_deletions(text, &flags, &terms).is_err(), "term literal deleted");
+        // Nothing else in the sentence is deletable; the all-false vector
+        // (settled NO-CHANGE) remains admissible.
+        let ok = vec![false; spans.len()];
+        assert_eq!(validate_deletions(text, &ok, &terms).as_deref(), Ok(text));
+        // Quoted interior: the filler inside quotes is untouchable.
+        let quoted = "He said \"um uh stop\" now.";
+        let qspans = word_spans(quoted);
+        let mut qflags = vec![false; qspans.len()];
+        for (i, s) in qspans.iter().enumerate() {
+            if &quoted[s.clone()] == "um" {
+                qflags[i] = true;
+            }
+        }
+        assert!(validate_deletions(quoted, &qflags, &[]).is_err(), "quote interior edited");
+        // Unpaired opener protects everything after it to end of text.
+        let open = "The client said \"we um ship";
+        let ospans = word_spans(open);
+        let mut oflags = vec![false; ospans.len()];
+        for (i, s) in ospans.iter().enumerate() {
+            if &open[s.clone()] == "um" {
+                oflags[i] = true;
+            }
+        }
+        assert!(validate_deletions(open, &oflags, &[]).is_err(), "unpaired quote seam");
+        // Caps replay: an Exact-locked capital and quoted words are immune —
+        // a recorded flip letter reaching them is dropped fail-closed.
+        let src = "um Dr Smith said \"go home\" now.";
+        let sspans = word_spans(src);
+        let mut sflags = vec![false; sspans.len()];
+        sflags[0] = true; // delete "um"
+        let base = validate_deletions(src, &sflags, &[]).expect("filler deletable");
+        assert_eq!(base, "Dr Smith said \"go home\" now.");
+        let bogus = vec![(2usize, 'G'), (4usize, 'H')]; // "Smith"→"G…", "go"→"H…"
+        assert_eq!(authorized_caps(src, &sflags, &bogus, &[]), base, "flip letters must not rewrite");
+    }
+
+    /// A Word-locked negation at a sentence start accepts the capitalized
+    /// shape exactly as the frozen pass does (end-to-end through the
+    /// validator + caps replay), while quoted material never can.
+    #[test]
+    fn word_locked_negation_caps_at_sentence_start() {
+        let source = "um never do that. keep this.";
+        let proposal = "Never do that. keep this.";
+        let edits = validate_cleanup_with_edits(source, proposal, &[]).expect("cap admitted");
+        assert_eq!(edits.output, proposal);
+        assert_eq!(edits.deleted, vec![true, false, false, false, false, false]);
+        let deletions = validate_deletions(source, &edits.deleted, &[]).expect("vector stands");
+        assert_eq!(deletions, "never do that. keep this.");
+        let flips = caps_flips(source, &edits.output, &edits.deleted).expect("caps extractable");
+        assert_eq!(authorized_caps(source, &edits.deleted, &flips, &[]), proposal);
+    }
+
+    #[test]
+    fn no_op_and_shape_rejects_precede_protection_pattern_errors() {
+        let term = "a".repeat(2_000_000);
+        let terms = [term.clone()];
+        let source = "um hello there ok";
+        let flags = vec![false; word_spans(source).len()];
+        assert_eq!(validate_deletions(source, &flags, &terms).as_deref(), Ok(source));
+        assert!(validate_deletions(source, &vec![true; flags.len()], &terms).is_err());
+        let mut broken = flags.clone();
+        broken.push(false);
+        assert!(validate_deletions(source, &broken, &terms).is_err());
+        let mut one = flags;
+        one[0] = true;
+        assert!(validate_deletions(source, &one, &terms).is_err());
+    }
+
+    /// A repeat run broken by an interior sentence break is rejected as a
+    /// whole, and rejecting it must not shadow the first gap-ordinary run
+    /// behind it: the second copy of the trailing pair stays deletable, and
+    /// reconstruct trims the punctuation stranded after the kept copy.
+    #[test]
+    fn bad_gap_maximal_run_does_not_shadow_ordinary_suffix_run() {
+        let source = "the the.\nthe the";
+        let flags = [false, false, false, true];
+        let out = validate_deletions(source, &flags, &[]).expect("suffix run authorized");
+        assert_eq!(out, "the the.\nthe");
+        // Deleting both trailing copies empties the only authorized group —
+        // the frozen per-block kept-sibling rule rejects it.
+        let both = [false, false, true, true];
+        assert!(validate_deletions(source, &both, &[]).is_err());
+    }
+
+    /// The frozen validator requires every Exact/Quote literal occurrence in
+    /// the source to survive a proposal ("Protected span changed" — a gap
+    /// character like "." is an Exact term, so the empty text a fully-deleted
+    /// filler source reconstructs to is NOT accepted). The adjudicator's
+    /// token-overlap veto is blind to such bytes (they belong to no token),
+    /// so the shared literal guard must reject the same candidate the frozen
+    /// helper rejects.
+    #[test]
+    fn adjudicated_deletions_preserve_gap_term_literals() {
+        let source = "um .";
+        let terms = [".".to_string()];
+        let flags = [true];
+        assert_eq!(
+            validate_deletions(source, &flags, &terms).unwrap_err(),
+            "Protected span changed"
+        );
+        // Same verdict from the frozen whole-proposal gate.
+        assert!(validate(source, "", &terms).is_err());
+        // Control: with no term protecting the period, emptying an all-
+        // hesitation source is the frozen legacy contract — it ACCEPTS, and
+        // the guard must not change that.
+        assert_eq!(validate_deletions(source, &flags, &[]).as_deref(), Ok(""));
+        // Control: the comma attached to a word forms NO span (the term
+        // pattern is word-delimited), so nothing is required and the
+        // filler-only deletion stands.
+        let keep = "keep um,";
+        assert_eq!(
+            validate_deletions(keep, &[false, true], &[",".to_string()]).as_deref(),
+            Ok("keep")
+        );
+        assert!(validate(keep, "keep", &[",".to_string()]).is_ok());
+    }
+
+    /// `authorized_caps` vetoes flips that OVERLAP a protection span, but a
+    /// far standalone Exact term makes its literal required in EVERY
+    /// position, including inside an untouched longer word: with term "in"
+    /// the source's two occurrences are the prefix of "inside" and the
+    /// terminal word, and capitalising "inside" at a sentence start would
+    /// drop the count to one. The shared literal guard reverts exactly that
+    /// flip — the deletion and every literal-safe cap still render, and the
+    /// output passes the frozen terminal gate.
+    #[test]
+    fn caps_flips_revert_only_literal_count_losses() {
+        let source = "um inside the warehouse. the roof beams rest on oak posts and steel clamps keep them steady while workers calibrate torque twice daily panels are measured in.";
+        let terms = ["in".to_string()];
+        let mut deleted = vec![false; word_spans(source).len()];
+        deleted[0] = true; // delete "um"
+        let out = authorized_caps(source, &deleted, &[(1, 'I')], &terms);
+        assert!(out.starts_with("inside the warehouse."), "unsafe cap leaked: {out}");
+        assert!(validate(source, &out, &terms).is_ok(), "rendered text must pass the frozen gate");
+        // Token 4 — the "the" sentence-initial after "warehouse. " — is a
+        // REAL valid cap unaffected by any count rule, and must be RETAINED
+        // alongside the reverted flip.
+        let both = authorized_caps(source, &deleted, &[(1, 'I'), (4, 'T')], &terms);
+        assert!(both.starts_with("inside the warehouse."), "unsafe cap leaked: {both}");
+        assert!(both.contains(". The roof "), "safe cap dropped: {both}");
+        assert!(validate(source, &both, &terms).is_ok());
     }
 }

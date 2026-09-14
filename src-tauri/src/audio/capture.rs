@@ -525,4 +525,5 @@ mod tests {
         let rms = calculate_rms(&[5.0, 5.0, 5.0]);
         assert_eq!(rms, 1.0);
     }
+
 }

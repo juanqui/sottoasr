@@ -73,12 +73,15 @@ SottoASR is a Tauri v2 application with a Rust backend and a Svelte 5 frontend.
 ```
 Hotkey pressed
   → cpal captures microphone audio
+    → (AI cleanup enabled) rolling audio windows transcribe + clean in the
+      background, caching settled bounded requests for later reuse
     → Blocking worker stops/drains capture and writes a checked private WAV
-      → Parakeet TDT v3 recognizes speech through CoreML
+      → Parakeet TDT v3 recognizes speech through CoreML (full recording)
         → Optional acoustic vocabulary checks saved words against audio
           → Exact replacements apply once
-            → Transcript saved in history and pasted or copied
-            → Optional cleanup suggestion stored separately for review
+            → Optional cleanup replays cached answers and finishes uncovered
+              regions with validated, bounded requests
+              → Corrected transcript saved in history and pasted or copied
 ```
 
 The frontend provides the recording overlay (floating pill with canvas-based waveform visualization), transcription history, settings panel, and onboarding flow. All audio capture and ASR inference happens entirely in the Rust backend -- the frontend never touches audio data.
@@ -89,9 +92,9 @@ Exact replacements match whole words without cascading, and protect URLs, email 
 
 On this M4/32 GiB Mac, the same Parakeet weights produced identical text in four CoreML compute configurations. CPU+ANE had a 62.70 ms warm median on short synthetic clips, versus about 138 ms for CPU-only or a GPU encoder. These exclude capture, cleanup and paste. Newer ASR alternatives did not improve the tested accuracy/resource tradeoff. [Model measurements](benchmarks/asr/README.md) and [UI measurements](docs/research/2026-09-08-settings-performance.md) include reproduction steps and limits; no wattage was measured.
 
-In **Settings → Dictation**, enabling AI cleanup prepares the local runtime/model automatically; Save activates the preference. MiniCPM5 2B (official MLX 4-bit) proposes filler and accidental-repeat removals. Rust validates those edits and reconstructs accepted text from the original. Enabled cleanup preloads and runs a one-time synthetic warmup at startup and during setup. Accepted cleanup is used for ordinary paste, Copy transcript, and Copy Last; the original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
+In **Settings → Dictation**, enabling AI cleanup prepares the local runtime/model automatically; Save activates the preference. MiniCPM5 2B (official MLX 4-bit) proposes filler and accidental-repeat removals. Rust validates those edits and reconstructs accepted text from the original. Correction runs incrementally: while you speak, rolling audio windows are transcribed and cleaned in small bounded requests, and settled answers are replayed against the final transcript at stop — so long dictations get corrected instead of being refused for length. Every request stays bounded; the final text is reconstructed only from validated deletions over the original bytes. Enabled cleanup preloads and runs a one-time synthetic warmup at startup and during setup. Accepted cleanup is used for ordinary paste, Copy transcript, and Copy Last; the original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
 
-Cleanup is off by default. Invalid, incomplete or unsupported edits retain the complete input. Quotes, code, identifiers, dictionary replacements and vocabulary terms are protected; reliable non-English detections skip cleanup. These checks do not prove semantic correctness, particularly for short ambiguous foreign phrases or literal words. Version 0.8.3 is a user-requested local test release; the earlier independent qualification failed, and the newer development results are not a replacement qualification. See the [direct model comparison](benchmarks/llm/model-study-2026-09-08/direct-cleanup-diagnostic/HEAD-TO-HEAD.md), [automatic cleanup specification](docs/specs/2026-09-08-automatic-cleanup-recovery.md), and [bundled smoke tests](benchmarks/llm/release-smoke/README.md). Old History suggestions remain readable.
+Cleanup is off by default. Validation is per window: a failed, rejected or incomplete window leaves just its own region raw while independently validated edits elsewhere still apply, and the uncorrected original always remains in expanded History. Quotes, code, identifiers, dictionary replacements and vocabulary terms are protected; reliable non-English detections skip cleanup. The correction is conservative: ambiguous fillers, word-choice errors made by the recognizer, and awkward phrasing are kept, not rewritten. When most spoken windows did not match the final transcript, the remaining bounded requests can still take minutes after you stop (measured ≈ 113 s of cleanup on a 5-minute synthetic fixture; see [journal §15](docs/journals/2026-09-12-correction-baseline-experiments.md)). These checks do not prove semantic correctness, particularly for short ambiguous foreign phrases or literal words. Version 0.8.3 is a user-requested local test release; the earlier independent qualification failed, and the newer development results are not a replacement qualification. See the [direct model comparison](benchmarks/llm/model-study-2026-09-08/direct-cleanup-diagnostic/HEAD-TO-HEAD.md), [automatic cleanup specification](docs/specs/2026-09-08-automatic-cleanup-recovery.md), [incremental correction specification](docs/specs/2026-09-12-incremental-voice-correction.md), and [bundled smoke tests](benchmarks/llm/release-smoke/README.md). Old History suggestions remain readable.
 
 ## Permissions
 

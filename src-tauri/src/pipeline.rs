@@ -779,7 +779,21 @@ mod tests {
                 assert_eq!(transcription.llm_applied, expected != raw);
                 assert!(transcription.cleanup_suggestion.is_none());
                 if expected == raw {
-                    assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Rejected { .. }));
+                    // The harmful edit never lands. Which raw-preserving
+                    // status surfaces depends on the work mask: a fully
+                    // protected `raw` is provably no-work and is NEVER
+                    // dispatched (honest `NoChanges` — the model was not
+                    // consulted); a partially-active window that dispatches
+                    // and is refused surfaces `Rejected`. Delivery
+                    // invariance above is the contract.
+                    assert!(
+                        matches!(
+                            transcription.llm_cleanup_status,
+                            LlmCleanupStatus::Rejected { .. } | LlmCleanupStatus::NoChanges
+                        ),
+                        "protected harmful proposal for {raw:?} must stay raw-preserving, got {:?}",
+                        transcription.llm_cleanup_status
+                    );
                 } else {
                     assert!(matches!(transcription.llm_cleanup_status, LlmCleanupStatus::Applied { .. }));
                     assert_eq!(transcription.raw_text.as_deref(), Some(raw));
@@ -828,7 +842,19 @@ mod tests {
         let item = last.as_ref().unwrap();
         assert_eq!(item.text, raw);
         assert!(!item.llm_applied);
-        assert!(matches!(item.llm_cleanup_status, LlmCleanupStatus::Rejected { .. }));
+        // Same mask semantics as protected_word_deletions: the single window
+        // is fully term-protected ⇒ provably no work ⇒ never dispatched
+        // (NoChanges), or dispatched-and-refused (Rejected). Both preserve
+        // the raw; the vocabulary guard is what makes the harmful edit
+        // impossible either way.
+        assert!(
+            matches!(
+                item.llm_cleanup_status,
+                LlmCleanupStatus::Rejected { .. } | LlmCleanupStatus::NoChanges
+            ),
+            "{:?}",
+            item.llm_cleanup_status
+        );
     }
 
     #[tokio::test]
@@ -1018,11 +1044,17 @@ mod tests {
     async fn stale_cleanup_does_not_publish_status_or_deliver_text() {
         struct SupersededCleanup(std::sync::Weak<AppState>);
         impl crate::llm::engine::LlmBackend for SupersededCleanup {
-            fn cleanup(&mut self, _: &str) -> Result<String, String> {
+            fn cleanup_batch(
+                &mut self,
+                texts: &[String],
+            ) -> Result<Vec<crate::llm::engine::BatchItem>, String> {
                 let state = self.0.upgrade().unwrap();
                 state.new_job();
                 state.set_state(AppStateEnum::Recording);
-                Ok("Please keep the entire final instruction.".into())
+                Ok(texts
+                    .iter()
+                    .map(|t| crate::llm::engine::BatchItem::Proposal(Some(t.clone())))
+                    .collect())
             }
             fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
                 unreachable!()

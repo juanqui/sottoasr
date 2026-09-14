@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::audio::capture::AudioCaptureBackend;
 use crate::asr::engine::{AsrEngine, AsrResult};
-use crate::llm::engine::LlmBackend;
+use crate::llm::engine::{BatchItem, LlmBackend};
 use crate::paste::PasteBackend;
 use crate::pipeline::PipelineEvents;
 use crate::models::{AppStateEnum, Transcription};
@@ -155,20 +155,23 @@ impl AsrEngine for MockAsrEngine {
 /// Type alias for LLM transform functions.
 type LlmTransformFn = Box<dyn Fn(&str) -> Result<String, String> + Send>;
 
-/// Mock LLM backend that applies a canned transformation.
+/// Mock LLM backend that applies a canned transformation per batch text.
 pub struct MockLlmBackend {
     /// The transformation to apply.
     transform: LlmTransformFn,
 }
 
 impl MockLlmBackend {
-    /// Create a mock that proposes complete, untrusted text.
+    /// Create a mock that proposes the same complete, untrusted text for
+    /// every batch item (the old serial "proposal" semantics, batched).
     pub fn proposal(text: &str) -> Self {
         let output = text.to_string();
         Self { transform: Box::new(move |_| Ok(output.clone())) }
     }
 
-    /// Create a mock that returns an error.
+    /// Create a mock whose batch request fails as a whole (endpoint/transport
+    /// fault). Batch-level `Err` is the retire/typed channel — the planner
+    /// never receives per-item values from it.
     pub fn failing(error: &str) -> Self {
         let error = error.to_string();
         Self {
@@ -176,18 +179,34 @@ impl MockLlmBackend {
         }
     }
 
-    /// Create a mock that passes text through unchanged.
+    /// Create a mock that passes every text through unchanged.
     #[allow(dead_code)]
     pub fn passthrough() -> Self {
         Self {
             transform: Box::new(|text| Ok(text.to_string())),
         }
     }
+
+    /// Create a mock from an arbitrary per-text transform. Tests that need
+    /// window-aware proposals (the planner sends window keys, not the whole
+    /// transcript) build the transform themselves.
+    pub fn run(f: impl Fn(&str) -> Result<String, String> + Send + 'static) -> Self {
+        Self { transform: Box::new(f) }
+    }
 }
 
 impl LlmBackend for MockLlmBackend {
-    fn cleanup(&mut self, text: &str) -> Result<String, String> {
-        (self.transform)(text)
+    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+        let mut items = Vec::with_capacity(texts.len());
+        for text in texts {
+            match (self.transform)(text) {
+                // First batch-level fault aborts the request — the same
+                // whole-request `Err` channel the real client exposes.
+                Err(e) => return Err(e),
+                Ok(proposal) => items.push(BatchItem::Proposal(Some(proposal))),
+            }
+        }
+        Ok(items)
     }
 
     fn request_raw(&mut self, _req: &serde_json::Value) -> Result<serde_json::Value, String> {

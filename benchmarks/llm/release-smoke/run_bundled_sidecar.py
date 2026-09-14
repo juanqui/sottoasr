@@ -18,7 +18,9 @@ import time
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-MAX_LINE = 256 * 1024
+# Wire bounds mirror the production sidecar (asserted against it in pure_checks).
+MAX_REQUEST_LINE = 1_048_576
+MAX_RESPONSE_LINE = 4_194_304
 MODEL = "openbmb/MiniCPM5-2B-MLX"
 REVISION = "32f8dd5df1188512a20413f1297083238306634c"
 PROMPT_HASH = "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f"
@@ -46,7 +48,7 @@ class Child:
         started = time.perf_counter()
         deadline = started + timeout
         line = (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
-        if len(line) > MAX_LINE:
+        if len(line) > MAX_REQUEST_LINE:
             raise ValueError("smoke request exceeds protocol bound")
         with selectors.DefaultSelector() as selector:
             selector.register(self.process.stdin, selectors.EVENT_WRITE)
@@ -66,13 +68,13 @@ class Child:
                 if remaining <= 0 or not selector.select(remaining):
                     raise TimeoutError("sidecar response deadline")
                 try:
-                    data = os.read(self.process.stdout.fileno(), min(65536, MAX_LINE + 1 - len(self.buffer)))
+                    data = os.read(self.process.stdout.fileno(), min(65536, MAX_RESPONSE_LINE + 1 - len(self.buffer)))
                 except BlockingIOError:
                     continue
                 if not data:
                     raise RuntimeError("sidecar response ended early")
                 self.buffer.extend(data)
-                if len(self.buffer) > MAX_LINE:
+                if len(self.buffer) > MAX_RESPONSE_LINE:
                     raise RuntimeError("sidecar response exceeds protocol bound")
         raw_line, _, remaining = self.buffer.partition(b"\n")
         self.buffer = bytearray(remaining)
@@ -100,20 +102,143 @@ def pure_checks(sidecar):
     assert module.MODEL_ID == MODEL and module.MODEL_REVISION == REVISION
     assert module.PROMPT_SHA256 == PROMPT_HASH == digest(PROMPT_FILE)
     assert module.PROMPT == json.loads(PROMPT_FILE.read_text())
-    assert module.parse_generation("", "stop") == ""
-    assert module.parse_generation("Complete tail 859.", "stop") == "Complete tail 859."
+    # Batch-wire identity and bounds match this smoke's expectations exactly.
+    assert module.MAX_REQUEST_LINE_BYTES == MAX_REQUEST_LINE
+    assert module.MAX_RESPONSE_LINE_BYTES == MAX_RESPONSE_LINE
+    assert module.MAX_BATCH_TEXTS == 16 and module.MAX_INPUT_BYTES == 4096
+    # Input contract on the real dispatcher: every malformed batch surfaces its
+    # typed code without ever reaching model or generator work.
     checks = []
-    for output, finish in [("partial", "length"), ("partial", None), ("partial", "error"),
-                           ("é" * 32000, "stop"), ("\ud800", "stop")]:
+    for entries in ([{"text": "x"}] * 17,          # over the 16-text cap
+                    "not-a-list",                   # entries must be a list
+                    ["x" * 5000],                   # over MAX_INPUT_BYTES
+                    [17]):                          # non-text entry
+        response = module.safe_response({"action": "cleanup_batch", "texts": entries})
+        assert response.get("ok") is False and response.get("error_code") == "invalid_request"
+        checks.append(response["error_code"])
+    bad_action = module.safe_response({"action": "cleanup"})
+    assert bad_action.get("ok") is False and bad_action.get("error_code") == "invalid_action"
+    checks.append(bad_action["error_code"])
+    # Malformed Unicode is caught per item before any encode touches the wire.
+    try:
+        module.validate_batch_text("\ud800")
+    except module.CleanupError as error:
+        assert error.code == "invalid_request"
+        checks.append("invalid_request")
+    else:
+        raise AssertionError("malformed unicode batch entry accepted")
+    # The defined empty-batch no-op returns before any model or generator work.
+    empty = module.handle_request({"action": "cleanup_batch", "texts": []})
+    assert empty == {"ok": True, "results": []}
+    if "mlx.core" in sys.modules:
+        raise AssertionError("empty batch no-op unexpectedly loaded inference")
+    # Consumer strictness on the one-item batch: malformed protocol aborts;
+    # healthy typed outcomes report distinctly. Negative controls first —
+    # each malformed shape MUST raise, never fall back to raw silently.
+    def ok_response(results):
+        return {"ok": True, "results": results}
+    good = [{"index": 0, "status": "ok", "text": "Clean.", "elapsed_ms": 120}]
+    malformed = [
+        "not-an-object",
+        {"results": good},                                        # no outer ok
+        {"ok": True},                                             # no results
+        ok_response([]),                                          # empty results
+        ok_response(good + good),                                 # duplicate count
+        ok_response("nope"),                                      # results not list
+        ok_response(["not-a-dict"]),                              # item not object
+        ok_response([{"index": 1, "status": "ok", "text": "x", "elapsed_ms": 1}]),
+        ok_response([{"index": False, "status": "ok", "text": "x", "elapsed_ms": 1}]),
+        ok_response([{"index": 0.0, "status": "ok", "text": "x", "elapsed_ms": 1}]),
+        ok_response([{"index": 0, "status": "weird", "text": "x"}]),
+        ok_response([{"index": 0, "status": "ok", "elapsed_ms": 1}]),
+        ok_response([{"index": 0, "status": "ok", "text": "x"}]),  # no elapsed
+        ok_response([{"index": 0, "status": "ok", "text": "x", "elapsed_ms": True}]),
+        ok_response([{"index": 0, "status": "ok", "text": "x", "elapsed_ms": -1}]),
+        ok_response([{"index": 0, "status": "ok", "text": "x" * 33000, "elapsed_ms": 1}]),
+        ok_response([{"index": 0, "status": "ok", "text": "x", "elapsed_ms": 10001}]),
+        ok_response([{"index": 0, "status": "failed"}]),           # failed w/o code
+        {"ok": False},                                             # failure w/o code
+    ]
+    for bad in malformed:
         try:
-            module.parse_generation(output, finish)
-        except module.CleanupError as error:
-            checks.append(error.code)
+            batch_item(bad)
+        except ProtocolError:
+            checks.append("protocol")
         else:
-            raise AssertionError("incomplete/invalid proposal accepted")
+            raise AssertionError(f"malformed batch response accepted: {bad!r}")
+    assert batch_item(ok_response(good)) == ("ok", "Clean.")
+    assert batch_item(ok_response([{"index": 0, "status": "ok", "text": "", "elapsed_ms": 5}])) == ("ok", "")
+    assert batch_item(ok_response([{"index": 0, "status": "timeout"}])) == ("timeout", None)
+    assert batch_item(ok_response([{"index": 0, "status": "failed", "error_code": "text_limit"}])) == ("failed:text_limit", None)
+    assert batch_item({"ok": False, "error_code": "invalid_request"}) == ("outer_failure:invalid_request", None)
     return {"model_id": MODEL, "revision": REVISION, "prompt_sha256": PROMPT_HASH,
-            "empty_completed_output_supported": True, "rejected_cases": checks,
+            "empty_batch_noop_supported": True, "rejected_cases": checks,
+            "wire": {"max_request_line_bytes": MAX_REQUEST_LINE,
+                     "max_response_line_bytes": MAX_RESPONSE_LINE,
+                     "max_batch_texts": 16,
+                     "sidecar_request_timeout_seconds": module.REQUEST_TIMEOUT_SECONDS},
             "runtime_pins": module.RUNTIME_PINS}
+
+class ProtocolError(RuntimeError):
+    """Malformed batch protocol: a transport/consumer contract breach.
+    Must abort the smoke — never silently degrade to the raw fallback."""
+
+
+ITEM_CAP_BYTES = 32_000  # sidecar MAX_TEXT_BYTES: output cap mirror
+KNOWN_ITEM_STATUSES = ("ok", "timeout", "failed")
+
+
+def batch_item(response):
+    """Strictly parse the one-item cleanup_batch response the production
+    client itself accepts. Returns (outcome, proposal-or-None).
+
+    Outer ok true  -> results must be exactly one dict with integer index 0
+    (never bool), a known status; status ok additionally requires string text
+    within the output cap plus sane elapsed metadata. Any other shape is a
+    ProtocolError (fail the smoke). Outer ok false is healthy ONLY with a
+    known error_code; unknown codes are protocol breaches too. Typed item
+    timeout/failed outcomes are healthy results: raw preserved, reported."""
+    if not isinstance(response, dict):
+        raise ProtocolError("response is not a JSON object")
+    ok = response.get("ok")
+    if ok is False:
+        code = response.get("error_code")
+        if not isinstance(code, str) or not code:
+            raise ProtocolError("outer failure without a typed error_code")
+        return "outer_failure:" + code, None
+    if ok is not True:
+        raise ProtocolError("missing non-boolean outer ok")
+    results = response.get("results")
+    if not isinstance(results, list) or len(results) != 1:
+        raise ProtocolError("ok response without exactly one result")
+    item = results[0]
+    if not isinstance(item, dict):
+        raise ProtocolError("result is not an object")
+    index = item.get("index")
+    if isinstance(index, bool) or not isinstance(index, int) or index != 0:
+        raise ProtocolError(f"result index is not exactly integer 0: {index!r}")
+    status = item.get("status")
+    if status not in KNOWN_ITEM_STATUSES:
+        raise ProtocolError(f"unknown item status {status!r}")
+    if status == "ok":
+        text = item.get("text")
+        if not isinstance(text, str):
+            raise ProtocolError("ok item without string text")
+        if len(text.encode("utf-8")) > ITEM_CAP_BYTES:
+            raise ProtocolError("ok item exceeds the output cap")
+        elapsed = item.get("elapsed_ms")
+        if isinstance(elapsed, bool) or not isinstance(elapsed, int) or elapsed < 0:
+            raise ProtocolError(f"ok item elapsed_ms missing/invalid: {elapsed!r}")
+        if elapsed > 10_000:
+            # Sealed ok after the alarm budget: clock-last contract breach.
+            raise ProtocolError(f"ok item sealed past the alarm budget: {elapsed}ms")
+        return "ok", text
+    if status == "failed":
+        code = item.get("error_code")
+        if not isinstance(code, str) or not code:
+            raise ProtocolError("failed item without a typed error_code")
+        return "failed:" + code, None
+    return "timeout", None
 
 
 def adapter_request(adapter, request, environment):
@@ -204,17 +329,30 @@ def main():
                 if admission["language_skip"]:
                     row.update({"response": None, "latency_s": 0, "delivered": raw, "accepted": False})
                 else:
-                    response, elapsed = child.request({"action": "cleanup", "text": raw}, 15)
+                    # Production wire: one typed cleanup_batch per case; the
+                    # old serial "cleanup" action no longer exists. The
+                    # one-item response is parsed with consumer strictness:
+                    # malformed protocol fails the run, never falls back.
+                    response, elapsed = child.request({"action": "cleanup_batch", "texts": [raw]}, 15)
                     row.update({"response": response, "latency_s": elapsed})
                     report.setdefault("first_user_request_latency_s", elapsed)
-                    completed = (response.get("ok") is True and response.get("finish_reason") == "stop"
-                                 and isinstance(response.get("text"), str) and response.get("elapsed_ms", 10001) <= 10000)
-                    row["completed"] = completed
-                    if completed:
-                        validated = adapter_request(args.adapter, {"source": raw, "proposal": response["text"],
-                            "protected_terms": case.get("protected_terms", [])}, environment)
-                        row.update({"validation": validated, "delivered": validated["output"], "accepted": validated["accepted"]})
+                    completed = None
+                    try:
+                        outcome, proposal = batch_item(response)
+                    except ProtocolError as error:
+                        raise ProtocolError(f"case {case['id']}: {error}") from None
+                    row["outcome"] = outcome
+                    if outcome == "ok":
+                        completed = proposal is not None
+                        if completed:
+                            validated = adapter_request(args.adapter, {"source": raw, "proposal": proposal,
+                                "protected_terms": case.get("protected_terms", [])}, environment)
+                            row.update({"validation": validated, "delivered": validated["output"], "accepted": validated["accepted"]})
+                        else:
+                            row.update({"delivered": raw, "accepted": False})
                     else:
+                        # Healthy typed outcomes (timeout/failed) preserve raw
+                        # and report the distinct outcome; no silent pass.
                         row.update({"delivered": raw, "accepted": False})
                 choices = case.get("acceptable_outputs", [case["expected"]])
                 row["exact_target"] = row["delivered"] in choices
