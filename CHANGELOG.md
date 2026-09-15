@@ -9,6 +9,9 @@ All notable changes to SottoASR are documented in this file.
 - The first dictation after the computer has been idle no longer waits seconds for voice cleanup. The cleanup model's memory pages were being evicted to swap while nothing was recording, so the first cleanup paid the full reload cost at stop time. Cleanup is now warmed up in the background the moment recording starts, and a very short recording that ends mid-warmup waits for the warmup to finish instead of skipping the correction.
 - The bundled cleanup runtime's self-test suite works again after the dual-strategy model upgrade (it had been left checking the retired single-strategy internals).
 
+### Infrastructure
+- Refreshed Rust and web dependencies, including a patched TLS library fixing a published security advisory (RUSTSEC-2026-0285).
+
 ## [0.10.0] — 2026-09-14
 
 ### Added
