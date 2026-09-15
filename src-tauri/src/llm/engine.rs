@@ -5,6 +5,7 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::models::CleanupMode;
 use crate::process::{bounded_command, OwnedChild};
 use crate::state::AppState;
 
@@ -61,8 +62,7 @@ pub trait LlmBackend: Send {
     /// (bad JSON, index-set mismatch, over-cap line, EOF, pipe death): the
     /// caller MUST see these to retire the handle. Per-item
     /// `BatchOutcome`-style failures are `Ok` entries, never `Err`.
-    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String>;
-
+    fn cleanup_batch(&mut self, texts: &[String], mode: CleanupMode) -> Result<Vec<BatchItem>, String>;
     /// Send a raw JSON request and return the raw JSON response.
     /// Used by `commands/llm.rs` for protocol-level operations like
     /// `check_update` that bypass the typed batch API.
@@ -554,9 +554,10 @@ impl LlmBackend for LlmEngine {
         matches!(self.child.lock().try_wait(), Ok(None))
     }
 
-    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
-        let response =
-            self.request(&serde_json::json!({"action": "cleanup_batch", "texts": texts}))?;
+    fn cleanup_batch(&mut self, texts: &[String], mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
+        let response = self.request(&serde_json::json!({
+            "action": "cleanup_batch", "texts": texts, "mode": mode
+        }))?;
         match parse_batch_response(&response, texts.len()) {
             Ok(items) => Ok(items),
             Err((true, reason)) => {
@@ -1090,8 +1091,13 @@ pub struct ModelConfig {
     pub download_size_mb: u64,
 }
 
-pub const PROMPT_SHA256: &str = "2edd80834efc831c1f7d37f93da35c209622525b39dcc766c01159f6ad87de7f";
-
+/// The cleanup prompt configuration. Two modes (retype / replace) ship as one
+/// canonical pair; this hash pins the combination
+/// `sha256(canonical(retype) + "\n" + canonical(replace))` over the four
+/// consumed fields — the same value the sidecar asserts at module load.
+/// Changing either prompt here without updating the sidecar (and vice versa)
+/// fails the load handshake and keeps the raw ASR text.
+pub const PROMPT_SHA256: &str = "ad24de2a72e4fdaedc2923c3e0d60734e0b53251d4f816834728b323e5b99ed4";
 pub const MODEL_REVISION: &str = "32f8dd5df1188512a20413f1297083238306634c";
 
 pub const SOTTO_MODEL: ModelConfig = ModelConfig {
@@ -1228,18 +1234,18 @@ mod tests {
             "  r=json.loads(line)\n",
             "  print(json.dumps({'ok':True,'results':[{'index':i,'status':'ok','text':t} for i,t in enumerate(r.get('texts',[]))]}),flush=True)\n",
         ));
-        let error = engine.cleanup_batch(&[source.to_string()]).unwrap_err();
+        let error = engine.cleanup_batch(&[source.to_string()], CleanupMode::Retype).unwrap_err();
         assert!(is_responded_timeout(&error));
         assert!(!is_zombie_error(&error));
         // The process survived its own deadline and serves the next request.
-        let items = engine.cleanup_batch(&[source.to_string()]).unwrap();
+        let items = engine.cleanup_batch(&[source.to_string()], CleanupMode::Retype).unwrap();
         assert!(matches!(&items[0], BatchItem::Proposal(Some(s)) if s == source));
         assert!(engine.is_alive());
 
         let mut failing = stub_engine(
             "import json,sys\nfor line in sys.stdin:\n print(json.dumps({'ok':False,'error_code':'operation_failed','error':'Local cleanup runtime failed; it will restart for the next recording. Original text preserved.'}),flush=True)",
         );
-        let error = failing.cleanup_batch(&[source.to_string()]).unwrap_err();
+        let error = failing.cleanup_batch(&[source.to_string()], CleanupMode::Replace).unwrap_err();
         assert!(!is_responded_timeout(&error));
         assert!(is_zombie_error(&error));
     }

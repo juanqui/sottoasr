@@ -141,6 +141,7 @@ describe('Settings commands', () => {
     max_history: 500,
     launch_at_login: false,
     llm_cleanup_enabled: false,
+    llm_cleanup_mode: 'retype',
     dictionary: [],
     vocabulary: [],
     auto_check_updates: true,

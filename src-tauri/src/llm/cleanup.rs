@@ -14,15 +14,138 @@ use std::time::{Duration, Instant};
 
 use crate::llm::correction;
 use crate::llm::engine::{
-    BatchItem, ensure_running, is_responded_timeout, is_zombie_error, kill_orphan,
+    BatchItem, ensure_running, is_feature_compiled, is_platform_supported,
+    is_responded_timeout, is_zombie_error, kill_orphan,
 };
-use crate::models::LlmCleanupStatus;
+use crate::models::{CleanupMode, LlmCleanupStatus};
 use crate::state::AppState;
 
 /// Failure-recovery deadline for a blocked sidecar. Normal local cleanup is
 /// much faster; input and output sizes are bounded separately. A timeout always
 /// preserves the original transcript and terminates the orphaned process.
 pub const LLM_CLEANUP_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Fixed benign English sentence — byte-identical to the sidecar startup
+/// `WARMUP_TEXT` — that the recording-start prewarm sends through the real
+/// batch path. No user data; the reply is discarded after safe_response
+/// parsing. Its purpose is purely to make the sidecar execute a tiny
+/// generation, which pages the weights back in.
+const PREWARM_SENTINEL: &str = "Please um keep this readiness check local.";
+
+/// How long a stop-path cleanup waits for an in-flight recording-start
+/// prewarm to hand over `llm_operation` before falling back to the existing
+/// "busy" answer. Sized above the worst measured page-in generation
+/// (~6.5 s) with margin; under the 10 s production sidecar alarm only in the
+/// pathological case where a prewarm collides with a slow cleanup anyway.
+pub const PREWARM_HANDOFF_WAIT: Duration = Duration::from_secs(10);
+
+/// Speculative cleanup-sidecar prewarm, fired when recording starts.
+///
+/// Weights sitting idle in macOS swap make the first cleanup of a session
+/// pay a multi-second page-in. This warms them in the BACKGROUND of the
+/// recording window by dispatching a fixed benign sentinel straight to an
+/// already-resident handle, so weights, prefix caches, and compile artifacts
+/// are hot by the time the user stops talking.
+///
+/// Hard constraints (see
+/// docs/specs/2026-09-14-idle-cleanup-prewarm.md):
+/// * NEVER spawns or prepares a sidecar — it borrows only an already-resident
+///   handle (`engine.is_alive()` fast path). Down/starting → return silently;
+///   `ensure_running` stays exclusively on the stop path.
+/// * NEVER queues behind real work: `try_lock` on `llm_operation`; busy →
+///   return. The `llm_prewarming` flag (set by the caller BEFORE spawning)
+///   tells a colliding stop-path cleanup to wait for this handoff instead of
+///   skipping correction.
+/// * Fixed text only — nothing user-derived ever reaches the wire here.
+pub async fn prewarm_sidecar(state: &AppState) {
+    // Clears `llm_prewarming` on every exit path — including early returns
+    // and cancellation of this task — so the handoff gate can never strand
+    // future cleanups behind a phantom prewarm.
+    struct PrewarmGuard<'a>(&'a std::sync::atomic::AtomicBool);
+    impl Drop for PrewarmGuard<'_> {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::SeqCst);
+        }
+    }
+    let _prewarm_guard = PrewarmGuard(&state.llm_prewarming);
+    if !is_feature_compiled() || !is_platform_supported() {
+        return;
+    }
+    // Snapshot settings, then release that lock before touching
+    // llm_operation (lock-order rule: never hold settings across a generation).
+    let (enabled, mode) = {
+        let settings = state.settings.lock().await;
+        (settings.llm_cleanup_enabled, settings.llm_cleanup_mode)
+    };
+    if !enabled {
+        return;
+    }
+    let Ok(_operation) = state.llm_operation.try_lock() else {
+        log::debug!("Prewarm skipped — cleanup operation in progress");
+        return;
+    };
+    // Borrow an already-resident handle only. NEVER call ensure_running here:
+    // spawning/loading belongs exclusively to the stop path, and a cold
+    // recording-start must not fork a second MLX process.
+    let mut handle = {
+        let mut guard = state.llm_engine.lock().await;
+        match guard.take() {
+            Some(mut h) => {
+                if h.is_alive() {
+                    Some(h)
+                } else {
+                    drop(h);
+                    state.llm_loaded.store(false, Ordering::SeqCst);
+                    None
+                }
+            }
+            None => None,
+        }
+    };
+    let Some(mut engine) = handle.take() else {
+        log::debug!("Prewarm skipped — no resident cleanup sidecar");
+        return;
+    };
+    log::debug!("Prewarm dispatching sentinel generation");
+    let started = Instant::now();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let r = engine.cleanup_batch(&[PREWARM_SENTINEL.to_string()], mode);
+        (engine, r)
+    })
+    .await;
+    match outcome {
+        Ok((engine_back, Ok(items))) => {
+            *state.llm_engine.lock().await = Some(engine_back);
+            let ms = started.elapsed().as_millis();
+            match items.first() {
+                Some(BatchItem::Proposal(_)) => log::info!(
+                    "LLM cleanup prewarm generation complete in {ms}ms"
+                ),
+                other => log::debug!(
+                    "Prewarm batch replied with a typed item {other:?} (cleanup path unchanged)"
+                ),
+            }
+        }
+        Ok((engine_back, Err(e))) => {
+            // A transport-level error means the handle is dead or
+            // untrustworthy — same classification the stop path applies, but
+            // prewarm never respawns; it retires and leaves the field empty.
+            let retire = is_zombie_error(&e);
+            if !retire {
+                *state.llm_engine.lock().await = Some(engine_back);
+            } else {
+                drop(engine_back);
+                state.llm_pid.store(0, Ordering::SeqCst);
+                state.llm_loaded.store(false, Ordering::SeqCst);
+            }
+            log::debug!("Prewarm generation failed (cleanup path unchanged): {e}");
+        }
+        Err(panic) => {
+            log::error!("Prewarm task panicked: {panic}");
+            kill_orphan(state);
+        }
+    }
+}
 
 /// Run LLM cleanup on `raw` through the batched stop-path planner
 /// (`correction::plan_cleanup`).
@@ -96,8 +219,9 @@ async fn run_cleanup_attempt(
 pub(crate) async fn sidecar_cleanup_batch(
     state: &AppState,
     texts: Vec<String>,
+    mode: CleanupMode,
 ) -> Result<Vec<BatchItem>, LlmCleanupStatus> {
-    match tokio::time::timeout(LLM_CLEANUP_TIMEOUT, sidecar_batch_request(state, texts)).await {
+    match tokio::time::timeout(LLM_CLEANUP_TIMEOUT, sidecar_batch_request(state, texts, mode)).await {
         Ok(result) => result,
         Err(_) => {
             // Old semantics preserved: the whole attempt (startup included)
@@ -119,6 +243,7 @@ pub(crate) async fn sidecar_cleanup_batch(
 async fn sidecar_batch_request(
     state: &AppState,
     texts: Vec<String>,
+    mode: CleanupMode,
 ) -> Result<Vec<BatchItem>, LlmCleanupStatus> {
     // Ensure a live sidecar handle is available.
     let mut llm = match ensure_running(state).await {
@@ -137,7 +262,7 @@ async fn sidecar_batch_request(
     let cleanup_result = tokio::time::timeout(
         LLM_CLEANUP_TIMEOUT,
         tokio::task::spawn_blocking(move || {
-            let r = llm.cleanup_batch(&texts);
+            let r = llm.cleanup_batch(&texts, mode);
             (llm, r)
         }),
     )
@@ -370,6 +495,7 @@ mod tests {
         fn cleanup_batch(
             &mut self,
             _texts: &[String],
+            _mode: CleanupMode,
         ) -> Result<Vec<crate::llm::engine::BatchItem>, String> {
             Err("Sidecar protocol closed: response exceeded protocol limit".into())
         }
@@ -401,6 +527,7 @@ mod tests {
         fn cleanup_batch(
             &mut self,
             texts: &[String],
+            _mode: CleanupMode,
         ) -> Result<Vec<crate::llm::engine::BatchItem>, String> {
             self.started.take().unwrap().send(()).unwrap();
             self.resume.recv_timeout(Duration::from_secs(2)).unwrap();
@@ -455,5 +582,82 @@ mod tests {
         assert!(matches!(status, LlmCleanupStatus::Applied { .. }));
         let _operation = lifecycle.await;
         assert!(state.llm_engine.lock().await.is_some());
+    }
+
+    fn prewarm_state(backend: Option<crate::test_support::MockLlmBackend>) -> AppState {
+        AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            backend.map(|b| Box::new(b) as Box<dyn LlmBackend>),
+            Box::new(MockPasteBackend::new()),
+            Settings {
+                llm_cleanup_enabled: true,
+                ..Settings::default()
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn prewarm_dispatches_sentinel_through_resident_handle_and_clears_flag() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = calls.clone();
+        let backend = crate::test_support::MockLlmBackend::run(move |text| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            // The sentinel is fixed benign text — never user material.
+            assert_eq!(text, PREWARM_SENTINEL);
+            Ok(text.to_string())
+        });
+        let state = prewarm_state(Some(backend));
+        // Mirrors handle_start_recording: flag set BEFORE the task runs.
+        state.llm_prewarming.store(true, Ordering::SeqCst);
+        prewarm_sidecar(&state).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "sentinel must reach the sidecar");
+        assert!(state.llm_engine.lock().await.is_some(), "handle restored");
+        assert!(!state.llm_prewarming.load(Ordering::SeqCst), "guard cleared");
+    }
+
+    #[tokio::test]
+    async fn prewarm_never_spawns_and_always_clears_the_flag() {
+        // No resident sidecar: prewarm returns without touching llm_engine.
+        // (A stray ensure_running here would try to spawn a real Python
+        // process on the test machine — the empty guard field proves it
+        // did not.)
+        let state = prewarm_state(None);
+        state.llm_prewarming.store(true, Ordering::SeqCst);
+        prewarm_sidecar(&state).await;
+        assert!(state.llm_engine.lock().await.is_none());
+        assert!(!state.llm_prewarming.load(Ordering::SeqCst));
+
+        // Cleanup disabled in settings: no dispatch either (no engine was
+        // ever installed; the enabled gate returns before acquisition).
+        let disabled = AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(Box::new(crate::test_support::MockLlmBackend::passthrough())),
+            Box::new(MockPasteBackend::new()),
+            Settings::default(),
+        );
+        disabled.llm_prewarming.store(true, Ordering::SeqCst);
+        prewarm_sidecar(&disabled).await;
+        assert!(disabled.llm_engine.lock().await.is_some(), "untouched");
+        assert!(!disabled.llm_prewarming.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn prewarm_never_queues_behind_real_cleanup_work() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = calls.clone();
+        let backend = crate::test_support::MockLlmBackend::run(move |text| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(text.to_string())
+        });
+        let state = prewarm_state(Some(backend));
+        let real_work = state.llm_operation.try_lock().unwrap();
+        state.llm_prewarming.store(true, Ordering::SeqCst);
+        // try_lock contention: prewarm must answer now, not wait.
+        prewarm_sidecar(&state).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!state.llm_prewarming.load(Ordering::SeqCst), "guard cleared on busy path");
+        drop(real_work);
     }
 }

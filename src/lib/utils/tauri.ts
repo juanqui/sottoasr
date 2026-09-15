@@ -77,6 +77,7 @@ export interface Settings {
 	max_history: number;
 	launch_at_login: boolean;
 	llm_cleanup_enabled: boolean;
+	llm_cleanup_mode: 'retype' | 'replace';
 	dictionary: DictionaryEntry[];
 	vocabulary: string[];
 	auto_check_updates: boolean;

@@ -52,6 +52,13 @@ pub struct AppState {
     // Serializes resident sidecar ownership across cleanup and lifecycle commands.
     // Lock before llm_engine and hold while a blocking task owns the handle.
     pub llm_operation: TokioMutex<()>,
+
+    /// True while the recording-start speculative prewarm holds
+    /// `llm_operation`. A stop-path cleanup arriving mid-prewarm waits for
+    /// the handoff instead of skipping correction ("Cleanup is busy" would
+    /// silently preserve raw text). A stale flag is harmless: it can only
+    /// extend a wait the operation genuinely needed.
+    pub llm_prewarming: AtomicBool,
     // LLM engine for transcript cleanup
     pub llm_engine: TokioMutex<Option<Box<dyn LlmBackend>>>,
     // PID of the currently-running LLM sidecar subprocess, or 0 if none.
@@ -139,6 +146,7 @@ impl AppState {
             llm_engine: TokioMutex::new(None),
             llm_pid: std::sync::Arc::new(AtomicI32::new(0)),
             llm_preparing: AtomicBool::new(false),
+            llm_prewarming: AtomicBool::new(false),
             llm_loaded: AtomicBool::new(false),
             llm_downloading: AtomicBool::new(false),
             llm_setup_error: TokioMutex::new(None),
@@ -192,6 +200,7 @@ impl AppState {
             llm_engine: TokioMutex::new(llm),
             llm_pid: std::sync::Arc::new(AtomicI32::new(0)),
             llm_preparing: AtomicBool::new(false),
+            llm_prewarming: AtomicBool::new(false),
             llm_loaded: AtomicBool::new(false),
             llm_downloading: AtomicBool::new(false),
             llm_setup_error: TokioMutex::new(None),

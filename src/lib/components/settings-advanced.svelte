@@ -62,6 +62,20 @@
     {:else}<p class="setting-hint">{cleanup.loading ? 'Checking cleanup model…' : 'Model status unavailable.'}</p><button class="secondary-button" type="button" onclick={() => cleanup.refresh()}>Retry status</button>{/if}
   </div>
 </section>
+<section class="setting-card">
+  <h3>AI cleanup strategy</h3>
+  <p class="setting-hint">How the cleanup model rewrites your dictation. Applies after Save.</p>
+  <div class="mode-options" role="radiogroup" aria-label="AI cleanup strategy">
+    <label class="mode-option"><input type="radio" name="cleanup-mode" value="retype"
+      checked={settingsStore.current.llm_cleanup_mode === 'retype'}
+      onchange={() => settingsStore.update('llm_cleanup_mode', 'retype')} />
+      <span><strong>Retype</strong><span class="mode-hint">The model rewrites the whole passage. Best correction quality.</span></span></label>
+    <label class="mode-option"><input type="radio" name="cleanup-mode" value="replace"
+      checked={settingsStore.current.llm_cleanup_mode === 'replace'}
+      onchange={() => settingsStore.update('llm_cleanup_mode', 'replace')} />
+      <span><strong>Replace (experimental)</strong><span class="mode-hint">The model only marks words to remove or replace. Noticeably faster on short recordings; cleans fewer issues and sometimes none. Your original text is never altered unless the safety check passes.</span></span></label>
+  </div>
+</section>
 {#if error}<p class="setting-error" role="alert">{error}</p>{/if}
 <ConfirmDialog open={confirmDelete} title="Remove cleanup model?" message="This removes the downloaded cleanup model from this Mac. Turning cleanup on again will download it. Your recordings and history are kept." confirmLabel="Remove model" busy={deleting} onconfirm={removeModel} oncancel={() => { confirmDelete = false; }} />
 <style>
@@ -71,4 +85,11 @@
   .model-details { border-top:1px solid var(--border); margin-top:16px; padding-top:16px; }
   .model-details p { font-size:13px; overflow-wrap:anywhere; }
   .model-details a { display:block; font-size:12px; margin:12px 0; color:var(--accent); }
+  .mode-options { display:grid; gap:10px; margin-top:14px; }
+  .mode-option { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+  .mode-option:has(input:checked) { border-color:var(--accent); }
+  .mode-option input { margin-top:2px; accent-color:var(--accent); }
+  .mode-option strong { display:block; color:var(--text-bright); font-size:13px; font-weight:500; }
+  .mode-option > span { flex:1; display:grid; gap:4px; }
+  .mode-option .mode-hint { color:var(--text-dim); font-size:12px; line-height:1.5; }
 </style>

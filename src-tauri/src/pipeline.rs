@@ -1047,6 +1047,7 @@ mod tests {
             fn cleanup_batch(
                 &mut self,
                 texts: &[String],
+                _mode: crate::models::CleanupMode,
             ) -> Result<Vec<crate::llm::engine::BatchItem>, String> {
                 let state = self.0.upgrade().unwrap();
                 state.new_job();

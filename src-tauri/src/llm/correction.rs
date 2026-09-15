@@ -18,8 +18,10 @@
 
 use std::collections::HashMap;
 use std::ops::Range;
+use std::time::Duration;
 
 use crate::llm::cleanup::sidecar_cleanup_batch;
+use crate::models::CleanupMode;
 use crate::llm::engine::BatchItem;
 use crate::llm::validation::{
     DeletionContext, WorkMask, authorized_caps, caps_flips, deletions_candidate,
@@ -165,6 +167,49 @@ type WindowAuthority = (Vec<bool>, Vec<(usize, char)>);
 /// all-false result is still settled NO-CHANGE authority. Caps flips the
 /// frozen pass accepted for TARGET tokens ride alongside the flags (key-token
 /// indices); they are applied globally at terminal time, never here.
+/// Apply a Replace-mode edit script to the window's key bytes, returning the
+/// reconstructed proposal — or `None` when the reply is not an edit script at
+/// all (fail-closed: the region stays raw). Byte-exact port of the benchmark
+/// parser validated by the real shipped validator
+/// (benchmarks/llm/results/2026-09-14-slm-sweep/EDITFMT/parse_score.py, arm
+/// DELIM): strip `<transcript>` tags; `<KEEP>` ⇒ echo the source; per
+/// non-blank line, split at the FIRST `|||` (a line without it poisons the
+/// whole reply); NEW `<D>` ⇒ delete; empty OLD ⇒ no-op; each edit replaces
+/// every non-overlapping occurrence, left to right, sequentially. A `find`
+/// matching nothing is a harmless no-op (measured copy-fidelity: attempted
+/// edits are byte-exact; misses carry no authority because the result still
+/// passes the frozen validator).
+fn apply_edit_lines(reply: &str, key: &str) -> Option<String> {
+    let s = reply.replace("<transcript>", "").replace("</transcript>", "");
+    let s = s.trim();
+    if s == "<KEEP>" {
+        return Some(key.to_string());
+    }
+    let mut text = key.to_string();
+    for line in s.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Some((old, new)) = line.split_once("|||") else {
+            return None; // prose / fallback line: whole reply is unusable
+        };
+        let new = if new.trim() == "<D>" { "" } else { new };
+        if old.is_empty() {
+            continue;
+        }
+        let mut out = String::with_capacity(text.len());
+        let mut cur = 0;
+        while let Some(rel) = text[cur..].find(old) {
+            out.push_str(&text[cur..cur + rel]);
+            out.push_str(new);
+            cur = cur + rel + old.len();
+        }
+        out.push_str(&text[cur..]);
+        text = out;
+    }
+    Some(text)
+}
+
 fn target_authority(
     request: &WindowRequest,
     proposal: &str,
@@ -342,13 +387,45 @@ struct Authority<'a> {
 /// alignment, no byte/word cap — so one failed chunk can never cost the
 /// whole transcript: later chunks still run and their regions still apply
 /// (per-window isolation became per-chunk + per-item isolation).
+/// Take the `llm_operation` permit for one cleanup pass.
+///
+/// Ordinary contention (download, prepare, another cleanup) answers
+/// `None` immediately — the existing "busy" semantics. The one exception
+/// is the recording-start speculative prewarm: while `llm_prewarming` is
+/// set, a cleanup that arrives mid-prewarm waits up to `handoff_wait` for
+/// the sentinel generation to finish and the permit to drop, because that
+/// generation IS the page-in this cleanup needs anyway. `handoff_wait` is
+/// a parameter so tests can exercise the expiry without a 10 s real wait.
+async fn acquire_cleanup_operation(
+    state: &AppState,
+    handoff_wait: Duration,
+) -> Option<tokio::sync::MutexGuard<'_, ()>> {
+    match state.llm_operation.try_lock() {
+        Ok(guard) => Some(guard),
+        Err(_) if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) => {
+            tokio::time::timeout(handoff_wait, state.llm_operation.lock())
+                .await
+                .ok()
+        }
+        Err(_) => None,
+    }
+}
+
 pub(crate) async fn plan_cleanup(
     state: &AppState,
     f: &str,
     terms: &[String],
 ) -> (String, LlmCleanupStatus) {
     let started = std::time::Instant::now();
-    let Ok(_operation) = state.llm_operation.try_lock() else {
+    // Busy gate. An ordinary collision (download, prepare, a real cleanup)
+    // answers immediately with raw preserved, exactly as before. The one
+    // exception is the recording-start speculative prewarm: it holds
+    // llm_operation for a single tiny generation whose whole purpose is to
+    // page the weights in, so waiting for it IS the fast path — skipping
+    // correction then would silently discard a real cleanup opportunity.
+    // Hence the bounded handoff wait, gated on the prewarm flag.
+    let operation = acquire_cleanup_operation(state, crate::llm::cleanup::PREWARM_HANDOFF_WAIT).await;
+    let Some(_operation) = operation else {
         return (
             f.to_string(),
             LlmCleanupStatus::Unavailable {
@@ -356,6 +433,10 @@ pub(crate) async fn plan_cleanup(
             },
         );
     };
+
+    // One mode snapshot per cleanup: mid-cleanup setting changes must not
+    // make two chunks of the same pass speak different protocols.
+    let mode = state.settings.lock().await.llm_cleanup_mode;
 
     let cfg = CorrectionConfig::default();
     let windows = plan_windows(f, &cfg);
@@ -473,7 +554,7 @@ pub(crate) async fn plan_cleanup(
     let mut per_key: Vec<Option<String>> = vec![None; slots.len()];
     for (base, chunk) in slots.chunks(crate::llm::engine::BATCH_CAP).enumerate() {
         let texts: Vec<String> = chunk.iter().map(|slot| slot.request.key.clone()).collect();
-        let items = match sidecar_cleanup_batch(state, texts).await {
+        let items = match sidecar_cleanup_batch(state, texts, mode).await {
             Ok(items) => items,
             Err(status) => {
                 log::info!("cleanup: batch chunk failed: {status:?}");
@@ -546,6 +627,29 @@ pub(crate) async fn plan_cleanup(
         };
         let Some(proposal) = per_key[*slot].as_ref() else {
             continue; // never dispatched, failed, or timed out
+        };
+        // Replace mode: the reply is an edit SCRIPT, not a proposal. Rust
+        // applies it verbatim to the key bytes (the same parse the benchmark
+        // harness validated); a parse failure means the reply was not an
+        // edit script at all and this region stays raw — never a silent
+        // retype fallback. The reconstructed text is then adjudicated by
+        // the unchanged frozen validator below.
+        let edited: Option<String> = match mode {
+            CleanupMode::Retype => None,
+            CleanupMode::Replace => match apply_edit_lines(proposal, &occ.request.key) {
+                Some(text) => Some(text),
+                None => {
+                    log::info!("cleanup: replace-mode reply unparseable; region stays raw");
+                    first_status.get_or_insert_with(|| LlmCleanupStatus::Failed {
+                        reason: "replace-mode reply was not a valid edit script".into(),
+                    });
+                    continue;
+                }
+            },
+        };
+        let proposal: &str = match &edited {
+            Some(text) => text,
+            None => proposal.as_str(),
         };
         let Some((deleted, flips)) = target_authority(occ.request, proposal, terms) else {
             log::info!("cleanup: window proposal rejected by validator");
@@ -658,7 +762,7 @@ mod tests {
     struct Stripper(&'static str);
 
     impl LlmBackend for Stripper {
-        fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+        fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
             let filler = format!(" {} ", self.0);
             let dotted = format!(" {}.", self.0);
             Ok(texts
@@ -680,7 +784,7 @@ mod tests {
     struct NoText;
 
     impl LlmBackend for NoText {
-        fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+        fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
             Ok(texts.iter().map(|_| BatchItem::Proposal(None)).collect())
         }
         fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
@@ -764,7 +868,7 @@ mod tests {
     async fn deletion_before_retained_words_preserves_text_and_caps() {
         struct Capting;
         impl LlmBackend for Capting {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Ok(texts
                     .iter()
                     .map(|t| BatchItem::Proposal(Some(t.replacen("um never", "Never", 1))))
@@ -793,7 +897,7 @@ mod tests {
     async fn caps_only_proposal_applies_from_the_final_diff() {
         struct CapsOnly;
         impl LlmBackend for CapsOnly {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Ok(texts
                     .iter()
                     .map(|t| {
@@ -910,7 +1014,7 @@ mod tests {
             seen: Arc<Mutex<Vec<usize>>>,
         }
         impl LlmBackend for SharedRecorder {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 assert!(
                     texts.len() <= crate::llm::engine::BATCH_CAP,
                     "client dispatched a {}-text batch",
@@ -1046,7 +1150,7 @@ mod tests {
             keys: Arc<Mutex<Vec<String>>>,
         }
         impl LlmBackend for Counting {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 self.keys.lock().unwrap().extend(texts.iter().cloned());
                 Ok(texts
                     .iter()
@@ -1064,11 +1168,11 @@ mod tests {
         let keys = Arc::new(Mutex::new(Vec::new()));
         struct Shared(Arc<Mutex<Vec<String>>>);
         impl LlmBackend for Shared {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Counting {
                     keys: self.0.clone(),
                 }
-                .cleanup_batch(texts)
+                .cleanup_batch(texts, mode)
             }
             fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
                 Err("none".into())
@@ -1115,7 +1219,7 @@ mod tests {
             seen: AtomicUsize,
         }
         impl LlmBackend for FirstChunkFails {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 if self.seen.fetch_add(1, Ordering::SeqCst) == 0 {
                     // A typed, NON-retire batch fault: handle stays, later
                     // chunks still dispatch, this chunk's regions stay raw.
@@ -1167,7 +1271,7 @@ mod tests {
             timeout_key: String,
         }
         impl LlmBackend for Mixed {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Ok(texts
                     .iter()
                     .map(|t| {
@@ -1217,7 +1321,7 @@ mod tests {
     async fn per_item_failed_code_preserves_region() {
         struct AllFail;
         impl LlmBackend for AllFail {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Ok(texts
                     .iter()
                     .map(|_| BatchItem::Failed("incomplete_generation".into()))
@@ -1301,7 +1405,7 @@ mod tests {
     async fn caps_opportunity_at_a_later_sentence_boundary_dispatches() {
         struct Capting;
         impl LlmBackend for Capting {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 Ok(texts
                     .iter()
                     .map(|t| BatchItem::Proposal(Some(t.replace("epsilon", "Epsilon"))))
@@ -1345,7 +1449,7 @@ mod tests {
             seen: Arc<AtomicUsize>,
         }
         impl LlmBackend for Recorder {
-            fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
                 self.seen.fetch_add(texts.len(), Ordering::SeqCst);
                 Ok(texts
                     .iter()
@@ -1391,5 +1495,206 @@ mod tests {
                 );
             }
         }
+    }
+    /// Parser contract (ported from the benchmark's 24-test parse suite,
+    /// EDITFMT/test_parse.py): exact semantics of `apply_edit_lines`.
+    #[test]
+    fn apply_edit_lines_matches_the_benchmark_parser() {
+        let key = "I um need uh the the green notebook tomorrow.";
+        // delete + fold, one line each
+        assert_eq!(
+            apply_edit_lines("um |||<D>\nuh the the|||the", key).as_deref(),
+            Some("I need the green notebook tomorrow.")
+        );
+        // <KEEP> echoes the source verbatim
+        assert_eq!(apply_edit_lines("<KEEP>", key).as_deref(), Some(key));
+        // transcript tags are stripped around a valid script; `<D>` is a
+        // byte deletion, so the surrounding spaces survive (whitespace
+        // folding is the MODEL's job — fewshots show `uh the the|||the`).
+        assert_eq!(
+            apply_edit_lines("<transcript>\nuh|||<D>\n</transcript>", key).as_deref(),
+            Some("I um need  the the green notebook tomorrow.")
+        );
+        // one delimiterless line poisons the WHOLE reply (fail-closed)
+        assert_eq!(apply_edit_lines("um |||<D>\nI cleaned it up", key), None);
+        // empty OLD is a no-op line, not a poisoner
+        assert_eq!(apply_edit_lines("|||x", key).as_deref(), Some(key));
+        // a find that matches nothing is a harmless no-op
+        assert_eq!(
+            apply_edit_lines("zebra|||horse", key).as_deref(),
+            Some(key)
+        );
+        // edits apply sequentially: the second sees the FIRST's output,
+        // and left-to-right non-overlapping scan re-reads from after each
+        // replacement (a replaced span is never rescanned by the same edit).
+        assert_eq!(
+            apply_edit_lines("a b|||c d\nc d|||e f", "a b a b").as_deref(),
+            Some("e f e f")
+        );
+        // every non-overlapping occurrence is replaced
+        assert_eq!(
+            apply_edit_lines("the the|||the", "the the the the").as_deref(),
+            Some("the the")
+        );
+        // NEW is verbatim EXCEPT a trimmed `<D>` is the delete token
+        assert_eq!(apply_edit_lines("a||| <D> ", "a").as_deref(), Some(""));
+        assert_eq!(apply_edit_lines("a|||x<D>", "a").as_deref(), Some("x<D>"));
+        // blank lines are skipped, not poisoners
+        assert_eq!(
+            apply_edit_lines("\na|||b\n\n", "a").as_deref(),
+            Some("b")
+        );
+        // `<D>` is only recognized as the whole trimmed NEW
+        assert_eq!(apply_edit_lines("a|||x<D>", "a").as_deref(), Some("x<D>"));
+    }
+
+    /// End-to-end Replace mode: a mock sidecar replying with edit SCRIPTS
+    /// must yield exactly the same cleaned output Retype yields for the same
+    /// intended edits; an unparseable reply keeps the region raw.
+    #[tokio::test]
+    async fn replace_mode_scripts_compose_and_fail_closed() {
+        struct Scripter;
+        impl LlmBackend for Scripter {
+            fn cleanup_batch(
+                &mut self,
+                texts: &[String],
+                _mode: CleanupMode,
+            ) -> Result<Vec<BatchItem>, String> {
+                // Half the replies are scripts, half are prose garbage.
+                Ok(texts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, text)| {
+                        let reply = if i % 2 == 0 {
+                            let _ = text;
+                            "um|||<D>".to_string()
+                        } else {
+                            "I cannot help with that.".to_string()
+                        };
+                        BatchItem::Proposal(Some(reply))
+                    })
+                    .collect())
+            }
+            fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
+                Err("none".into())
+            }
+        }
+        let settings = Settings {
+            llm_cleanup_mode: CleanupMode::Replace,
+            ..Settings::default()
+        };
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(Box::new(Scripter)),
+            Box::new(MockPasteBackend::new()),
+            settings,
+        );
+        // A full 16-key batch: keys alternate clean-script replies (even
+        // indices) and prose garbage (odd). Every key is one tiny window, so
+        // per-KEY isolation is exactly the batch-index parity below.
+        let f: String = (0..16)
+            .map(|i| format!("w{i} um end. "))
+            .collect::<Vec<_>>()
+            .join("");
+        let (out, status) = plan_cleanup(&state, &f, &[]).await;
+        assert!(matches!(status, LlmCleanupStatus::Applied { .. }), "{status:?}");
+        for i in 0..16 {
+            if i % 2 == 0 {
+                assert!(!out.contains(&format!("w{i} um")), "script {i} must apply: {out:?}");
+            } else {
+                assert!(out.contains(&format!("w{i} um")), "garbage {i} must stay raw: {out:?}");
+            }
+        }
+        // Delivered text is always frozen-validator admissible.
+        assert!(out == f || validate(&f, &out, &[]).is_ok(), "{out:?}");
+    }
+
+    /// Retype mode must be byte-identical to pre-0.10.0 behavior: the mode
+    /// never reaches the proposal pipeline as a transform.
+    #[test]
+    fn settings_default_mode_is_retype() {
+        assert_eq!(Settings::default().llm_cleanup_mode, CleanupMode::Retype);
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value.as_object_mut().unwrap().remove("llm_cleanup_mode");
+        let restored: Settings = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.llm_cleanup_mode, CleanupMode::Retype);
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value["llm_cleanup_mode"] = serde_json::json!("replace");
+        let switched: Settings = serde_json::from_value(value).unwrap();
+        assert_eq!(switched.llm_cleanup_mode, CleanupMode::Replace);
+        assert_ne!(Settings::default(), switched);
+    }
+
+    #[tokio::test]
+    async fn in_flight_prewarm_hands_off_to_cleanup_instead_of_skipping_it() {
+        // A recording-start prewarm holds llm_operation while its sentinel
+        // generation runs. A stop arriving mid-prewarm must WAIT for the
+        // handoff and then run the real cleanup — never silently preserve
+        // raw text. The sentinel (prewarm text) passes through unchanged;
+        // the cleanup window gets a valid caps-only edit.
+        let backend = MockLlmBackend::run(|text| {
+            if text == "Please um keep this readiness check local." {
+                return Ok(text.to_string());
+            }
+            let mut chars = text.chars();
+            let first = chars.next().unwrap_or(' ').to_uppercase().to_string();
+            Ok(first + chars.as_str())
+        });
+        let state = std::sync::Arc::new(state_with_llm(backend));
+        let holder = state.clone();
+        let prewarming = tokio::spawn(async move {
+            let _operation = holder.llm_operation.lock().await;
+            holder.llm_prewarming.store(true, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        });
+        // Deterministic rendezvous: proceed only once the flag is observable
+        // (the setter runs before it ever takes the lock, so the lock being
+        // held plus the flag set is the exact collision state).
+        for _ in 0..2000 {
+            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst));
+        let (out, status) = plan_cleanup(&state, "hello there", &[]).await;
+        assert!(
+            matches!(status, LlmCleanupStatus::Applied { .. }),
+            "handoff must yield a real cleanup, got {status:?}"
+        );
+        assert_eq!(out, "Hello there");
+        prewarming.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn expired_prewarm_handoff_falls_back_to_busy_unavailable() {
+        // Same collision, but the prewarm outlives the handoff budget: the
+        // cleanup answers `None` (→ busy-Unavailable, raw preserved — the
+        // existing branch, already covered). `handoff_wait` is a parameter
+        // precisely so this expiry runs in milliseconds, not 10 s.
+        let state = std::sync::Arc::new(state_with_llm(MockLlmBackend::passthrough()));
+        let holder = state.clone();
+        let prewarming = tokio::spawn(async move {
+            let _operation = holder.llm_operation.lock().await;
+            holder.llm_prewarming.store(true, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        });
+        for _ in 0..2000 {
+            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            acquire_cleanup_operation(&state, std::time::Duration::from_millis(50)).await.is_none(),
+            "handoff budget must expire while the prewarm still holds the permit"
+        );
+        // Control: within budget, the same wait acquires the permit.
+        assert!(
+            acquire_cleanup_operation(&state, std::time::Duration::from_secs(2)).await.is_some(),
+            "handoff must succeed once the prewarm drops the permit"
+        );
+        prewarming.await.unwrap();
     }
 }

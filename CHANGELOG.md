@@ -3,6 +3,20 @@
 All notable changes to SottoASR are documented in this file.
 
 
+## [0.10.1] — 2026-09-14
+
+### Fixed
+- The first dictation after the computer has been idle no longer waits seconds for voice cleanup. The cleanup model's memory pages were being evicted to swap while nothing was recording, so the first cleanup paid the full reload cost at stop time. Cleanup is now warmed up in the background the moment recording starts, and a very short recording that ends mid-warmup waits for the warmup to finish instead of skipping the correction.
+- The bundled cleanup runtime's self-test suite works again after the dual-strategy model upgrade (it had been left checking the retired single-strategy internals).
+
+## [0.10.0] — 2026-09-14
+
+### Added
+- A new Advanced setting, "AI cleanup strategy": choose between **Retype** (the model rewrites the passage — best quality, the default) and **Replace (experimental)**, where the model only marks words to remove or replace. Replace is several times faster on short recordings, at the cost of cleaning fewer issues; whenever its answer fails the safety check your original text is delivered unchanged.
+
+### Changed
+- Retype cleanup now completes more of its work within the time budget on filler-heavy dictations (a clearer end-of-prompt instruction); correction quality otherwise unchanged.
+
 ## [0.9.1] — 2026-09-13
 
 ### Fixed

@@ -350,6 +350,24 @@ pub fn handle_start_recording(app: &AppHandle) -> Result<u64, String> {
                 }
             });
 
+            // Speculative cleanup-sidecar prewarm: page the swapped-out MLX
+            // weights back in during the recording window, so the stop-path
+            // cleanup starts hot. The flag is set HERE, synchronously, so a
+            // stop that races this spawn still finds the handoff gate (a
+            // stale-set flag can only extend a wait the sidecar genuinely
+            // needs; the guard inside prewarm_sidecar always clears it).
+            {
+                let prewarm_state: &AppState = &state;
+                prewarm_state
+                    .llm_prewarming
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                let app_for_prewarm = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, AppState> = app_for_prewarm.state();
+                    crate::llm::cleanup::prewarm_sidecar(&state).await;
+                });
+            }
+
             log::info!("Recording started — microphone active");
             Ok(generation)
         }

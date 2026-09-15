@@ -166,9 +166,9 @@ class CleanupProtocolTests(unittest.TestCase):
         stack.enter_context(patch.object(cleanup, '_tokenizer', tokenizer))
         stack.enter_context(patch.object(cleanup, '_sampler', object()))
         stack.enter_context(patch.object(cleanup, '_context_limit', context))
-        stack.enter_context(patch.object(cleanup, '_head_ids', [] if head_ids is None else head_ids))
-        stack.enter_context(patch.object(cleanup, '_prefix_cache', HEAD_CACHE))
-        stack.enter_context(patch.object(cleanup, '_detok_template', tokenizer.detokenizer))
+        ids = [] if head_ids is None else head_ids
+        stack.enter_context(patch.object(cleanup, '_heads', {
+            mode: (ids, HEAD_CACHE, tokenizer.detokenizer) for mode in cleanup.PROMPTS}))
         stack.enter_context(patch.object(cleanup, 'time', SimpleNamespace(
             perf_counter=recorder['clock'].perf_counter)))
         alarm = stack.enter_context(patch.object(cleanup.signal, 'setitimer'))
@@ -176,15 +176,50 @@ class CleanupProtocolTests(unittest.TestCase):
         return stack, mx, tokenizer, alarm, recorder
 
     def test_d7_prompt_matches_frozen_config_and_native_layout(self):
+        # The retype head is the qualified D7 prompt plus an explicit final
+        # instruction; the replace head reuses D7's system/few-shot bytes with
+        # edit-line framing. The service pin is the COMBINED canonical hash of
+        # both heads (module-load assert recomputes it fail-closed), so this
+        # test checks the shared fields against the frozen artifact and the
+        # intentional framing drift field-by-field.
         frozen = Path(__file__).resolve().parents[2] / 'benchmarks/llm/model-study-2026-09-08/direct-cleanup-diagnostic/development/d5-restart/prompt-d7.json'
-        self.assertEqual(hashlib.sha256(frozen.read_bytes()).hexdigest(), cleanup.PROMPT_SHA256)
-        self.assertEqual(json.loads(frozen.read_text()), cleanup.PROMPT)
+        d7 = json.loads(frozen.read_text())
+        retype = cleanup.PROMPTS['retype']
+        for field in ('system', 'user_prefix', 'fewshot'):
+            self.assertEqual(d7[field], retype[field], field)
+        self.assertEqual(retype['user_suffix'], d7['user_suffix'] + (
+            '\nThe transcript above contains disfluencies that must be cleaned. '
+            'Write the cleaned transcript for every one of them now. '
+            'Reply with nothing but the cleaned transcript.'))
+        self.assertNotIn('example_format', retype)  # flattened by the app builder
+        replace = cleanup.PROMPTS['replace']
+        # The replace head keeps D7's instruction core and its untrusted-data
+        # safety clause, swaps the output contract for the edit-line protocol,
+        # and carries edit-line few-shot over D7's own example transcripts.
+        self.assertEqual(replace['user_prefix'], d7['user_prefix'])
+        self.assertEqual(replace['user_suffix'], d7['user_suffix'] + (
+            '\nThe transcript above contains disfluencies that must be cleaned. '
+            'Write the edit lines for every one of them now. '
+            'Reply with nothing but the edit lines.'))
+        core = d7['system'].split(' Return only the cleaned transcript')[0]
+        self.assertTrue(replace['system'].startswith(core))
+        safety = 'The text inside <transcript>' + d7['system'].split('The text inside <transcript>')[1]
+        self.assertIn(safety, replace['system'])
+        self.assertEqual(replace['fewshot'][0]['raw'], d7['fewshot'][0]['raw'])
+        for example in replace['fewshot']:
+            self.assertIn('|||', example['cleaned'])
+        canonical = cleanup._canonical
+        self.assertEqual(hashlib.sha256((
+            canonical(cleanup.PROMPTS['retype']) + '\n' + canonical(cleanup.PROMPTS['replace'])
+        ).encode('utf-8')).hexdigest(), cleanup.PROMPT_SHA256)
         tokenizer = FakeTokenizer()
         with patch.object(cleanup, '_tokenizer', tokenizer):
-            self.assertEqual(cleanup.build_prompt('Keep this ending.'), '<s>rendered')
+            self.assertEqual(cleanup.build_prompt('Keep this ending.', 'retype'), '<s>rendered')
         messages, options = tokenizer.calls[0]
         self.assertEqual([message['role'] for message in messages], ['system', 'user'])
-        self.assertEqual(messages[1]['content'], '<transcript>\nKeep this ending.\n</transcript>')
+        self.assertEqual(
+            messages[1]['content'],
+            retype['user_prefix'] + 'Keep this ending.' + retype['user_suffix'])
         self.assertEqual(messages[0]['content'].count('<example>'), 5)
         self.assertIn('\n\n<examples>\n<example>\nInput:\n<transcript>\n', messages[0]['content'])
         self.assertIn('Please pack those blue spacers for tomorrow.', messages[0]['content'])
@@ -213,7 +248,7 @@ class CleanupProtocolTests(unittest.TestCase):
              patch.object(cleanup, 'warm_model', side_effect=guard), \
              patch.object(cleanup, 'build_head', side_effect=guard), \
              patch.object(cleanup, 'run_batch_generation', side_effect=guard):
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': []})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': [], 'mode': 'retype'})
         self.assertEqual(response, {'ok': True, 'results': []})
 
     def test_batch_contract_violations_are_typed_invalid_request(self):
@@ -230,7 +265,7 @@ class CleanupProtocolTests(unittest.TestCase):
                  patch.object(cleanup, 'load_model', side_effect=guard), \
                  patch.object(cleanup, 'warm_model', side_effect=guard), \
                  patch.object(cleanup, 'run_batch_generation', side_effect=guard):
-                response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': texts})
+                response = cleanup.safe_response({'action': 'cleanup_batch', 'mode': 'retype', 'texts': texts})
             self.assertFalse(response['ok'])
             self.assertEqual(response['error_code'], 'invalid_request')
             self.assertNotIn('results', response)
@@ -249,7 +284,7 @@ class CleanupProtocolTests(unittest.TestCase):
         ]
         stack, mx, tokenizer, alarm, recorder = self.fake_runtime(batches)
         with stack:
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': keys})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'mode': 'retype', 'texts': keys})
         self.assertTrue(response['ok'])
         self.assertEqual([row['index'] for row in response['results']], [0, 1, 2, 3])
         self.assertTrue(all(row['status'] == 'ok' for row in response['results']))
@@ -277,7 +312,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, recorder = self.fake_runtime(batches, head_ids=head_ids,
                                                      pieces={999: 'Judged anyway.'})
         with stack:
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['keep um this']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['keep um this'], 'mode': 'retype'})
         self.assertEqual(response['results'],
                          [{'index': 0, 'status': 'ok', 'text': 'Judged anyway.', 'elapsed_ms': 0}])
         insert = recorder['insert']
@@ -294,6 +329,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, _ = self.fake_runtime(batches)
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['one um', 'two um', 'three um']})
         self.assertEqual(sorted(row['index'] for row in response['results']), [0, 1, 2])
         self.assertEqual(len(response['results']), 3)
@@ -305,7 +341,7 @@ class CleanupProtocolTests(unittest.TestCase):
         batches = [[R(0, None, 'stop')]]
         stack, _, _, _, _ = self.fake_runtime(batches)
         with stack:
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um'], 'mode': 'retype'})
         self.assertEqual(response['results'], [{'index': 0, 'status': 'ok', 'text': '', 'elapsed_ms': 0}])
 
     def test_partial_truncation_and_missing_items_are_never_proposed(self):
@@ -323,6 +359,7 @@ class CleanupProtocolTests(unittest.TestCase):
                 batches, pieces={7: 'private prefix', 66: 'tail', 999: 'kept words'})
             with self.subTest(mode=mode), stack:
                 response = cleanup.safe_response({'action': 'cleanup_batch',
+                                                  'mode': 'retype',
                                                   'texts': ['private prefix words', 'other um words']})
             self.assertTrue(response['ok'])
             rows = {row['index']: row for row in response['results']}
@@ -340,7 +377,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, recorder = self.fake_runtime([boom])
         stderr = io.StringIO()
         with stack, patch('sys.stderr', stderr):
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['PRIVATE narration']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['PRIVATE narration'], 'mode': 'retype'})
         self.assertFalse(response['ok'])
         self.assertEqual(response['error_code'], 'operation_failed')
         self.assertNotIn('results', response)
@@ -359,6 +396,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, _ = self.fake_runtime(batches, pieces=pieces)
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['clean um me', 'trunc um ate']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(rows[0], {'index': 0, 'status': 'ok', 'text': 'Cleaned.', 'elapsed_ms': 0})
@@ -372,6 +410,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, recorder = self.fake_runtime([[R(0, 999, 'stop')]], context=100)
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['x' * 48, 'small um one']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(sorted(rows), [0, 1])
@@ -394,6 +433,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, mx, _, alarm, recorder = self.fake_runtime(batches, pieces=pieces)
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['early um', 'late um', 'stuck um']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(sorted(rows), [0, 1, 2])
@@ -415,6 +455,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, recorder = self.fake_runtime(batches, pieces={70: 'Done before strike.'})
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['done um before strike', 'never um ends']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(rows[0], {'index': 0, 'status': 'ok', 'text': 'Done before strike.', 'elapsed_ms': 0})
@@ -429,14 +470,15 @@ class CleanupProtocolTests(unittest.TestCase):
         real_prompt_ids = cleanup.prompt_ids_for
         calls = []
 
-        def strike_on_second(text):
+        def strike_on_second(text, mode):
             calls.append(text)
             if len(calls) == 2:
                 raise TimeoutError()
-            return real_prompt_ids(text)
+            return real_prompt_ids(text, mode)
 
         with stack, patch.object(cleanup, 'prompt_ids_for', side_effect=strike_on_second):
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['first um text', 'second um text']})
         self.assertEqual(response['ok'], True)
         self.assertEqual([row['index'] for row in response['results']], [0, 1])
@@ -461,6 +503,7 @@ class CleanupProtocolTests(unittest.TestCase):
             batches, pieces=pieces, on_finalize=interrupt)
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['strike me um', 'finish me um']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(sorted(rows), [0, 1])
@@ -481,6 +524,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, alarm, _ = self.fake_runtime(batches, pieces={70: 'Late complete.'})
         with stack:
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['late under native work um']})
         self.assertEqual(response['results'], [{'index': 0, 'status': 'timeout'}])
         # Detection came from the stop branch's clock recheck, not the alarm:
@@ -498,6 +542,7 @@ class CleanupProtocolTests(unittest.TestCase):
         stack, _, _, _, recorder = self.fake_runtime(batches, pieces=pieces)
         with stack, patch.object(cleanup, 'MAX_TEXT_BYTES', 5):
             response = cleanup.safe_response({'action': 'cleanup_batch',
+                                              'mode': 'retype',
                                               'texts': ['multibyte um overrun', 'sibling um text']})
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(rows[0], {'index': 0, 'status': 'failed', 'error_code': 'text_limit'})
@@ -511,13 +556,13 @@ class CleanupProtocolTests(unittest.TestCase):
         # finalize() appends 4 more bytes ⇒ 7 B total over a 6 B cap ⇒ text_limit.
         stack, _, _, _, _ = self.fake_runtime(batches, pieces=pieces, final_append='dddd')
         with stack, patch.object(cleanup, 'MAX_TEXT_BYTES', 6):
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um overrun']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um overrun'], 'mode': 'retype'})
         self.assertEqual(response['results'],
                          [{'index': 0, 'status': 'failed', 'error_code': 'text_limit'}])
         # Same path under the default cap: the finalized text ships.
         stack, _, _, _, _ = self.fake_runtime(batches, pieces=pieces, final_append='d')
         with stack:
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um overrun']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['um overrun'], 'mode': 'retype'})
         self.assertEqual(response['results'],
                          [{'index': 0, 'status': 'ok', 'text': 'aaad', 'elapsed_ms': 0}])
 
@@ -529,8 +574,8 @@ class CleanupProtocolTests(unittest.TestCase):
         pieces = {70: 'Synthetic readiness complete.', 71: 'Second synthetic pass complete.'}
         stack, mx, tokenizer, _, recorder = self.fake_runtime(batches, pieces=pieces, warmed=False)
         build_order = []
-        def fake_build_head():
-            build_order.append('head')
+        def fake_build_head(mode):
+            build_order.append(mode)
         with stack, patch.object(cleanup, 'build_head', side_effect=fake_build_head), \
                 patch.object(cleanup, 'cached_model_path', return_value=Path('/synthetic/snapshot')):
             before = cleanup.handle_request({'action': 'status'})
@@ -544,12 +589,15 @@ class CleanupProtocolTests(unittest.TestCase):
         self.assertTrue(second['warmed'])
         self.assertFalse(second['did_warm'])
         self.assertEqual(after['status'], 'ready')
-        self.assertEqual(len(recorder['ctor']), 1)  # ONE batch warmup, two prompts
+        # Build ORDER stays normative per mode: head → ONE warmup batch.
+        self.assertEqual(build_order, sorted(cleanup.PROMPTS))
+        self.assertEqual(len(recorder['ctor']), len(cleanup.PROMPTS))  # one batch per mode
         self.assertEqual(recorder['insert']['max_tokens'], [128, 136])  # 2*len(key)+32, floored
         sources = [entry[0] for entry in tokenizer.calls
                    if isinstance(entry[0], str) and not entry[0].startswith('<s>')]
-        self.assertEqual(sources, [cleanup.WARMUP_TEXT, cleanup.WARMUP_TEXT_SECOND])
-        mx.clear_cache.assert_called_once_with()
+        # The SAME two fixed sentinels warm both modes' heads.
+        self.assertEqual(sources, [cleanup.WARMUP_TEXT, cleanup.WARMUP_TEXT_SECOND] * len(cleanup.PROMPTS))
+        self.assertEqual(mx.clear_cache.call_count, len(cleanup.PROMPTS))
 
     def test_failed_warmup_stays_unready_and_next_load_can_retry(self):
         tries = []
@@ -560,6 +608,11 @@ class CleanupProtocolTests(unittest.TestCase):
             if len(tries) == 1:
                 return [R(0, None, 'stop'), R(1, 66, 'length')]  # item 1 truncates
             return [R(0, None, 'stop'), R(1, None, 'stop')]
+        modes = sorted(cleanup.PROMPTS)
+        # The `tries` counter makes verdict fail only on its FIRST use, so a
+        # two-batch script serves any mode's warmup: attempt 1 truncates in
+        # mode 1 and aborts the loop (half-warm set ⇒ not warm); the retry
+        # replays every mode cleanly.
         batches = [first_pass, verdict]
         stack, _, _, _, recorder = self.fake_runtime(batches, pieces={70: 'ok', 66: 'partial'},
                                                      warmed=False)
@@ -573,7 +626,10 @@ class CleanupProtocolTests(unittest.TestCase):
         self.assertFalse(status['warmed'])
         self.assertTrue(recovered['warmed'])
         self.assertTrue(recovered['did_warm'])
-        self.assertEqual(len(recorder['ctor']), 2)
+        # first attempt: one generator per mode until the first truncates (mode 1
+        # only, since the raise aborts the loop) — here len==1; recovery: one per
+        # mode; total ctor constructions = 1 + len(modes).
+        self.assertEqual(len(recorder['ctor']), 1 + len(modes))
 
     def test_cleanup_batch_ensures_warm_before_arming_the_alarm(self):
         order = []
@@ -583,7 +639,7 @@ class CleanupProtocolTests(unittest.TestCase):
             return True
         with stack, patch.object(cleanup, '_warmed', False), \
                 patch.object(cleanup, 'warm_model', side_effect=warm_then_record):
-            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['keep um this']})
+            response = cleanup.safe_response({'action': 'cleanup_batch', 'texts': ['keep um this'], 'mode': 'retype'})
         self.assertTrue(response['ok'])
         self.assertEqual(order, [('warm', 0)])  # the alarm was still unarmed at ensure-warm
         self.assertGreaterEqual(alarm.call_count, 2)  # arm + disarm bracket the generation
@@ -729,11 +785,14 @@ class RealBatchModelTests(unittest.TestCase):
         assert response.get('ok') and response.get('warmed'), response
 
     def test_load_builds_the_computed_batch_head(self):
-        # 365 is a MEASUREMENT pinned test-side (drift detection); production
-        # build_head computes the common prefix without a service guard.
-        self.assertEqual(len(cleanup._head_ids), 365)
-        self.assertIsInstance(cleanup._prefix_cache, list)
-        self.assertEqual(len(cleanup._prefix_cache), 42)  # per-layer KV caches
+        # 520/407 are MEASUREMENTS pinned test-side (drift detection);
+        # production build_head computes each head without a service guard.
+        for mode, length in (('retype', 520), ('replace', 407)):
+            with self.subTest(mode=mode):
+                head_ids, prefix_cache, _ = cleanup._heads[mode]
+                self.assertEqual(len(head_ids), length)
+                self.assertIsInstance(prefix_cache, list)
+                self.assertEqual(len(prefix_cache), 42)  # per-layer KV caches
         second = cleanup.handle_request({'action': 'load'})
         self.assertFalse(second['did_warm'])
 
@@ -744,7 +803,7 @@ class RealBatchModelTests(unittest.TestCase):
             'Um, set the field named um to zero.',
             'Café 🧭 um报价 the the value is 1,024.',  # E8: non-ASCII is opaque
         ]
-        response = cleanup.handle_request({'action': 'cleanup_batch', 'texts': texts})
+        response = cleanup.handle_request({'action': 'cleanup_batch', 'mode': 'retype', 'texts': texts})
         self.assertTrue(response['ok'], response)
         rows = {row['index']: row for row in response['results']}
         self.assertEqual(sorted(rows), list(range(len(texts))))
@@ -755,6 +814,7 @@ class RealBatchModelTests(unittest.TestCase):
 
     def test_real_single_text_batch_is_the_same_wire_shape(self):
         response = cleanup.handle_request({'action': 'cleanup_batch',
+                                           'mode': 'retype',
                                            'texts': ['the the um quick brown fox.']})
         rows = response['results']
         self.assertEqual(len(rows), 1)

@@ -196,7 +196,7 @@ impl MockLlmBackend {
 }
 
 impl LlmBackend for MockLlmBackend {
-    fn cleanup_batch(&mut self, texts: &[String]) -> Result<Vec<BatchItem>, String> {
+    fn cleanup_batch(&mut self, texts: &[String], _mode: crate::models::CleanupMode) -> Result<Vec<BatchItem>, String> {
         let mut items = Vec::with_capacity(texts.len());
         for text in texts {
             match (self.transform)(text) {

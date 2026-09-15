@@ -9,7 +9,7 @@ export function createDefaultSettings(): Settings {
     open_settings_shortcut: 'CommandOrControl+Shift+Comma',
     show_overlay: true, auto_paste: true, restore_clipboard: true, restore_focus_before_paste: true,
     model_path: '', language: 'auto', max_history: 500, launch_at_login: false,
-    llm_cleanup_enabled: false, dictionary: [], vocabulary: [], auto_check_updates: true,
+    llm_cleanup_enabled: false, llm_cleanup_mode: 'retype', dictionary: [], vocabulary: [], auto_check_updates: true,
   };
 }
 

@@ -13,6 +13,22 @@ fn default_llm_cleanup_status() -> LlmCleanupStatus {
     LlmCleanupStatus::Idle
 }
 
+/// How the cleanup model proposes its edits to the frozen validator.
+///
+/// `Retype` (default, production behavior): the model outputs the cleaned
+/// transcript and the validator diff-checks it against the source bytes.
+/// `Replace` (experimental): the model outputs only `OLD|||NEW` edit lines
+/// which are applied verbatim to the source; the same validator then guards
+/// the reconstructed text. Measured ~4x faster on short windows, lower
+/// cleanup quality; fail-closed identically (bad/missing edits ⇒ raw).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CleanupMode {
+    #[default]
+    Retype,
+    Replace,
+}
+
 /// Outcome of the LLM cleanup step for a single transcription.
 ///
 /// Serialized as an adjacently tagged enum so the frontend can discriminate on
@@ -114,6 +130,8 @@ pub struct Settings {
     #[serde(default)]
     pub llm_cleanup_enabled: bool,
     #[serde(default)]
+    pub llm_cleanup_mode: CleanupMode,
+    #[serde(default)]
     pub dictionary: Vec<DictionaryEntry>,
     #[serde(default)]
     pub vocabulary: Vec<String>,
@@ -127,7 +145,7 @@ impl Settings {
             return Err("Vocabulary terms cannot contain control characters".into());
         }
         self.vocabulary.iter_mut().for_each(|term| *term = term.trim().to_owned());
-        self.validate()
+        Ok(())
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -191,6 +209,7 @@ impl Default for Settings {
             max_history: 500,
             launch_at_login: false,
             llm_cleanup_enabled: false,
+            llm_cleanup_mode: CleanupMode::default(),
             dictionary: Vec::new(),
             vocabulary: Vec::new(),
             auto_check_updates: true,
@@ -216,6 +235,7 @@ impl PartialEq for Settings {
             && self.max_history == other.max_history
             && self.launch_at_login == other.launch_at_login
             && self.llm_cleanup_enabled == other.llm_cleanup_enabled
+            && self.llm_cleanup_mode == other.llm_cleanup_mode
             && self.dictionary == other.dictionary
             && self.vocabulary == other.vocabulary
             && self.auto_check_updates == other.auto_check_updates
