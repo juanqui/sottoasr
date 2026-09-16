@@ -376,6 +376,7 @@ pub fn handle_start_recording(app: &AppHandle) -> Result<u64, String> {
             if state.get_state() == AppStateEnum::Idle {
                 show_recording_error(app, "recording-error", state.recording_generation.load(Ordering::SeqCst),
                     serde_json::json!({ "error": &e }));
+                let _ = app.emit("recovery-recordings-changed", ());
             }
             Err(e)
         }
@@ -407,6 +408,7 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
             state.set_state(AppStateEnum::Idle);
             crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
             show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
+            let _ = app.emit("recovery-recordings-changed", ());
             return;
         }
     };
@@ -534,7 +536,7 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
                 };
 
                 let transcription = crate::models::Transcription {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
                     text: final_text.clone(),
                     duration_ms,
                     created_at: chrono::Utc::now(),
@@ -658,6 +660,7 @@ async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>)
         if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
             state.set_state(AppStateEnum::Idle);
             crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
+            let _ = app_clone.emit("recovery-recordings-changed", ());
         }
     });
 
@@ -686,6 +689,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
             state.set_state(AppStateEnum::Idle);
             crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
             show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
+            let _ = app.emit("recovery-recordings-changed", ());
             return;
         }
     };
@@ -713,7 +717,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
             }
             if let Ok(asr_result) = result {
                 let transcription = crate::models::Transcription {
-                    id: uuid::Uuid::new_v4().to_string(),
+                    id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
                     text: asr_result.text.clone(),
                     duration_ms,
                     created_at: chrono::Utc::now(),
@@ -740,6 +744,7 @@ pub async fn handle_cancel_recording(app: &AppHandle) {
             if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
                 state.set_state(AppStateEnum::Idle);
                 crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
+                let _ = app_clone.emit("recovery-recordings-changed", ());
             }
         });
     } else {

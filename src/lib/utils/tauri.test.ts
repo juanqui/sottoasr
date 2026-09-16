@@ -376,3 +376,4 @@ describe('Updater commands', () => {
     expect(result).toEqual(status);
   });
 });
+

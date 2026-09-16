@@ -2,7 +2,7 @@
 // This module is only compiled under `#[cfg(test)]`.
 
 use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Mutex};
 
 use crate::audio::capture::AudioCaptureBackend;
@@ -47,7 +47,7 @@ impl MockAudioCapture {
 impl AudioCaptureBackend for MockAudioCapture {
     fn start(
         &mut self,
-        sender: Sender<Vec<f32>>,
+        sender: SyncSender<Vec<f32>>,
         _is_recording: Arc<AtomicBool>,
         _level_callback: Box<dyn Fn(f32) + Send + 'static>,
         _error_callback: Box<dyn Fn(String) + Send + 'static>,

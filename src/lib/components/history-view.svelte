@@ -5,6 +5,7 @@
   import { exportTranscriptionsCsvFile } from '../utils/tauri';
   import { createEventScope } from '../utils/event-scope';
   import { cleanupOutcome } from '../utils/cleanup-outcome';
+  import RecordingRecovery from './recording-recovery.svelte';
   import HistoryItem from './history-item.svelte';
   import ConfirmDialog from './confirm-dialog.svelte';
   import type { TranscriptionEvent } from '../utils/tauri';
@@ -102,6 +103,7 @@
   {/if}
   {#if feedback}<p class="history-feedback" role="status">{feedback}</p>{/if}
   <div class="history-list" bind:this={historyList}>
+    <RecordingRecovery />
     {#if transcriptionStore.loading}<div class="empty-state" role="status"><p>Loading history…</p></div>
     {:else if !transcriptionStore.loaded}<div class="empty-state"><p class="empty-title">History is unavailable</p><p class="empty-subtitle">Your saved entries have not been changed.</p></div>
     {:else if !transcriptionStore.items.length}<div class="empty-state"><p class="empty-title">No transcriptions yet</p><p class="empty-subtitle">Press your hotkey to start recording. Transcriptions will appear here.</p></div>

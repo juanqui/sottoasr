@@ -48,7 +48,10 @@ export class TranscriptionStore {
       return;
     }
     this.pendingArrivals?.set(transcription.id, transcription);
-    this.items = [transcription, ...this.items.filter((item) => item.id !== transcription.id && !this.removedIds.has(item.id))];
+    const items = this.items.filter((item) => item.id !== transcription.id && !this.removedIds.has(item.id));
+    const position = items.findIndex((item) => item.created_at.localeCompare(transcription.created_at) <= 0);
+    items.splice(position === -1 ? items.length : position, 0, transcription);
+    this.items = items;
   }
 
   async delete(id: string) {

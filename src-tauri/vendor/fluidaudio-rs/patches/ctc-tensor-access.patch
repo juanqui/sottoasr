@@ -1,0 +1,103 @@
+--- a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/WordSpotting/CtcKeywordSpotter+Inference.swift
++++ b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/WordSpotting/CtcKeywordSpotter+Inference.swift
+@@ -1,3 +1,4 @@
++// Modified by SottoASR contributors: typed CTC tensor access and explicit silence padding.
+ import CoreML
+ import Foundation
+ 
+@@ -255,9 +256,21 @@
+             array = try MLMultiArray(shape: [NSNumber(value: maxModelSamples)], dataType: dataType)
+         }
+ 
+-        // Copy actual samples (MLMultiArray is zero-initialized, so padding is implicit).
+-        for i in 0..<clampedCount {
+-            array[i] = NSNumber(value: audioSamples[i])
++        // Typed contiguous input access avoids one NSNumber bridge per sample.
++        switch dataType {
++        case .float16:
++            let data = array.dataPointer.assumingMemoryBound(to: Float16.self)
++            for i in 0..<clampedCount { data[i] = Float16(audioSamples[i]) }
++            for i in clampedCount..<maxModelSamples { data[i] = 0 }
++        case .float32:
++            let data = array.dataPointer.assumingMemoryBound(to: Float.self)
++            if clampedCount > 0 {
++                audioSamples.withUnsafeBufferPointer { data.update(from: $0.baseAddress!, count: clampedCount) }
++            }
++            for i in clampedCount..<maxModelSamples { data[i] = 0 }
++        default:
++            for i in 0..<clampedCount { array[i] = NSNumber(value: audioSamples[i]) }
++            for i in clampedCount..<maxModelSamples { array[i] = 0 }
+         }
+ 
+         if debugMode {
+@@ -359,36 +372,52 @@
+ 
+         let vocabSize: Int
+         let timeSteps: Int
+-        let indexBuilder: (Int, Int) -> [NSNumber]
++        let timeStride: Int
++        let vocabularyStride: Int
+ 
+         if rank == 3 {
+             // Expected shape: [1, timeSteps, vocabSize]
+             timeSteps = ctcOutput.shape[1].intValue
+             vocabSize = ctcOutput.shape[2].intValue
+-            indexBuilder = { t, v in [0, t, v].map { NSNumber(value: $0) } }
++            timeStride = ctcOutput.strides[1].intValue
++            vocabularyStride = ctcOutput.strides[2].intValue
+         } else {
+             // Expected shape: [1, vocabSize, 1, timeSteps]
+             vocabSize = ctcOutput.shape[1].intValue
+             timeSteps = ctcOutput.shape[3].intValue
+-            indexBuilder = { t, v in [0, v, 0, t].map { NSNumber(value: $0) } }
++            timeStride = ctcOutput.strides[3].intValue
++            vocabularyStride = ctcOutput.strides[1].intValue
+         }
+ 
+         if vocabSize <= 0 || timeSteps <= 0 {
+             return []
+         }
+ 
+-        var logProbs: [[Float]] = Array(
+-            repeating: Array(repeating: 0, count: vocabSize),
+-            count: timeSteps
+-        )
++        var logProbs: [[Float]] = []
++        logProbs.reserveCapacity(timeSteps)
++        let pointer = ctcOutput.dataPointer
+ 
+         // Iterate over time/vocab dimensions, read logits or log-probabilities.
+         // Apply log-softmax per frame when needed.
+         for t in 0..<timeSteps {
+             var logits = [Float](repeating: 0, count: vocabSize)
+ 
+-            for v in 0..<vocabSize {
+-                logits[v] = ctcOutput[indexBuilder(t, v)].floatValue
++            let offset = t * timeStride
++            switch ctcOutput.dataType {
++            case .float16:
++                let data = pointer.assumingMemoryBound(to: Float16.self)
++                for v in 0..<vocabSize { logits[v] = Float(data[offset + v * vocabularyStride]) }
++            case .float32:
++                let data = pointer.assumingMemoryBound(to: Float.self)
++                for v in 0..<vocabSize { logits[v] = data[offset + v * vocabularyStride] }
++            case .double:
++                let data = pointer.assumingMemoryBound(to: Double.self)
++                for v in 0..<vocabSize { logits[v] = Float(data[offset + v * vocabularyStride]) }
++            default:
++                for v in 0..<vocabSize {
++                    let index = rank == 3 ? [0,t,v] : [0,v,0,t]
++                    logits[v] = ctcOutput[index.map(NSNumber.init)].floatValue
++                }
+             }
+ 
+             var row = logSoftmax(logits, temperature: temperature)
+@@ -398,7 +427,7 @@
+                 row[blankId] -= blankBias
+             }
+ 
+-            logProbs[t] = row
++            logProbs.append(row)
+         }
+ 
+         return logProbs

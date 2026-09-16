@@ -57,6 +57,10 @@ pub fn run() {
             commands::transcription::clear_transcriptions,
             commands::transcription::export_transcriptions_csv,
             commands::transcription::export_transcriptions_csv_file,
+            commands::recovery::get_recoverable_recordings,
+            commands::recovery::recover_recording,
+            commands::recovery::reveal_recovery_recording,
+            commands::recovery::get_recovery_notice,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_settings,
@@ -112,6 +116,9 @@ pub fn run() {
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
 
             let handle = app.handle().clone();
+            let recovery = commands::recovery::RecoverySession::start();
+            *app.state::<AppState>().recording_storage_error.lock().unwrap_or_else(|e| e.into_inner()) = recovery.error.clone();
+            app.manage(recovery);
 
             // Hide from Dock — menu bar only app.
             // LSUIElement in Info.plist should handle this, but we also set it
@@ -261,6 +268,7 @@ pub fn run() {
                     if let Err(e) = tray::menu::setup_tray_menu(app) {
                         log::error!("Failed to setup tray menu: {}", e);
                     }
+                    commands::recovery::offer_on_startup(app);
                 }
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
                     // Only prevent exit when triggered by last window closing (code == None).
@@ -273,7 +281,10 @@ pub fn run() {
                         commands::overlay::show_busy_exit_warning(app);
                     }
                 }
-                tauri::RunEvent::Exit => process::shutdown(),
+                tauri::RunEvent::Exit => {
+                    process::shutdown();
+                    app.state::<commands::recovery::RecoverySession>().clean_exit();
+                }
                 _ => {}
             }
         });

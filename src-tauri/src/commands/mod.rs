@@ -1,5 +1,6 @@
 pub mod recording;
 pub mod transcription;
+pub mod recovery;
 pub mod settings;
 pub mod permissions;
 pub mod setup;

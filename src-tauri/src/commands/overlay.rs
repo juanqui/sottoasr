@@ -181,27 +181,16 @@ pub async fn open_transcription_history(app: AppHandle) -> Result<(), String> {
     }).map_err(|error| error.to_string())
 }
 
-/// Only an existing recording made by this app in the system temp directory
-/// can be revealed. A webview cannot use this command as a general path opener.
-fn recovery_audio_path(path: &std::path::Path, temporary: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let name = path.file_name().and_then(|name| name.to_str()).ok_or("Invalid recording filename")?;
-    let id = name.strip_prefix("sotto_").and_then(|name| name.strip_suffix(".wav"))
-        .ok_or("Invalid recording filename")?;
-    uuid::Uuid::parse_str(id).map_err(|_| "Invalid recording filename")?;
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| format!("Recording is unavailable: {error}"))?;
-    if !metadata.file_type().is_file() { return Err("Recording must be a regular file".into()); }
-    let canonical = path.canonicalize().map_err(|error| error.to_string())?;
-    let temporary = temporary.canonicalize().map_err(|error| error.to_string())?;
-    if canonical.parent() != Some(temporary.as_path()) {
-        return Err("Recording is outside SottoASR's temporary audio directory".into());
-    }
-    Ok(canonical)
+/// Reveal only app-owned recordings, never arbitrary webview-supplied paths.
+fn recovery_audio_path(path: &std::path::Path, directory: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    crate::commands::recovery::checked_audio_path(path, directory)
 }
 
 #[tauri::command]
 pub async fn reveal_recording_audio(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let path = recovery_audio_path(std::path::Path::new(&path), &std::env::temp_dir())?;
+        let path = recovery_audio_path(std::path::Path::new(&path), &std::env::temp_dir())
+            .or_else(|_| recovery_audio_path(std::path::Path::new(&path), &crate::audio::recovery::recordings_dir()?))?;
         #[cfg(target_os = "macos")]
         {
             let status = std::process::Command::new("open").arg("-R").arg(path).status()

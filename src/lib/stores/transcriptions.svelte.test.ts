@@ -48,3 +48,14 @@ it('applies durable eviction acknowledgements even when their new record was alr
   store.add({...item('newest'),removed_ids:['oldest']});
   expect(store.items.map((value)=>value.id)).toEqual(['other']);
 });
+it('inserts recovered recordings by their original date without splitting date groups', () => {
+  const store = new TranscriptionStore();
+  store.items = [
+    {...item('today'), created_at: '2026-09-15T12:00:00Z'},
+    {...item('yesterday'), created_at: '2026-09-14T10:00:00Z'},
+  ];
+  const recovered = {...item('recovered'), created_at: '2026-09-14T11:00:00Z'};
+  store.add(recovered);
+  store.add(recovered); // IPC response and event acknowledge the same recording.
+  expect(store.items.map((value) => value.id)).toEqual(['today', 'recovered', 'yesterday']);
+});

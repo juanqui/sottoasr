@@ -2,6 +2,30 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.11.0] — 2026-09-15
+
+### Changed
+- Faster acoustic vocabulary processing with typed CoreML tensor access. The speech model, chunk boundaries, vocabulary policy, and cleanup settings stay unchanged.
+- Correct the documentation: ASR and batched cleanup run after Stop. Recording-start warmup does not transcribe speech.
+
+### Fixed
+- Initialize unused CTC input samples to silence. CoreML buffers do not guarantee zeroed memory, which caused variable vocabulary scores on partial windows.
+- Include the long-recording stack-overflow fix and restart recovery from the local 0.10.2 build.
+
+### Added
+- Private WAV checkpoints during recording, plus History recovery with file locations, Show in Finder, and local reprocessing without automatic paste.
+- Tensor conversion regressions for strided arrays, numeric types, empty inputs, and final-window silence padding.
+
+## [0.10.2] — 2026-09-15
+
+### Fixed
+- Replace recursive vocabulary alignment with bounded-stack traversal. This fixes a native stack overflow after long recordings without disabling vocabulary assistance.
+
+### Added
+- Save private WAV checkpoints during recording. Interrupted recordings remain in Application Support instead of relying on temporary storage.
+- Open History after an unclean exit or an unfinished recording. Show the audio path and offer Show in Finder and local reprocessing.
+- Preserve legacy temporary WAVs during recovery. Save recovered transcripts before acknowledging completion, without automatic paste.
+
 
 ## [0.10.1] — 2026-09-14
 

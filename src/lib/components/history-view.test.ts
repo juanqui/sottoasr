@@ -2,8 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 vi.mock('@tauri-apps/api/event', () => ({listen:vi.fn(async () => vi.fn())}));
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({writeText:vi.fn()}));
-vi.mock('../utils/tauri', () => ({getTranscriptions:vi.fn(), clearTranscriptions:vi.fn(), deleteTranscription:vi.fn(), exportTranscriptionsCsvFile:vi.fn()}));
-import { getTranscriptions, clearTranscriptions, exportTranscriptionsCsvFile } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({getTranscriptions:vi.fn(), clearTranscriptions:vi.fn(), deleteTranscription:vi.fn(), exportTranscriptionsCsvFile:vi.fn(), getRecoverableRecordings:vi.fn(async()=>[]), getRecoveryNotice:vi.fn(async()=>null), recoverRecording:vi.fn(), revealRecoveryRecording:vi.fn()}));
+import { getTranscriptions, clearTranscriptions, exportTranscriptionsCsvFile, getRecoverableRecordings } from '../utils/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { transcriptionStore } from '../stores/transcriptions.svelte';
 import HistoryView from './history-view.svelte';
@@ -11,6 +11,9 @@ let component:ReturnType<typeof mount>|undefined;
 let target:HTMLDivElement;
 beforeEach(() => {
   vi.clearAllMocks(); transcriptionStore.items = []; transcriptionStore.loaded = false; transcriptionStore.error = '';
+  // clearAllMocks keeps implementations set with mockImplementation; pin the default each test.
+  vi.mocked(listen).mockImplementation(async () => vi.fn<() => void>());
+  vi.mocked(getRecoverableRecordings).mockResolvedValue([]);
   HTMLDialogElement.prototype.showModal = function () {this.open=true;}; HTMLDialogElement.prototype.close = function () {this.open=false;};
   vi.mocked(getTranscriptions).mockResolvedValue(Array.from({length:5000},(_,i)=>({id:`history-${i}`,text:`Transcript ${i}`,created_at:'2026-09-08T00:00:00Z',duration_ms:1000,word_count:2})));
 });
@@ -43,7 +46,7 @@ it('reports export success only after native file creation succeeds',async()=>{
 
 it('registers live history before taking its initial authoritative snapshot',async()=>{
   let subscribed!:(off:()=>void)=>void;
-  vi.mocked(listen).mockImplementationOnce(()=>new Promise((resolve)=>{subscribed=resolve;}));
+  vi.mocked(listen).mockImplementation((event:string)=>event==='transcription-complete'?new Promise((resolve)=>{subscribed=resolve;}):Promise.resolve(vi.fn()));
   target=document.createElement('div');document.body.append(target);component=mount(HistoryView,{target});flushSync();
   expect(getTranscriptions).not.toHaveBeenCalled();
   subscribed(vi.fn());await vi.waitFor(()=>expect(getTranscriptions).toHaveBeenCalledOnce());

@@ -40,9 +40,9 @@ pub struct AppState {
     // Audio capture — managed by hotkey handlers
     pub audio_capture: std::sync::Arc<StdMutex<Box<dyn AudioCaptureBackend>>>,
     pub capture_health: std::sync::Arc<StdMutex<crate::audio::capture::CaptureHealth>>,
-    // Audio buffer: samples sent via channel from cpal callback
-    pub audio_sender: StdMutex<std::sync::mpsc::Sender<Vec<f32>>>,
-    pub audio_receiver: std::sync::Arc<StdMutex<std::sync::mpsc::Receiver<Vec<f32>>>>,
+    pub(crate) recording_writer: StdMutex<Option<crate::audio::recovery::RecordingWriter>>,
+    pub(crate) recording_audio_path: StdMutex<Option<std::path::PathBuf>>,
+    pub(crate) recording_storage_error: StdMutex<Option<String>>,
     // ASR engine
     pub asr_engine: SharedAsrEngine,
     pub vocabulary_operation: TokioMutex<()>,
@@ -104,7 +104,6 @@ impl Drop for ShortcutUpdate<'_> {
 
 impl AppState {
     pub fn new() -> Self {
-        let (tx, rx) = std::sync::mpsc::channel();
         let (settings, settings_load_error) = match crate::commands::settings::load_persisted_settings_checked() {
             Ok(settings) => (settings, None),
             Err(error) => {
@@ -135,8 +134,9 @@ impl AppState {
             is_model_loaded: AtomicBool::new(false),
             audio_capture: std::sync::Arc::new(StdMutex::new(Box::new(AudioCapture::new()))),
             capture_health: Default::default(),
-            audio_sender: StdMutex::new(tx),
-            audio_receiver: std::sync::Arc::new(StdMutex::new(rx)),
+            recording_writer: StdMutex::new(None),
+            recording_audio_path: StdMutex::new(None),
+            recording_storage_error: StdMutex::new(None),
             asr_engine: std::sync::Arc::new(TokioMutex::new(crate::asr::engine::create_engine())),
             vocabulary_operation: TokioMutex::new(()),
             vocabulary_runtime: StdMutex::new(crate::commands::vocabulary::VocabularyRuntime::default()),
@@ -171,7 +171,6 @@ impl AppState {
         paste: Box<dyn PasteBackend>,
         settings: Settings,
     ) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel();
         let vocabulary = settings.vocabulary.clone();
         let cancel = settings.cancel_shortcut.clone();
         let cancel_alt = settings.cancel_shortcut_alt.clone();
@@ -189,8 +188,9 @@ impl AppState {
             is_model_loaded: AtomicBool::new(true),
             audio_capture: std::sync::Arc::new(StdMutex::new(audio)),
             capture_health: Default::default(),
-            audio_sender: StdMutex::new(tx),
-            audio_receiver: std::sync::Arc::new(StdMutex::new(rx)),
+            recording_writer: StdMutex::new(None),
+            recording_audio_path: StdMutex::new(None),
+            recording_storage_error: StdMutex::new(None),
             asr_engine: std::sync::Arc::new(TokioMutex::new(asr)),
             vocabulary_operation: TokioMutex::new(()),
             vocabulary_runtime: StdMutex::new(crate::commands::vocabulary::VocabularyRuntime::default()),

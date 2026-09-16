@@ -1,6 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -20,61 +20,35 @@ pub(crate) struct FinishedCapture {
     pub audio_path: Option<std::path::PathBuf>,
 }
 
-/// The caller must first claim Recording -> Transcribing. Keep that claim until
-/// this worker completes; it owns stream shutdown, final callbacks, and samples.
+pub(crate) fn active_recording_path(state: &crate::state::AppState) -> Option<std::path::PathBuf> {
+    state.recording_audio_path.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Stop finishes in-flight callbacks before the writer drains its bounded queue.
 pub(crate) async fn finish_recording_capture(
     state: &crate::state::AppState,
 ) -> Result<FinishedCapture, String> {
-    let path = std::env::temp_dir().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
-    finish_recording_capture_to(state, path).await
-}
-
-async fn finish_recording_capture_to(
-    state: &crate::state::AppState,
-    path: std::path::PathBuf,
-) -> Result<FinishedCapture, String> {
     let capture = Arc::clone(&state.audio_capture);
-    let receiver = Arc::clone(&state.audio_receiver);
     let health = Arc::clone(&state.capture_health);
+    let writer = state.recording_writer.lock().unwrap_or_else(|e| e.into_inner()).take()
+        .ok_or("No recording writer is active")?;
+    let path = writer.path.clone();
     let result = tokio::task::spawn_blocking(move || {
         let sample_rate = {
-            let mut capture = capture.lock().unwrap_or_else(|error| error.into_inner());
+            let mut capture = capture.lock().unwrap_or_else(|e| e.into_inner());
             capture.stop();
             capture.sample_rate()
         };
-        // Stop finishes in-flight callbacks. Read health only afterward so a
-        // failure racing a manual Stop cannot label a partial recording normal.
-        let capture_error = health
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .error
-            .clone();
-        let mut samples = Vec::new();
-        {
-            let receiver = receiver.lock().unwrap_or_else(|error| error.into_inner());
-            while let Ok(chunk) = receiver.try_recv() {
-                samples.extend(chunk);
-            }
-        }
-        let sample_count = samples.len();
+        let sample_count = writer.finish()?;
+        let capture_error = health.lock().unwrap_or_else(|e| e.into_inner()).error.clone();
         let duration_ms = super::wav::captured_duration_ms(sample_count, sample_rate);
-        let audio_path = if sample_count >= 4000 || capture_error.is_some() {
-            super::wav::write_recording_wav(&path, &samples, sample_rate)?;
-            Some(path)
-        } else {
+        let audio_path = if sample_count < 4000 && capture_error.is_none() {
+            let _ = std::fs::remove_file(&path);
             None
-        };
-        Ok(FinishedCapture {
-            sample_count,
-            sample_rate,
-            duration_ms,
-            capture_error,
-            audio_path,
-        })
-    })
-    .await
-    .map_err(|error| format!("Audio finalization worker failed: {error}"))
-    .and_then(|result| result);
+        } else { Some(path) };
+        Ok(FinishedCapture { sample_count, sample_rate, duration_ms, capture_error, audio_path })
+    }).await.map_err(|e| format!("Audio finalization worker failed: {e}"))
+        .and_then(|result| result);
     state.is_recording.store(false, Ordering::SeqCst);
     result
 }
@@ -89,7 +63,7 @@ pub trait AudioCaptureBackend: Send {
     /// - `level_callback`: called with RMS level (~30 Hz) for waveform UI.
     fn start(
         &mut self,
-        sender: Sender<Vec<f32>>,
+        sender: SyncSender<Vec<f32>>,
         is_recording: Arc<AtomicBool>,
         level_callback: Box<dyn Fn(f32) + Send + 'static>,
         error_callback: Box<dyn Fn(String) + Send + 'static>,
@@ -115,7 +89,7 @@ pub(crate) fn start_recording_capture(
 pub(crate) fn start_recording_capture_with_errors(
     state: &crate::state::AppState,
     level_callback: Box<dyn Fn(f32) + Send + 'static>,
-    error_callback: Box<dyn Fn(u64, String) + Send + 'static>,
+    error_callback: Box<dyn Fn(u64, String) + Send + Sync + 'static>,
 ) -> Result<u64, String> {
     use crate::models::AppStateEnum;
     let mut current = state
@@ -133,19 +107,14 @@ pub(crate) fn start_recording_capture_with_errors(
             "Cannot start recording: currently in {current:?} state"
         ));
     }
+    if let Some(error) = state.recording_storage_error.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return Err(format!("Recording storage is unavailable: {error}"));
+    }
     *state
         .recording_vocabulary
         .lock()
         .unwrap_or_else(|error| error.into_inner()) = state
         .vocabulary_terms
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .clone();
-    if let Ok(receiver) = state.audio_receiver.lock() {
-        while receiver.try_recv().is_ok() {}
-    }
-    let sender = state
-        .audio_sender
         .lock()
         .unwrap_or_else(|error| error.into_inner())
         .clone();
@@ -158,7 +127,7 @@ pub(crate) fn start_recording_capture_with_errors(
         error: None,
     };
     let health = state.capture_health.clone();
-    let on_error = Box::new(move |error: String| {
+    let on_error: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |error: String| {
         let mut health = health.lock().unwrap_or_else(|error| error.into_inner());
         if health.generation != generation || health.error.is_some() {
             return;
@@ -167,15 +136,24 @@ pub(crate) fn start_recording_capture_with_errors(
         drop(health);
         error_callback(generation, error);
     });
+    let path = super::recovery::recordings_dir()?.join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
+    let (writer, sender, rate_sender) = super::recovery::RecordingWriter::start(path.clone(), on_error.clone())?;
+    *state.recording_audio_path.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
     let recording = Arc::new(AtomicBool::new(true));
     state.is_recording.store(true, Ordering::SeqCst);
-    let result = state
-        .audio_capture
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .start(sender, recording, level_callback, on_error);
+    let mut capture = state.audio_capture.lock().unwrap_or_else(|error| error.into_inner());
+    let result = capture.start(sender, recording, level_callback, Box::new(move |error| on_error(error)));
     match result {
         Ok(()) => {
+            if rate_sender.send(capture.sample_rate()).is_err() {
+                capture.stop();
+                state.is_recording.store(false, Ordering::SeqCst);
+                drop(rate_sender);
+                writer.abandon_start();
+                *state.recording_audio_path.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                return Err("Recording storage worker stopped during microphone startup".into());
+            }
+            *state.recording_writer.lock().unwrap_or_else(|e| e.into_inner()) = Some(writer);
             state
                 .target_pid
                 .store(state.paste_backend.get_frontmost_pid(), Ordering::SeqCst);
@@ -183,6 +161,10 @@ pub(crate) fn start_recording_capture_with_errors(
             Ok(generation)
         }
         Err(error) => {
+            capture.stop();
+            drop(rate_sender);
+            writer.abandon_start();
+            *state.recording_audio_path.lock().unwrap_or_else(|e| e.into_inner()) = None;
             state.is_recording.store(false, Ordering::SeqCst);
             Err(error)
         }
@@ -212,7 +194,7 @@ impl AudioCapture {
 impl AudioCaptureBackend for AudioCapture {
     fn start(
         &mut self,
-        sender: Sender<Vec<f32>>,
+        sender: SyncSender<Vec<f32>>,
         is_recording: Arc<AtomicBool>,
         level_callback: Box<dyn Fn(f32) + Send + 'static>,
         error_callback: Box<dyn Fn(String) + Send + 'static>,
@@ -238,6 +220,11 @@ impl AudioCaptureBackend for AudioCapture {
         self.captured_sample_rate = sample_rate;
         let sender_clone = sender.clone();
         let is_recording_clone = is_recording.clone();
+        let shared_error = Arc::new(std::sync::Mutex::new(error_callback));
+        let callback_error = shared_error.clone();
+        let send_error = move |error| {
+            callback_error.lock().unwrap_or_else(|e| e.into_inner())(error);
+        };
 
         // Level metering: accumulate ~33ms of samples, then emit RMS
         let level_window = sample_rate as usize / 30; // ~1600 samples at 48kHz
@@ -270,10 +257,14 @@ impl AudioCaptureBackend for AudioCapture {
                     } else {
                         data
                     };
-
-                    // Send samples to receiver for transcription
-                    // (Vec allocation here is unavoidable — the channel requires owned data)
-                    let _ = sender_clone.send(mono.to_vec());
+                    // Bound each queued allocation as well as the queue length.
+                    for chunk in mono.chunks(4096) {
+                        if let Err(error) = sender_clone.try_send(chunk.to_vec()) {
+                            is_recording_clone.store(false, Ordering::Relaxed);
+                            send_error(format!("Recording storage could not keep up: {error}"));
+                            break;
+                        }
+                    }
 
                     // Calculate audio level for waveform visualization
                     level_buffer.extend_from_slice(mono);
@@ -291,7 +282,7 @@ impl AudioCaptureBackend for AudioCapture {
                 },
                 move |err| {
                     log::error!("Audio capture error: {}", err);
-                    error_callback(format!("Microphone capture was interrupted: {err}"));
+                    shared_error.lock().unwrap_or_else(|e| e.into_inner())(format!("Microphone capture was interrupted: {err}"));
                 },
                 None,
             )
@@ -330,18 +321,38 @@ pub(crate) fn calculate_rms(samples: &[f32]) -> f32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn failed_microphone_start_clears_reservation_and_active_path() {
+        struct Unavailable;
+        impl AudioCaptureBackend for Unavailable {
+            fn start(&mut self, _: SyncSender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send>, _: Box<dyn Fn(String) + Send>) -> Result<(), String> {
+                Err("microphone unavailable".into())
+            }
+            fn stop(&mut self) {}
+            fn sample_rate(&self) -> u32 { 16000 }
+        }
+        let state = crate::state::AppState::new_with_backends(Box::new(Unavailable),
+            Box::new(crate::test_support::MockAsrEngine::with_text("unused")), None,
+            Box::new(crate::test_support::MockPasteBackend::new()), crate::models::Settings::default());
+        assert!(start_recording_capture(&state, Box::new(|_| {})).unwrap_err().contains("microphone unavailable"));
+        assert_eq!(state.get_state(), crate::models::AppStateEnum::Idle);
+        assert!(!state.is_recording.load(Ordering::SeqCst));
+        assert!(active_recording_path(&state).is_none());
+        assert!(state.recording_writer.lock().unwrap().is_none());
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn finalization_yields_and_preserves_callbacks_from_stream_shutdown() {
         struct DelayedStop {
             started: Option<tokio::sync::oneshot::Sender<()>>,
             release: std::sync::mpsc::Receiver<()>,
-            audio: Option<Sender<Vec<f32>>>,
+            audio: Option<SyncSender<Vec<f32>>>,
             error: Option<Box<dyn Fn(String) + Send>>,
         }
         impl AudioCaptureBackend for DelayedStop {
             fn start(
                 &mut self,
-                sender: Sender<Vec<f32>>,
+                sender: SyncSender<Vec<f32>>,
                 _: Arc<AtomicBool>,
                 _: Box<dyn Fn(f32) + Send>,
                 error: Box<dyn Fn(String) + Send>,
@@ -379,14 +390,9 @@ mod tests {
         ));
         let generation = start_recording_capture(&state, Box::new(|_| {})).unwrap();
         assert!(state.claim_recording_end(Some(generation)));
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("shutdown.wav");
+        let path = active_recording_path(&state).unwrap();
         let worker_state = Arc::clone(&state);
-        let worker_path = path.clone();
-        let worker =
-            tokio::spawn(
-                async move { finish_recording_capture_to(&worker_state, worker_path).await },
-            );
+        let worker = tokio::spawn(async move { finish_recording_capture(&worker_state).await });
         started_rx.await.unwrap();
         // The sole Tokio thread can release Stop only when shutdown was offloaded.
         release_tx.send(()).unwrap();
@@ -409,34 +415,6 @@ mod tests {
         assert_eq!(samples.len(), 192_002 + 144_000);
     }
 
-    #[tokio::test]
-    async fn finalization_reports_write_failure_without_overwriting_and_skips_only_short_capture() {
-        for sample_count in [1, 4000] {
-            let state = crate::state::AppState::new_with_backends(
-                Box::new(crate::test_support::MockAudioCapture::new(
-                    vec![0.25; sample_count],
-                    16_000,
-                )),
-                Box::new(crate::test_support::MockAsrEngine::with_text("unused")),
-                None,
-                Box::new(crate::test_support::MockPasteBackend::new()),
-                crate::models::Settings::default(),
-            );
-            start_recording_capture(&state, Box::new(|_| {})).unwrap();
-            assert!(state.claim_recording_end(None));
-            let directory = tempfile::tempdir().unwrap();
-            let path = directory.path().join("existing.wav");
-            std::fs::write(&path, b"preserve existing recording").unwrap();
-            let result = finish_recording_capture_to(&state, path.clone()).await;
-            assert!(!state.is_recording.load(Ordering::SeqCst));
-            if sample_count == 1 {
-                assert!(result.unwrap().audio_path.is_none());
-            } else {
-                assert!(result.unwrap_err().contains("WAV create failed"));
-            }
-            assert_eq!(std::fs::read(path).unwrap(), b"preserve existing recording");
-        }
-    }
 
     #[test]
     fn capture_errors_notify_once_and_old_callbacks_cannot_poison_a_new_recording() {
@@ -446,7 +424,7 @@ mod tests {
         impl AudioCaptureBackend for ErrorCapture {
             fn start(
                 &mut self,
-                _: Sender<Vec<f32>>,
+                _: SyncSender<Vec<f32>>,
                 _: Arc<AtomicBool>,
                 _: Box<dyn Fn(f32) + Send>,
                 error: Box<dyn Fn(String) + Send>,

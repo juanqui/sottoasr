@@ -1,0 +1,93 @@
+--- a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/Rescorer/VocabularyRescorer+Utilities.swift
++++ b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/Rescorer/VocabularyRescorer+Utilities.swift
+@@ -1,3 +1,4 @@
++// Modified by SottoASR contributors: replace recursive vocabulary alignment with bounded-stack traversal.
+ import Foundation
+ 
+ extension VocabularyRescorer {
+@@ -143,46 +144,48 @@
+             return Array(repeating: nil, count: baseWords.count)
+         }
+ 
+-        var alignments: [[Range<String.Index>]] = []
+-
+-        func search(
+-            wordIndex: Int,
+-            cursor: String.Index,
+-            ranges: [Range<String.Index>]
+-        ) {
+-            guard alignments.count < 2 else { return }
+-            guard wordIndex < baseWords.count else {
+-                guard isDelimiterOnly(baseText[cursor..<baseText.endIndex]) else { return }
+-                alignments.append(ranges)
+-                return
+-            }
+-
+-            let word = baseWords[wordIndex]
+-            var searchStart = cursor
+-            while searchStart < baseText.endIndex,
+-                let match = baseText.range(
+-                    of: word,
+-                    options: .literal,
+-                    range: searchStart..<baseText.endIndex
+-                )
+-            {
+-                if isDelimiterOnly(baseText[cursor..<match.lowerBound]) {
+-                    search(
+-                        wordIndex: wordIndex + 1,
+-                        cursor: match.upperBound,
+-                        ranges: ranges + [match]
+-                    )
++        // One heap frame per word, never one Swift call frame per word. Long
++        // dictations run on cooperative workers with a small fixed stack.
++        struct Frame {
++            let cursor: String.Index
++            var searchStart: String.Index
++        }
++        var stack = [Frame(cursor: baseText.startIndex, searchStart: baseText.startIndex)]
++        var ranges: [Range<String.Index>] = []
++        ranges.reserveCapacity(baseWords.count)
++        var alignment: [Range<String.Index>]?
++
++        while !stack.isEmpty {
++            let depth = stack.count - 1
++            let frame = stack[depth]
++            guard frame.searchStart < baseText.endIndex,
++                let match = baseText.range(of: baseWords[depth], options: .literal,
++                    range: frame.searchStart..<baseText.endIndex),
++                isDelimiterOnly(baseText[frame.cursor..<match.lowerBound])
++            else {
++                // A later match cannot repair a non-delimiter gap: it contains
++                // the same prefix. Pop this branch without rescanning the tail.
++                stack.removeLast()
++                if !ranges.isEmpty { ranges.removeLast() }
++                continue
++            }
++            stack[depth].searchStart = baseText.index(after: match.lowerBound)
++            ranges.append(match)
++            if ranges.count == baseWords.count {
++                if isDelimiterOnly(baseText[match.upperBound..<baseText.endIndex]) {
++                    guard alignment == nil else {
++                        return Array(repeating: nil, count: baseWords.count)
++                    }
++                    alignment = ranges
+                 }
+-                guard alignments.count < 2, match.lowerBound < baseText.endIndex else { return }
+-                searchStart = baseText.index(after: match.lowerBound)
+-            }
+-        }
+-
+-        search(wordIndex: 0, cursor: baseText.startIndex, ranges: [])
+-        guard alignments.count == 1, let alignment = alignments.first else {
++                ranges.removeLast()
++            } else {
++                stack.append(Frame(cursor: match.upperBound, searchStart: match.upperBound))
++            }
++        }
++        guard let alignment else {
+             return Array(repeating: nil, count: baseWords.count)
+         }
+-
+         return alignment.map { lexicalUTF8Range(for: $0, in: baseText) }
+     }
+ 

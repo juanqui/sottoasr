@@ -73,15 +73,13 @@ SottoASR is a Tauri v2 application with a Rust backend and a Svelte 5 frontend.
 ```
 Hotkey pressed
   → cpal captures microphone audio
-    → (AI cleanup enabled) rolling audio windows transcribe + clean in the
-      background, caching settled bounded requests for later reuse
-    → Blocking worker stops/drains capture and writes a checked private WAV
+    → (AI cleanup enabled) warm the resident cleanup model with fixed text
+    → Disk worker writes private WAV checkpoints during capture and finalizes at Stop
       → Parakeet TDT v3 recognizes speech through CoreML (full recording)
         → Optional acoustic vocabulary checks saved words against audio
           → Exact replacements apply once
-            → Optional cleanup replays cached answers and finishes uncovered
-              regions with validated, bounded requests
-              → Corrected transcript saved in history and pasted or copied
+            → Optional cleanup processes bounded text windows in batches of 16
+              → Validated transcript saved in history and pasted or copied
 ```
 
 The frontend provides the recording overlay (floating pill with canvas-based waveform visualization), transcription history, settings panel, and onboarding flow. All audio capture and ASR inference happens entirely in the Rust backend -- the frontend never touches audio data.
@@ -92,9 +90,26 @@ Exact replacements match whole words without cascading, and protect URLs, email 
 
 On this M4/32 GiB Mac, the same Parakeet weights produced identical text in four CoreML compute configurations. CPU+ANE had a 62.70 ms warm median on short synthetic clips, versus about 138 ms for CPU-only or a GPU encoder. These exclude capture, cleanup and paste. Newer ASR alternatives did not improve the tested accuracy/resource tradeoff. [Model measurements](benchmarks/asr/README.md) and [UI measurements](docs/research/2026-09-08-settings-performance.md) include reproduction steps and limits; no wattage was measured.
 
-In **Settings → Dictation**, enabling AI cleanup prepares the local runtime/model automatically; Save activates the preference. MiniCPM5 2B (official MLX 4-bit) proposes filler and accidental-repeat removals. Rust validates those edits and reconstructs accepted text from the original. Correction runs incrementally: while you speak, rolling audio windows are transcribed and cleaned in small bounded requests, and settled answers are replayed against the final transcript at stop — so long dictations get corrected instead of being refused for length. Every request stays bounded; the final text is reconstructed only from validated deletions over the original bytes. Enabled cleanup preloads and runs a one-time synthetic warmup at startup and during setup. Accepted cleanup is used for ordinary paste, Copy transcript, and Copy Last; the original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
+In **Settings → Dictation**, enabling AI cleanup prepares the local runtime and model. Save activates the preference. MiniCPM5 2B proposes filler and accidental-repeat removals. After Stop, the full recording passes through ASR and vocabulary processing. Cleanup then processes bounded text windows in batches of up to 16. Rust validates the edits and reconstructs accepted text from the original. Startup and recording-start warmups use fixed text, not your speech. Accepted cleanup is used for paste and Copy. The original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
 
-Cleanup is off by default. Validation is per window: a failed, rejected or incomplete window leaves just its own region raw while independently validated edits elsewhere still apply, and the uncorrected original always remains in expanded History. Quotes, code, identifiers, dictionary replacements and vocabulary terms are protected; reliable non-English detections skip cleanup. The correction is conservative: ambiguous fillers, word-choice errors made by the recognizer, and awkward phrasing are kept, not rewritten. When most spoken windows did not match the final transcript, the remaining bounded requests can still take minutes after you stop (measured ≈ 113 s of cleanup on a 5-minute synthetic fixture; see [journal §15](docs/journals/2026-09-12-correction-baseline-experiments.md)). These checks do not prove semantic correctness, particularly for short ambiguous foreign phrases or literal words. Version 0.8.3 is a user-requested local test release; the earlier independent qualification failed, and the newer development results are not a replacement qualification. See the [direct model comparison](benchmarks/llm/model-study-2026-09-08/direct-cleanup-diagnostic/HEAD-TO-HEAD.md), [automatic cleanup specification](docs/specs/2026-09-08-automatic-cleanup-recovery.md), [incremental correction specification](docs/specs/2026-09-12-incremental-voice-correction.md), and [bundled smoke tests](benchmarks/llm/release-smoke/README.md). Old History suggestions remain readable.
+Cleanup is off by default. A failed, rejected, or incomplete window leaves its region unchanged while validated edits elsewhere still apply. Quotes, code, identifiers, dictionary replacements, and vocabulary terms are protected. Reliable non-English detections skip cleanup. Ambiguous fillers and word-choice errors can remain. These safeguards do not prove semantic correctness. Long recordings still require processing after Stop; this release does not promise tail-only transcription. The earlier live-window cache was replaced by the [batched stop-path design](docs/specs/2026-09-13-batched-stop-path-correction.md). [Bundled smoke tests](benchmarks/llm/release-smoke/README.md) describe the cleanup checks. Old History suggestions remain readable.
+
+Version 0.11.0 speeds up acoustic vocabulary processing with typed CoreML tensor access and explicit silence padding. The speech model, chunk boundaries, and acceptance thresholds stay unchanged. The retained [latency measurements](benchmarks/asr/latency-2026-09-15.json) distinguish tested improvements from unqualified streaming alternatives.
+
+## Recording Recovery
+
+If SottoASR exits unexpectedly, the next launch opens History with a recovery notice. Pending recordings appear with their audio paths and durations.
+
+1. Click **Show in Finder** to locate a recording.
+2. Click **Reprocess** to transcribe it locally and save the result in History.
+3. Copy the recovered transcript when you are ready. Recovery never pastes automatically.
+
+New recordings use private WAV files in `~/Library/Application Support/com.sottoasr.app/recordings/`. The disk worker checkpoints the WAV header and synchronizes audio about once per second. A sudden crash can lose audio after the last checkpoint. Disk stalls can extend that interval. A full capture queue stops recording and reports an error instead of silently dropping speech.
+
+Successful ordinary dictation removes its WAV only after History saves. Failed or interrupted operations keep the audio. Recovery copies older `sotto_<UUID>.wav` files from the current user temporary directory without changing the originals. Reprocessed audio remains in the recording directory; an acknowledgement prevents repeated recovery prompts. Closing History postpones recovery without deleting recordings.
+
+A recovery notice indicates an unclean exit, not a confirmed diagnosis. Empty or unreadable WAV files show an error and remain available in Finder. Recordings removed by the operating system before recovery cannot be restored.
+
 
 ## Permissions
 

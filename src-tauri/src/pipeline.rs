@@ -161,7 +161,7 @@ pub async fn pipeline_stop_recording(
 
             // 10e. Build Transcription struct
             let transcription = Transcription {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
                 text: final_text.clone(),
                 duration_ms,
                 created_at: chrono::Utc::now(),
@@ -288,7 +288,7 @@ pub async fn pipeline_cancel_recording(
         if let Err(error) = &result { events.emit_transcription_error(error); }
         if let Ok(asr_result) = result {
             let transcription = Transcription {
-                id: uuid::Uuid::new_v4().to_string(),
+                id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
                 text: asr_result.text.clone(),
                 duration_ms,
                 created_at: chrono::Utc::now(),
@@ -390,13 +390,13 @@ mod tests {
     #[tokio::test]
     async fn device_failure_during_stop_retains_tail_and_never_pastes_partial_text() {
         use crate::audio::capture::AudioCaptureBackend;
-        use std::sync::{atomic::AtomicBool, mpsc::Sender};
+        use std::sync::{atomic::AtomicBool, mpsc::SyncSender};
         struct InterruptedCapture {
-            sender: Option<Sender<Vec<f32>>>,
+            sender: Option<SyncSender<Vec<f32>>>,
             error: Option<Box<dyn Fn(String) + Send>>,
         }
         impl AudioCaptureBackend for InterruptedCapture {
-            fn start(&mut self, sender: Sender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send>, error: Box<dyn Fn(String) + Send>) -> Result<(), String> {
+            fn start(&mut self, sender: SyncSender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send>, error: Box<dyn Fn(String) + Send>) -> Result<(), String> {
                 sender.send(vec![0.25; 192_000]).unwrap();
                 self.sender = Some(sender);
                 self.error = Some(error);
@@ -469,11 +469,11 @@ mod tests {
     async fn stop_drains_final_callback_and_uses_captured_duration() {
         use crate::asr::engine::{AsrEngine, AsrResult};
         use crate::audio::capture::AudioCaptureBackend;
-        use std::sync::{atomic::AtomicBool, mpsc::Sender, Mutex};
+        use std::sync::{atomic::AtomicBool, mpsc::SyncSender, Mutex};
 
-        struct FinalCallbackCapture { sender: Option<Sender<Vec<f32>>> }
+        struct FinalCallbackCapture { sender: Option<SyncSender<Vec<f32>>> }
         impl AudioCaptureBackend for FinalCallbackCapture {
-            fn start(&mut self, sender: Sender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send>, _: Box<dyn Fn(String) + Send>) -> Result<(), String> {
+            fn start(&mut self, sender: SyncSender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send>, _: Box<dyn Fn(String) + Send>) -> Result<(), String> {
                 sender.send(vec![0.25; 16_000 * 60]).unwrap();
                 self.sender = Some(sender);
                 Ok(())
@@ -598,10 +598,10 @@ mod tests {
     #[test]
     fn shared_start_acquires_the_microphone_once_and_propagates_failure() {
         use crate::audio::capture::{start_recording_capture, AudioCaptureBackend};
-        use std::sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::Sender};
+        use std::sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::SyncSender};
         struct CountingCapture { starts: Arc<AtomicUsize>, fail: bool }
         impl AudioCaptureBackend for CountingCapture {
-            fn start(&mut self, _: Sender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send + 'static>, _: Box<dyn Fn(String) + Send>) -> Result<(), String> {
+            fn start(&mut self, _: SyncSender<Vec<f32>>, _: Arc<AtomicBool>, _: Box<dyn Fn(f32) + Send + 'static>, _: Box<dyn Fn(String) + Send>) -> Result<(), String> {
                 self.starts.fetch_add(1, Ordering::SeqCst);
                 if self.fail { Err("microphone unavailable".into()) } else { Ok(()) }
             }

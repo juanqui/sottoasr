@@ -341,3 +341,41 @@ export function performAppUpdate(): Promise<string> {
 export function getUpdateStatus(): Promise<UpdateStatus> {
 	return invoke("get_update_status");
 }
+
+// ---- Recovery commands ----
+
+/**
+ * A recorded WAV that survived an exit before its transcript was saved.
+ * Matches the Rust `RecoveryRecording` model.
+ */
+export interface RecoveryRecording {
+	id: string;
+	/** Full path to the durable audio file. The UI shows it verbatim. */
+	audio_path: string;
+	created_at: string;
+	/** Null when the WAV header did not report a decodable duration. */
+	duration_ms: number | null;
+	size_bytes: number;
+	/** A saved failure note for this recording, if one exists. */
+	error: string | null;
+}
+
+export function getRecoverableRecordings(): Promise<RecoveryRecording[]> {
+	return invoke("get_recoverable_recordings");
+}
+
+export function recoverRecording(id: string): Promise<Transcription> {
+	return invoke("recover_recording", { id });
+}
+
+export function revealRecoveryRecording(id: string): Promise<void> {
+	return invoke("reveal_recovery_recording", { id });
+}
+
+/**
+ * Wording for an unclean exit that left no recoverable audio.
+ * Null when the last session ended cleanly.
+ */
+export function getRecoveryNotice(): Promise<string | null> {
+	return invoke("get_recovery_notice");
+}

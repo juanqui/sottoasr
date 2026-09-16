@@ -38,6 +38,8 @@ jobs:
       - name: Default CoreML backend tests
         working-directory: src-tauri
         run: cargo test --locked
+      - name: Pinned Swift correctness regressions
+        run: python3 scripts/check-swift-regressions.py
       - name: Rust lint
         working-directory: src-tauri
         run: cargo clippy --locked --all-targets -- -D warnings

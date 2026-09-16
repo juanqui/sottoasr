@@ -1,5 +1,6 @@
 //! Checked serialization shared by recording, cancellation, and raw-sample ASR.
 
+#[cfg(any(feature = "asr-fluidaudio", test))]
 use std::io::{Seek, Write};
 use std::path::Path;
 
@@ -12,6 +13,7 @@ pub fn captured_duration_ms(sample_count: usize, sample_rate: u32) -> u64 {
     ((sample_count as u128 * 1000) / sample_rate as u128) as u64
 }
 
+#[cfg(any(feature = "asr-fluidaudio", test))]
 pub fn write_recording_wav(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), String> {
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -48,6 +50,7 @@ pub fn finish_after_history(path: &Path, interrupted: bool, saved: bool) {
     }
 }
 
+#[cfg(any(feature = "asr-fluidaudio", test))]
 fn write_wav<W: Write + Seek>(
     writer: W,
     samples: &[f32],

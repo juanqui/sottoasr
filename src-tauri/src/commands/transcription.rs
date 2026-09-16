@@ -34,6 +34,8 @@ impl TranscriptionStore {
 
     /// Add a transcription (newest first), capping at 5000 entries, and persist.
     pub fn add(&mut self, transcription: Transcription) -> Result<Vec<String>, String> {
+        // Retrying a recording replaces its unsaved/partial result, not its ID.
+        self.items.retain(|item| item.id != transcription.id);
         self.items.insert(0, transcription);
         // Keep the newly captured text in memory if storage fails. Never destroy
         // an unreadable existing file by replacing it with an empty fallback.
@@ -226,6 +228,14 @@ pub async fn add_transcription(transcription: Transcription) -> Result<Vec<Strin
     with_store(move |store| store.add(transcription)).await
 }
 
+/// Recovery must not mistake the in-memory copy of a failed save for durability.
+pub(crate) async fn persisted_transcriptions() -> Result<Vec<Transcription>, String> {
+    with_store(|store| {
+        store.ensure_loaded()?;
+        TranscriptionStore::load_from(&store.path)
+    }).await
+}
+
 /// Only a successful durable save can acknowledge the existing retention policy.
 /// Failed saves keep recovery-only entries without telling the UI to remove data.
 pub fn emit_transcription(app: &tauri::AppHandle, transcription: &Transcription, saved: &Result<Vec<String>, String>) {
@@ -246,6 +256,32 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use tempfile::TempDir;
+
+    #[test]
+    fn retry_replaces_partial_or_unsaved_result_without_duplicate_history() {
+        let (_directory, mut store) = temp_store();
+        store.add(make_transcription("recording", "partial speech")).unwrap();
+        store.add(make_transcription("recording", "complete recovered speech")).unwrap();
+        let persisted = TranscriptionStore::load(&store.path).unwrap();
+        assert_eq!(persisted.len(), 1);
+        assert_eq!(persisted[0].text, "complete recovered speech");
+    }
+
+    #[test]
+    fn failed_history_save_is_not_a_recovery_acknowledgement() {
+        let (directory, mut store) = temp_store();
+        let path = directory.path().join("blocked");
+        std::fs::create_dir(&path).unwrap();
+        store.path = path.clone();
+        assert!(store.add(make_transcription("recording", "unsaved speech")).is_err());
+        assert_eq!(store.get_all()[0].text, "unsaved speech");
+        assert!(TranscriptionStore::load_from(&path).is_err());
+        store.path = directory.path().join("restored.json");
+        store.add(make_transcription("recording", "recovered speech")).unwrap();
+        let saved = TranscriptionStore::load(&store.path).unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].text, "recovered speech");
+    }
 
     fn make_transcription(id: &str, text: &str) -> Transcription {
         Transcription {

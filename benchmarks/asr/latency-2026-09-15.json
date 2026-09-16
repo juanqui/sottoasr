@@ -1,0 +1,125 @@
+{
+  "date": "2026-09-15",
+  "hardware": "Apple M2 Pro, AC power",
+  "models": "unchanged Parakeet TDT v3 + CTC110M + MiniCPM5 2B",
+  "scope": "one private long recording and synthetic reference/positive controls",
+  "private_data_included": false,
+  "prior_findings": {
+    "full_pipeline_baseline_s": 40.52,
+    "parallel_ctc4_s": 31.106,
+    "parallel_ctc8_s": 28.842,
+    "streaming_rejected": "6-word known reference phrase lost; long transcript differs substantially",
+    "cleanup_winner": "Retype batch16"
+  },
+  "new_findings": {
+    "typed_sequential_asr_vocabulary_s": [
+      8.088,
+      7.816,
+      7.832
+    ],
+    "zero_control_asr_vocabulary_s": [
+      20.994,
+      22.008
+    ],
+    "tensor_equivalence_cases": 80,
+    "half_patterns": 65536,
+    "fixed_padding_equivalence": [
+      {
+        "fixture": "long-real",
+        "count": 3,
+        "same_raw": true,
+        "same_evidence": true,
+        "same_vocab_output": true
+      },
+      {
+        "fixture": "reference-samantha",
+        "count": 3,
+        "same_raw": true,
+        "same_evidence": true,
+        "same_vocab_output": true
+      },
+      {
+        "fixture": "reference-daniel",
+        "count": 3,
+        "same_raw": true,
+        "same_evidence": true,
+        "same_vocab_output": true
+      },
+      {
+        "fixture": "positive-daniel",
+        "count": 3,
+        "same_raw": true,
+        "same_evidence": true,
+        "same_vocab_output": true
+      },
+      {
+        "fixture": "positive-multi",
+        "count": 3,
+        "same_raw": true,
+        "same_evidence": true,
+        "same_vocab_output": true
+      }
+    ],
+    "memory_bug": "new MLMultiArray was not zero-filled; unused audio tail required explicit zeroing"
+  },
+  "limitations": [
+    "not multi-machine accuracy qualification",
+    "no battery or energy measurement",
+    "paced replay ran alongside development work; report separately from isolated timings"
+  ],
+  "champion": "typed CTC tensor access with explicit zero padding; original sequential chunking",
+  "champion_combined": [
+    {
+      "label": "baseline",
+      "asr_vocabulary_s": 20.81858503818512,
+      "cleanup_s": 20.7805292080011,
+      "total_s": 41.59911424618622
+    },
+    {
+      "label": "typed",
+      "asr_vocabulary_s": 12.85667598247528,
+      "cleanup_s": 20.59709762500279,
+      "total_s": 33.45377360747807
+    },
+    {
+      "label": "typed-repeat",
+      "asr_vocabulary_s": 7.821019887924194,
+      "cleanup_s": 19.987264584000513,
+      "total_s": 27.808284471924708
+    }
+  ],
+  "reproduction": {
+    "numeric": "python3 scripts/check-ctc-tensors.py --sdk-build <Cargo OUT_DIR>/swift-build",
+    "alignment": "python3 scripts/check-alignment.py --sdk-build <Cargo OUT_DIR>/swift-build",
+    "timings": "private local fixtures; no audio or transcript data committed",
+    "control": "original element access plus explicit zero padding; same models and arithmetic"
+  },
+  "full_duration_cache": {
+    "duration_s": 927.27,
+    "asr_s": 10.081079006195068,
+    "ctc_s": 2.0596028566360474,
+    "tail_s": 11.133506059646606,
+    "peak_rss_bytes": 389791744,
+    "word_count": 2459,
+    "same_output": true,
+    "timing_caveat": "Concurrent development builds; not an isolated latency comparison. Cache drained, final full-file ASR dominated tail."
+  },
+  "maintained_build": [
+    {
+      "asr_s": 3.858931064605713,
+      "ctc_s": 4.212970018386841,
+      "alignment_s": 0.6554208993911743,
+      "wall_s": 8.728587985038757,
+      "word_count": 2459,
+      "same_zero_control_output": true
+    },
+    {
+      "asr_s": 3.3939470052719116,
+      "ctc_s": 4.202445983886719,
+      "alignment_s": 0.6419650316238403,
+      "wall_s": 8.239630937576294,
+      "word_count": 2459,
+      "same_zero_control_output": true
+    }
+  ]
+}
