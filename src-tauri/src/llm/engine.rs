@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicI32, AtomicI8, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -139,11 +139,11 @@ impl LlmEngine {
     /// Spawn the Python sidecar process.
     pub fn spawn() -> Result<Self, String> {
         // Runtime inference and update checks never install packages implicitly.
-        if !is_venv_ready() {
-            return Err(
-                "Cleanup runtime needs setup. Download the model from Settings to install it."
-                    .into(),
-            );
+        // The reason is derived from the verdict so the history tooltip names
+        // the real fault instead of always pointing at a model download.
+        let verdict = venv_verdict();
+        if !verdict.is_ready() {
+            return Err(verdict.unavailable_reason());
         }
 
         let python = venv_python()?;
@@ -605,10 +605,170 @@ pub fn venv_python() -> Result<std::path::PathBuf, String> {
     Ok(venv_dir()?.join("bin").join("python3"))
 }
 
-/// Cached result of `is_venv_ready()`:
-/// `0` = not yet checked, `1` = ready, `-1` = broken.
-/// Reset to `0` in `setup_venv()` and `reset_venv_cache()` so a repair can be detected.
-static VENV_READY_CACHE: AtomicI8 = AtomicI8::new(0);
+/// Verdict of the venv readiness probe.
+///
+/// `Broken` and `Unknown` MUST stay distinct. `Broken` is deterministic state
+/// that only a repair can change, so caching it for the process lifetime is
+/// correct. `Unknown` means the probe never got an answer — a spawn failure, a
+/// timeout, or a system stall — and caching that as a verdict previously
+/// disabled cleanup for the life of the process. This is a menu-bar app that
+/// runs for days, so one 5-second probe timeout cost three days of cleanup.
+/// See docs/specs/2026-04-11-llm-cleanup-reliability.md §4.6.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VenkVerdict {
+    /// The interpreter ran and reported a runtime matching the qualified pins.
+    Ready,
+    /// The interpreter ran and reported a definitive negative (Python < 3.11,
+    /// a missing or incorrect package), or the interpreter is absent. Only a
+    /// repair changes this.
+    Broken(String),
+    /// The probe could not complete. Transient by definition — never trusted
+    /// beyond `VENV_UNKNOWN_RETRY_INTERVAL`.
+    Unknown(String),
+}
+
+impl VenkVerdict {
+    pub fn is_ready(&self) -> bool {
+        matches!(self, VenkVerdict::Ready)
+    }
+
+    /// User-facing reason for `LlmCleanupStatus::Unavailable`. This string is
+    /// rendered in the history tooltip, so it must name the real fault and the
+    /// real recovery. Pointing at the model download when the fault is the
+    /// interpreter sends the user to a screen that cannot fix anything.
+    pub fn unavailable_reason(&self) -> String {
+        match self {
+            VenkVerdict::Ready => "Cleanup runtime is ready".into(),
+            VenkVerdict::Broken(reason) => format!(
+                "Cleanup runtime needs repair: {reason}. Open Settings → AI cleanup and repair it."
+            ),
+            VenkVerdict::Unknown(reason) => format!(
+                "Cleanup runtime check did not complete ({reason}). Cleanup retries on the next recording."
+            ),
+        }
+    }
+}
+
+/// How long an `Unknown` verdict is trusted before the probe runs again.
+///
+/// Short by design: a transient stall must cost at most one recording.
+pub const VENV_UNKNOWN_RETRY_INTERVAL: Duration = Duration::from_secs(15);
+
+/// Budget for the full probe (`import mlx_lm` + pin verification).
+///
+/// Sized off a measured cost, not an estimate. The probe imports the MLX
+/// natives, and this project has already measured a cold page-in of ~6.5 s for
+/// them (see `llm::cleanup::PREWARM_HANDOFF_WAIT`); a healthy probe costs
+/// 1.9–3.2 s on an idle machine. The previous 5 s budget therefore had only
+/// ~1.6x headroom and lost the race whenever the app was loading ASR models
+/// concurrently. Paid once per process, and still under
+/// `llm::cleanup::LLM_CLEANUP_TIMEOUT` (30 s).
+pub const VENV_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Budget for the trivial version probe. Generous because a system-wide I/O
+/// stall, not the interpreter, is what makes it slow.
+pub const PYTHON_VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Whether a cached verdict may still be trusted.
+///
+/// Only `Unknown` expires: `Ready` and `Broken` are deterministic until a
+/// repair changes them, while an unanswered probe must be retried.
+fn verdict_is_fresh(verdict: &VenkVerdict, age: Duration, unknown_retry: Duration) -> bool {
+    match verdict {
+        VenkVerdict::Unknown(_) => age < unknown_retry,
+        _ => true,
+    }
+}
+
+/// A verdict plus the time it was recorded.
+struct VenvCacheEntry {
+    verdict: VenkVerdict,
+    recorded: Instant,
+}
+
+/// Probe cache. Production uses the `VENV_CACHE` instance; tests construct
+/// their own so a fixture interpreter never pollutes the real verdict.
+struct VenvCache {
+    entry: Mutex<Option<VenvCacheEntry>>,
+    /// Serializes probes so a hung interpreter cannot pile up blocking threads
+    /// when several callers ask at once.
+    probe_guard: Mutex<()>,
+}
+
+impl VenvCache {
+    const fn new() -> Self {
+        Self {
+            entry: Mutex::new(None),
+            probe_guard: Mutex::new(()),
+        }
+    }
+
+    fn reset(&self) {
+        *lock(&self.entry) = None;
+    }
+
+    /// The cached verdict, re-probing when it is missing or expired.
+    fn verdict(
+        &self,
+        python: &std::path::Path,
+        timeout: Duration,
+        unknown_retry: Duration,
+    ) -> VenkVerdict {
+        let fresh =
+            |entry: &VenvCacheEntry| verdict_is_fresh(&entry.verdict, entry.recorded.elapsed(), unknown_retry);
+        if let Some(entry) = lock(&self.entry).as_ref() {
+            if fresh(entry) {
+                return entry.verdict.clone();
+            }
+        }
+
+        let _probe = lock(&self.probe_guard);
+        // Another thread may have completed the probe while this one waited.
+        if let Some(entry) = lock(&self.entry).as_ref() {
+            if fresh(entry) {
+                return entry.verdict.clone();
+            }
+        }
+
+        let started = Instant::now();
+        let verdict = probe_venv_at(python, timeout);
+        let elapsed = started.elapsed();
+
+        // Log on transition. A silently cached negative is what made a
+        // three-day outage invisible in the log; this line is the diagnosis.
+        let previous = lock(&self.entry).as_ref().map(|e| e.verdict.clone());
+        if previous.as_ref() != Some(&verdict) {
+            match &verdict {
+                VenkVerdict::Ready => log::info!("Venv check: ready in {}ms", elapsed.as_millis()),
+                VenkVerdict::Broken(reason) => log::warn!(
+                    "Venv check: broken after {}ms — {} (cleanup disabled until repaired)",
+                    elapsed.as_millis(),
+                    reason
+                ),
+                VenkVerdict::Unknown(reason) => log::warn!(
+                    "Venv check: inconclusive after {}ms — {} (re-probing in {}s)",
+                    elapsed.as_millis(),
+                    reason,
+                    unknown_retry.as_secs()
+                ),
+            }
+        }
+
+        *lock(&self.entry) = Some(VenvCacheEntry {
+            verdict: verdict.clone(),
+            recorded: Instant::now(),
+        });
+        verdict
+    }
+}
+
+/// Lock helper that tolerates poisoning: a panic while probing must not turn
+/// every later readiness check into a panic.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+static VENV_CACHE: VenvCache = VenvCache::new();
 
 /// Minimum version verified by the current local model experiments.
 /// Keep in sync with MIN_MLX_LM in sidecar/llm_cleanup.py.
@@ -623,7 +783,7 @@ const RUNTIME_PACKAGES: [&str; 4] = [
     "huggingface-hub==1.7.2",
 ];
 
-/// Build the Python one-liner used by `is_venv_ready()` to verify the venv has
+/// Build the Python one-liner used by `probe_venv_at()` to verify the venv has
 /// both `mlx_lm` and `huggingface_hub` importable, a new-enough mlx-lm, and
 /// a supported Python version (3.11+).
 ///
@@ -639,6 +799,10 @@ const RUNTIME_PACKAGES: [&str; 4] = [
 /// importable, and `mlx_lm.__version__ >= MIN_MLX_LM`. Exit 1 for old Python,
 /// exit 2 for old mlx-lm. Writes a short status line to stderr so the Rust
 /// log forwarder shows the detected versions.
+///
+/// CONTRACT: `probe_venv_at` classifies exit 1 and exit 2 as a definitive
+/// `Broken` verdict and every other outcome (including a timeout) as
+/// `Unknown`. Changing these codes changes what the app is allowed to cache.
 fn build_venv_check_script() -> String {
     // Use conditional expressions (ternary) instead of compound `if:` statements,
     // because Python doesn't allow compound statements after semicolons on a
@@ -665,59 +829,71 @@ fn build_venv_check_script() -> String {
     )
 }
 
-/// Invalidate the cached venv readiness result. Call after any operation that
-/// repairs or recreates the venv.
-pub fn reset_venv_cache() {
-    VENV_READY_CACHE.store(0, Ordering::SeqCst);
-}
-
-/// Check if the app's venv exists AND has a working `mlx_lm` install.
+/// Current runtime verdict, probing only when the cache is missing or expired.
+///
+/// The single source of truth for "can cleanup run": `spawn()` and every
+/// preparation path read it, so they agree on why cleanup is unavailable.
 ///
 /// The cheap existence check (`bin/python3` file present) used to be the only
 /// probe, but that masked a common failure mode: the venv's `python3` is a
 /// symlink to a system Python that has since been upgraded or removed, which
-/// makes mlx_lm imports blow up at runtime. Here we actually exec the venv's
-/// Python with `import mlx_lm` and cache the result so we don't re-pay the
-/// ~500ms import cost on every call.
-pub fn is_venv_ready() -> bool {
-    match VENV_READY_CACHE.load(Ordering::SeqCst) {
-        1 => return true,
-        -1 => return false,
-        _ => {}
-    }
-
+/// makes mlx_lm imports blow up at runtime. So the probe actually execs the
+/// venv's Python with `import mlx_lm` and caches the verdict rather than
+/// re-paying the import cost on every call.
+pub fn venv_verdict() -> VenkVerdict {
     let python = match venv_python() {
-        Ok(p) => p,
-        Err(_) => {
-            VENV_READY_CACHE.store(-1, Ordering::SeqCst);
-            return false;
-        }
+        Ok(python) => python,
+        Err(error) => return VenkVerdict::Unknown(error),
     };
+    VENV_CACHE.verdict(&python, VENV_PROBE_TIMEOUT, VENV_UNKNOWN_RETRY_INTERVAL)
+}
+
+/// Invalidate the cached verdict.
+///
+/// Call on entry to any repair as well as on success: a repair that fails
+/// partway must not leave a stale verdict behind, which is what previously
+/// stranded cleanup after the one in-app lever had already been used.
+pub fn reset_venv_cache() {
+    VENV_CACHE.reset();
+}
+
+/// Probe a specific interpreter. Separate from `venv_verdict()` so tests can
+/// point it at a fixture.
+///
+/// The classification rule is exact: `Broken` requires a definitive answer —
+/// either the check script's own exit code, or an interpreter that is absent.
+/// Everything else (spawn failure, timeout, signal-killed child) is `Unknown`,
+/// because retrying is harmless while a wrong `Broken` verdict both disables
+/// cleanup and misdirects the user toward a repair that cannot help.
+fn probe_venv_at(python: &std::path::Path, timeout: Duration) -> VenkVerdict {
     if !python.exists() {
-        VENV_READY_CACHE.store(-1, Ordering::SeqCst);
-        return false;
+        return VenkVerdict::Broken(format!("{} is missing", python.display()));
     }
-
-    let check_script = build_venv_check_script();
-
-    let ok = bounded_command(
-        Command::new(&python).args(["-c", &check_script]),
-        Duration::from_secs(5),
-    )
-    .map(|out| {
-        if !out.status.success() {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            log::warn!("Venv check: failed ({}): {}", out.status, stderr.trim());
-        }
-        out.status.success()
-    })
-    .unwrap_or_else(|e| {
-        log::warn!("Venv check: could not exec {}: {}", python.display(), e);
-        false
-    });
-
-    VENV_READY_CACHE.store(if ok { 1 } else { -1 }, Ordering::SeqCst);
-    ok
+    match bounded_command(
+        Command::new(python).args(["-c", &build_venv_check_script()]),
+        timeout,
+    ) {
+        Ok(out) if out.status.success() => VenkVerdict::Ready,
+        // Exit 1 is the script's "Python < 3.11" verdict and exit 2 its "pins
+        // differ" verdict. Any other code is not a verdict about the runtime.
+        Ok(out) => match out.status.code() {
+            Some(1) | Some(2) => {
+                let detail = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                VenkVerdict::Broken(if detail.is_empty() {
+                    format!("{} reported an unqualified runtime", python.display())
+                } else {
+                    detail
+                })
+            }
+            Some(code) => VenkVerdict::Unknown(format!(
+                "{} exited with {code}: {}",
+                python.display(),
+                String::from_utf8_lossy(&out.stderr).trim()
+            )),
+            None => VenkVerdict::Unknown(format!("{} was killed by a signal", python.display())),
+        },
+        Err(error) => VenkVerdict::Unknown(error),
+    }
 }
 
 /// Require the current cached snapshot's tokenizer, config, and every weight shard.
@@ -832,67 +1008,152 @@ fn find_compatible_python() -> Result<std::path::PathBuf, String> {
     // Newest → oldest so we prefer the freshest interpreter available.
     const VERSIONS: &[&str] = &["3.14", "3.13", "3.12", "3.11"];
 
+    let mut inconclusive: Option<String> = None;
     for version in VERSIONS {
         let bin_name = format!("python{}", version);
-        for dir in SEARCH_DIRS {
-            let candidate = std::path::PathBuf::from(dir).join(&bin_name);
-            if candidate.exists() && is_python_311_or_newer(&candidate) {
-                log::info!("Using {} for LLM venv", candidate.display());
-                return Ok(candidate);
-            }
-        }
-        // Also try PATH-relative lookup.
+        // Explicit directories first, then a PATH-relative lookup.
+        let mut candidates: Vec<std::path::PathBuf> = SEARCH_DIRS
+            .iter()
+            .map(|dir| std::path::PathBuf::from(dir).join(&bin_name))
+            .filter(|candidate| candidate.exists())
+            .collect();
         if let Ok(out) =
             bounded_command(Command::new("which").arg(&bin_name), Duration::from_secs(2))
         {
             if out.status.success() {
                 let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !path.is_empty() {
-                    let candidate = std::path::PathBuf::from(&path);
-                    if is_python_311_or_newer(&candidate) {
-                        log::info!("Using {} for LLM venv", candidate.display());
-                        return Ok(candidate);
-                    }
+                    candidates.push(std::path::PathBuf::from(path));
+                }
+            }
+        }
+
+        for candidate in candidates {
+            match probe_python_version(&candidate) {
+                PythonProbe::Compatible => {
+                    log::info!("Using {} for LLM venv", candidate.display());
+                    return Ok(candidate);
+                }
+                PythonProbe::Unusable(reason) => {
+                    log::debug!("Skipping {}: {}", candidate.display(), reason)
+                }
+                PythonProbe::Inconclusive(reason) => {
+                    log::warn!("Could not verify {}: {}", candidate.display(), reason);
+                    inconclusive = Some(reason);
                 }
             }
         }
     }
 
-    Err(
-        "Python 3.11+ is required for the LLM feature but not found on this system. \
-         Install it with: brew install python"
+    Err(match inconclusive {
+        // Distinguish "no interpreter" from "could not verify one": the fix for
+        // the second is to retry, not to install Python.
+        Some(reason) => format!(
+            "Could not verify a Python 3.11+ interpreter ({reason}). Retry, or install one with: \
+             brew install python"
+        ),
+        None => "Python 3.11+ is required for the LLM feature but not found on this system. \
+                 Install it with: brew install python"
             .into(),
-    )
+    })
 }
 
-/// Returns true iff the given interpreter reports a version >= 3.11.
-fn is_python_311_or_newer(python: &std::path::Path) -> bool {
-    let Ok(out) = bounded_command(
+/// What probing a host interpreter for a usable version learned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PythonProbe {
+    /// Runs and reports >= 3.11.
+    Compatible,
+    /// The interpreter ran and gave a definitive answer — version < 3.11, a
+    /// nonzero exit, or unrecognized output. It cannot be used as-is.
+    Unusable(String),
+    /// The probe could not complete (spawn error or timeout). Transient, and
+    /// MUST NOT be treated as a verdict about the interpreter: reading a
+    /// timeout as "unsupported interpreter" is what blocked the only in-app
+    /// repair lever with a message about a perfectly healthy Python 3.14.
+    Inconclusive(String),
+}
+
+/// Probe an interpreter's version.
+fn probe_python_version(python: &std::path::Path) -> PythonProbe {
+    probe_python_version_with(python, PYTHON_VERSION_PROBE_TIMEOUT)
+}
+
+/// Probe with an explicit budget so tests can exercise the timeout path.
+fn probe_python_version_with(python: &std::path::Path, timeout: Duration) -> PythonProbe {
+    let out = match bounded_command(
         Command::new(python).args([
             "-c",
             "import sys; print(1 if sys.version_info >= (3, 11) else 0)",
         ]),
-        Duration::from_secs(3),
-    ) else {
-        return false;
+        timeout,
+    ) {
+        Ok(out) => out,
+        Err(error) => return PythonProbe::Inconclusive(error),
     };
-    out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == "1"
+    match String::from_utf8_lossy(&out.stdout).trim() {
+        "1" => PythonProbe::Compatible,
+        "0" => PythonProbe::Unusable(format!("{} is older than 3.11", python.display())),
+        other => PythonProbe::Unusable(format!(
+            "{} reported {other:?} ({}): {}",
+            python.display(),
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+    }
 }
 
-/// Install/upgrade the runtime during an explicit model download.
-/// Preserve existing environments and refuse an incompatible interpreter.
+/// Whether an existing venv must be refused instead of repaired.
+///
+/// Only a definitive `Unusable` verdict refuses. An `Inconclusive` probe MUST
+/// fall through to the install: a timeout says nothing about the interpreter,
+/// and refusing here is what blocked the only in-app repair lever with a
+/// message about a healthy Python 3.14.
+fn refuse_existing_runtime(probe: &PythonProbe) -> Option<String> {
+    match probe {
+        PythonProbe::Unusable(reason) => Some(format!(
+            "Existing cleanup runtime has an unsupported Python interpreter ({reason}). \
+             Its files were preserved; repair the runtime before downloading."
+        )),
+        _ => None,
+    }
+}
+
+/// Install/upgrade the runtime during an explicit model download or repair.
+/// Preserve existing environments and refuse only a definitively unusable
+/// interpreter.
 pub fn setup_venv() -> Result<(), String> {
     let venv = venv_dir()?;
+    // Reset on entry, not only on success: a repair that fails partway must not
+    // leave a stale verdict cached, or the next attempt inherits it.
+    reset_venv_cache();
 
-    if venv.exists() && !is_python_311_or_newer(&venv.join("bin/python3")) {
-        return Err("Existing cleanup runtime has an unsupported Python interpreter. Its files were preserved; repair the runtime before downloading.".into());
-    }
     if let Some(parent) = venv.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create venv parent dir: {}", e))?;
     }
 
-    if !venv.exists() {
+    let python = venv.join("bin").join("python3");
+    if venv.exists() && python.exists() {
+        let probe = probe_python_version(&python);
+        if let Some(refusal) = refuse_existing_runtime(&probe) {
+            return Err(refusal);
+        }
+        // A transient probe failure MUST NOT block an explicit repair: this is
+        // the only in-app lever that can fix a broken runtime, and the install
+        // below reports the real error if the interpreter is genuinely
+        // unusable.
+        if let PythonProbe::Inconclusive(reason) = &probe {
+            log::warn!(
+                "Could not verify the cleanup interpreter ({reason}); \
+                 continuing with the explicit repair"
+            );
+        }
+    }
+
+    // An env whose interpreter is gone cannot be repaired by pip. Creating a
+    // venv over an existing directory is idempotent and preserves
+    // site-packages, so this covers the absent-venv case too.
+    if !python.exists() {
         let host_python = find_compatible_python()?;
         let status = bounded_command(
             Command::new(&host_python).args(["-m", "venv", &venv.to_string_lossy()]),
@@ -903,7 +1164,6 @@ pub fn setup_venv() -> Result<(), String> {
             return Err("Could not create cleanup Python runtime".into());
         }
     }
-    let python = venv.join("bin").join("python3");
 
     log::info!("Installing the verified cleanup runtime into venv...");
     let output = bounded_command(
@@ -927,6 +1187,9 @@ pub fn setup_venv() -> Result<(), String> {
         return Err(format!("pip install failed: {}", stderr));
     }
 
+    // A concurrent readiness check can cache a verdict while pip runs (the
+    // entry reset above is not enough on its own); clear it now that the
+    // runtime is verified.
     reset_venv_cache();
     log::info!("LLM venv setup complete");
     Ok(())
@@ -1576,5 +1839,246 @@ mod tests {
         } else {
             Some(std::path::PathBuf::from(path))
         }
+    }
+
+    /// Write an executable shell fixture standing in for a Python interpreter.
+    fn interpreter_fixture(
+        directory: &tempfile::TempDir,
+        name: &str,
+        body: &str,
+    ) -> std::path::PathBuf {
+        let path = directory.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write fixture");
+        set_fixture_mode(&path, 0o755);
+        path
+    }
+
+    fn set_fixture_mode(path: &std::path::Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).expect("chmod fixture");
+    }
+
+    /// One byte per invocation, so a test can prove whether the probe re-ran.
+    fn invocation_count(counter: &std::path::Path) -> usize {
+        std::fs::read_to_string(counter).map(|s| s.len()).unwrap_or(0)
+    }
+
+    #[test]
+    fn probe_classifies_the_check_scripts_own_verdicts_as_broken() {
+        let directory = tempfile::TempDir::new().unwrap();
+        // Exit 1 is the script's "Python < 3.11" verdict, exit 2 its pin verdict.
+        for (name, code, stderr) in [
+            ("old-python", 1, "Python 3.9 < 3.11"),
+            (
+                "pin-mismatch",
+                2,
+                "Python 3.14, mlx-lm 0.30.0 differs from qualified runtime pins",
+            ),
+        ] {
+            let fixture = interpreter_fixture(
+                &directory,
+                name,
+                &format!("echo '{stderr}' >&2\nexit {code}"),
+            );
+            match probe_venv_at(&fixture, Duration::from_secs(5)) {
+                VenkVerdict::Broken(reason) => assert_eq!(reason, stderr),
+                other => panic!("expected Broken for exit {code}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn probe_never_treats_an_unanswered_run_as_a_verdict() {
+        let directory = tempfile::TempDir::new().unwrap();
+        // A timeout says nothing about the runtime, so it may not be cached as
+        // Broken. The budget only has to be shorter than the fixture's sleep.
+        let slow = interpreter_fixture(&directory, "slow", "sleep 30");
+        assert!(matches!(
+            probe_venv_at(&slow, Duration::from_millis(200)),
+            VenkVerdict::Unknown(_)
+        ));
+
+        // A signal-killed child is not a verdict either, and is distinguishable
+        // from a timeout in the reason.
+        let killed = interpreter_fixture(&directory, "killed", "kill -9 $$");
+        match probe_venv_at(&killed, Duration::from_secs(5)) {
+            VenkVerdict::Unknown(reason) => assert!(reason.contains("signal"), "{reason}"),
+            other => panic!("a signal-killed probe is not a verdict: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn probe_treats_a_missing_interpreter_as_broken() {
+        let directory = tempfile::TempDir::new().unwrap();
+        assert!(matches!(
+            probe_venv_at(&directory.path().join("absent"), Duration::from_secs(5)),
+            VenkVerdict::Broken(_)
+        ));
+    }
+
+    #[test]
+    fn only_an_unknown_verdict_expires() {
+        let retry = Duration::from_secs(15);
+        let day = Duration::from_secs(86_400);
+        assert!(verdict_is_fresh(&VenkVerdict::Ready, day, retry));
+        assert!(verdict_is_fresh(
+            &VenkVerdict::Broken("old python".into()),
+            day,
+            retry
+        ));
+        assert!(verdict_is_fresh(
+            &VenkVerdict::Unknown("timed out".into()),
+            Duration::from_secs(1),
+            retry
+        ));
+        assert!(!verdict_is_fresh(
+            &VenkVerdict::Unknown("timed out".into()),
+            retry,
+            retry
+        ));
+    }
+
+    /// The regression behind the outage: one probe timeout was cached as a
+    /// verdict, so every later cleanup short-circuited to Unavailable for the
+    /// life of the process. A menu-bar app runs for days.
+    ///
+    /// The first verdict comes from a spawn failure rather than a timeout, so
+    /// the test has no timing dependency.
+    #[test]
+    fn an_expired_unknown_verdict_reprobes_and_recovers() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let fixture = interpreter_fixture(&directory, "interpreter", "exit 0");
+        set_fixture_mode(&fixture, 0o644);
+        let cache = VenvCache::new();
+
+        assert!(matches!(
+            cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
+            VenkVerdict::Unknown(_)
+        ));
+        set_fixture_mode(&fixture, 0o755);
+        assert!(
+            cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO).is_ready(),
+            "an expired Unknown verdict must re-probe instead of staying false forever"
+        );
+    }
+
+    #[test]
+    fn a_fresh_unknown_verdict_does_not_reprobe() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let fixture = interpreter_fixture(&directory, "interpreter", "exit 0");
+        set_fixture_mode(&fixture, 0o644);
+        let cache = VenvCache::new();
+        let retry = Duration::from_secs(60);
+
+        assert!(matches!(
+            cache.verdict(&fixture, Duration::from_secs(5), retry),
+            VenkVerdict::Unknown(_)
+        ));
+        // The interpreter becomes usable, but the cached Unknown is still fresh.
+        set_fixture_mode(&fixture, 0o755);
+        assert!(matches!(
+            cache.verdict(&fixture, Duration::from_secs(5), retry),
+            VenkVerdict::Unknown(_)
+        ));
+    }
+
+    #[test]
+    fn a_broken_verdict_is_cached_without_reprobing() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let counter = directory.path().join("invocations");
+        let fixture = interpreter_fixture(
+            &directory,
+            "broken",
+            &format!("printf x >> '{}'\nexit 2", counter.display()),
+        );
+        let cache = VenvCache::new();
+        for _ in 0..3 {
+            assert!(matches!(
+                cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
+                VenkVerdict::Broken(_)
+            ));
+        }
+        assert_eq!(
+            invocation_count(&counter),
+            1,
+            "a deterministic verdict must be probed once, not every call"
+        );
+    }
+
+    #[test]
+    fn resetting_the_cache_forces_a_fresh_probe() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let counter = directory.path().join("invocations");
+        let fixture = interpreter_fixture(
+            &directory,
+            "broken",
+            &format!("printf x >> '{}'\nexit 2", counter.display()),
+        );
+        let cache = VenvCache::new();
+        assert!(matches!(
+            cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
+            VenkVerdict::Broken(_)
+        ));
+        cache.reset();
+        assert!(matches!(
+            cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
+            VenkVerdict::Broken(_)
+        ));
+        assert_eq!(invocation_count(&counter), 2);
+    }
+
+    /// The regression that blocked the only in-app repair lever: a probe
+    /// timeout was read as "unsupported interpreter", so `setup_venv` refused
+    /// to run and the runtime became unrecoverable from Settings.
+    #[test]
+    fn an_inconclusive_probe_does_not_refuse_an_existing_runtime() {
+        assert!(refuse_existing_runtime(&PythonProbe::Compatible).is_none());
+        assert!(refuse_existing_runtime(&PythonProbe::Inconclusive(
+            "Child process timed out after 10 seconds".into()
+        ))
+        .is_none());
+        let refusal = refuse_existing_runtime(&PythonProbe::Unusable("3.9".into()))
+            .expect("a definitively unusable interpreter must be refused");
+        assert!(
+            refusal.contains("unsupported Python interpreter"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn python_probe_distinguishes_unusable_from_inconclusive() {
+        let directory = tempfile::TempDir::new().unwrap();
+        // The budget is per case: the fast fixtures only need enough room for
+        // /bin/sh to start under a loaded test runner.
+        let probe = |name: &str, body: &str, timeout: Duration| {
+            probe_python_version_with(&interpreter_fixture(&directory, name, body), timeout)
+        };
+        let generous = Duration::from_secs(5);
+        assert_eq!(probe("new", "echo 1", generous), PythonProbe::Compatible);
+        let old = probe("old", "echo 0", generous);
+        assert!(
+            matches!(&old, PythonProbe::Unusable(reason) if reason.contains("older than 3.11")),
+            "{old:?}"
+        );
+        assert!(matches!(
+            probe("slow", "sleep 30", Duration::from_millis(200)),
+            PythonProbe::Inconclusive(_)
+        ));
+    }
+
+    /// The old text pointed every failure at a model download, which is what
+    /// made the outage unactionable: the model was present and verified.
+    #[test]
+    fn unavailable_reasons_name_the_real_recovery() {
+        let broken =
+            VenkVerdict::Broken("python3 is older than 3.11".into()).unavailable_reason();
+        assert!(broken.contains("repair"), "{broken}");
+        assert!(!broken.contains("Download the model"), "{broken}");
+
+        let unknown =
+            VenkVerdict::Unknown("Child process timed out after 20 seconds".into())
+                .unavailable_reason();
+        assert!(unknown.contains("retries"), "{unknown}");
+        assert!(!unknown.contains("Download the model"), "{unknown}");
     }
 }

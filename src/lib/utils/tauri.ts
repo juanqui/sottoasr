@@ -284,6 +284,11 @@ export function prepareLlmModel(): Promise<LlmStatus> {
 	return invoke("prepare_llm_model");
 }
 
+/** Rebuild the cleanup runtime after a broken-verdict failure. */
+export function repairLlmRuntime(): Promise<LlmStatus> {
+	return invoke("repair_llm_runtime");
+}
+
 export function checkLlmUpdate(): Promise<boolean> {
 	return invoke("check_llm_update");
 }

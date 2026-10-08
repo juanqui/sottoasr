@@ -23,6 +23,13 @@
     if (status.loaded) return { label: status.busy ? 'Working…' : 'Ready', tone: 'ready', detail: 'Loaded and prewarmed locally with MLX.' };
     return { label: status.downloaded ? 'Not loaded' : 'Not downloaded', tone: 'warning', detail: status.downloaded ? 'The next recording will load it, or prepare it in Dictation.' : 'Enable cleanup in Dictation to prepare the model.' };
   });
+  let cleanupNeedsRepair = $derived.by(() => {
+    const status = cleanup.status;
+    if (!status) return false;
+    // Only the runtime-failure states: a `failed` cleanup may be a per-request
+    // problem that rebuilding the runtime would not address.
+    return Boolean(status.setup_error) || status.last_cleanup_status.kind === 'unavailable';
+  });
   let speech = $derived.by(() => {
     if (retrying || asr?.initializing) return { label: 'Loading…', tone: 'pending', detail: 'Preparing speech recognition.' };
     if (asrError || asr?.error) return { label: 'Needs attention', tone: 'warning', detail: asrError || asr?.error || '' };
@@ -77,7 +84,12 @@
     {#if cleanup.status && !['idle', 'disabled'].includes(cleanup.status.last_cleanup_status.kind)}
       <details class:attention={lastOutcome.issue}><summary>Last recording: {lastOutcome.label}</summary><p>{lastOutcome.detail}</p></details>
     {/if}
-    <button type="button" onclick={onconfigure}>Manage cleanup</button>
+    <div class="actions">
+      {#if cleanupNeedsRepair}
+        <button type="button" onclick={() => void cleanup.repair()} disabled={cleanup.pending}>Repair cleanup runtime</button>
+      {/if}
+      <button type="button" onclick={onconfigure}>Manage cleanup</button>
+    </div>
   </article>
 </section>
 
@@ -93,6 +105,7 @@
   .model-detail, details { color:var(--text-dim); font-size:11px; line-height:1.45; margin:0; overflow-wrap:anywhere; }
   details { margin-top:8px; } summary { cursor:pointer; } details[open] { max-height:90px; overflow:auto; } details p { margin:6px 0; }
   button { margin:8px 0 0; padding:0; border:0; background:none; color:#93c5fd; font:inherit; font-size:11px; cursor:pointer; }
+  .actions { display:flex; gap:12px; flex-wrap:wrap; }
   button:disabled { opacity:.5; cursor:default; }
   @media(max-width:460px) { .model-dashboard { grid-template-columns:1fr; } }
 </style>

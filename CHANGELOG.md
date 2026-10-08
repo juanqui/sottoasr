@@ -2,6 +2,17 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [0.11.1] — 2026-10-08
+
+### Fixed
+- AI cleanup no longer turns itself off for the rest of the session after a slow startup. The runtime check that runs before cleanup had a 5-second budget, and a single timeout was cached as a permanent failure — so one slow check at launch, while the speech models were loading, left every later dictation uncleaned until the app was quit and reopened. A check that cannot complete is now treated as inconclusive and retried on the next recording, and its budget is sized for a cold start.
+- Repairing AI cleanup from Settings works when the runtime check is slow or inconclusive. The repair path re-ran the same short-budget check, and a timeout was reported as "unsupported Python interpreter" — refusing to repair a runtime that was healthy.
+- A stalled runtime check at launch no longer starts a model download. Startup retries the check in the background instead.
+- The cleanup failure message in History names the real problem and the action that fixes it, instead of always pointing at a model download.
+
+### Added
+- Settings can now repair the AI cleanup runtime directly.
+
 ## [0.11.0] — 2026-09-15
 
 ### Changed

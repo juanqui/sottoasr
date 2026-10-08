@@ -15,6 +15,7 @@
    - 4.3 [Fix 3 — Orphaned Sidecar Kill on Timeout](#43-fix-3--orphaned-sidecar-kill-on-timeout)
    - 4.4 [Fix 4 — UI Status Indicator for Cleanup Result](#44-fix-4--ui-status-indicator-for-cleanup-result)
    - 4.5 [Fix 5 — Paragraph Formatting Training Data Gap](#45-fix-5--paragraph-formatting-training-data-gap)
+   - 4.6 [Fix 6 — Transient Probe Failures Are Not Verdicts](#46-fix-6--transient-probe-failures-are-not-verdicts)
 5. [Edge Cases](#5-edge-cases)
 6. [File Changes](#6-file-changes)
 7. [Testing Strategy](#7-testing-strategy)
@@ -441,6 +442,64 @@ impl LlmEngine {
 
 **Retraining is NOT part of this spec.** The user's message stated "we will re-train later." The deliverable here is the updated dataset on HF; the retrain is a follow-up.
 
+### 4.6 Fix 6 — Transient Probe Failures Are Not Verdicts
+
+**Root cause.** `is_venv_ready()` exec'd the venv Python with `import mlx_lm` plus pin
+verification under a 5 s `bounded_command` budget and cached the *boolean* result in a
+process-global `AtomicI8`. A timeout and a genuinely broken runtime both produced
+`false`, and `false` was cached for the life of the process with no re-probe and no
+invalidation short of an explicit repair — which itself re-probed with an even tighter
+3 s budget and refused to proceed. Three defects compounded:
+
+| # | Defect | Consequence |
+|---|--------|-------------|
+| 1 | `-1` cached a transient timeout as a permanent verdict | One 5 s hiccup disabled cleanup until the app was relaunched. This is a menu-bar app that runs for days; the observed outage lasted three. |
+| 2 | A timeout was indistinguishable from "Python < 3.11" | `setup_venv` reported `unsupported Python interpreter` for a healthy Python 3.14 and refused to run, blocking the only in-app repair lever. |
+| 3 | A 5 s budget against a measured 1.9–3.2 s probe, and a documented ~6.5 s cold MLX page-in (`cleanup::PREWARM_HANDOFF_WAIT`) | Only ~1.6× headroom. The probe lost the race whenever the ASR models loaded concurrently at startup. |
+
+**Fix.** A verdict with provenance, and a retention policy that matches what the verdict
+actually means:
+
+```rust
+pub enum VenkVerdict {
+    Ready,            // interpreter answered; runtime matches the qualified pins
+    Broken(String),   // interpreter answered with a definitive negative, or is absent
+    Unknown(String),  // the probe never got an answer: spawn error, timeout, signal
+}
+```
+
+| Verdict | Retention | Rationale |
+|---------|-----------|-----------|
+| `Ready` | Process lifetime | Only a repair changes it. |
+| `Broken` | Process lifetime | Deterministic state; retrying cannot help. |
+| `Unknown` | `VENV_UNKNOWN_RETRY_INTERVAL` (15 s) | A stall must cost at most one recording, never the process lifetime. |
+
+Supporting changes:
+
+1. **Budgets sized off measurement.** `VENV_PROBE_TIMEOUT` 5 s → 20 s and
+   `PYTHON_VERSION_PROBE_TIMEOUT` 3 s → 10 s. Both are paid once per process and stay
+   under `LLM_CLEANUP_TIMEOUT` (30 s).
+2. **Classification rule.** `Broken` requires a definitive answer: the check script's own
+   exit 1 / exit 2, or an absent interpreter. Every other outcome — spawn failure,
+   timeout, signal-killed child — is `Unknown`. The exit codes in
+   `build_venv_check_script()` are now a documented contract rather than an incidental
+   detail of the script.
+3. **`refuse_existing_runtime()`** is the single place that decides an existing venv is
+   unusable, and it refuses only `Unusable`. An `Inconclusive` probe falls through to the
+   install, which reports the real error if the interpreter is genuinely unusable.
+4. **`setup_venv` resets the verdict cache on entry** as well as on success, so a repair
+   that fails partway cannot leave a stale verdict behind.
+5. **`repair_llm_runtime`** — a new command that runs `setup_venv` unconditionally, so a
+   stale or inconclusive verdict can never block the repair.
+6. **Startup escalation is gated.** `Unknown` no longer falls through to
+   `download_model()` (which installs the runtime *and* downloads the model). Startup
+   retries the probe at 5 s / 15 s / 45 s; only `Broken` escalates to an install.
+7. **Honest reason text.** `LlmCleanupStatus::Unavailable { reason }` is derived from the
+   verdict, so the history tooltip names the real fault. The previous hardcoded string
+   sent every failure to a model download that was present and `sotto-verified.json`-valid.
+8. **Verdict transitions are logged** with the probe's elapsed time. The silent `-1`
+   short-circuit is what made a three-day outage invisible in `SottoASR.log`.
+
 ## 5. Edge Cases
 
 | Case | Handling |
@@ -448,6 +507,9 @@ impl LlmEngine {
 | User records while sidecar pre-load is still in progress | Pipeline waits on `ensure_running()`. Guard pattern: first recording pays the 5–15 s cost, subsequent recordings reuse the running sidecar. |
 | User records twice in rapid succession, second press bumps job ID | Existing staleness check at `manager.rs:488` and `manager.rs:574` already discards the stale result. No change needed. |
 | Sidecar process is killed by the OS OOM-killer externally | Next `llm.cleanup()` call returns an I/O error from the broken pipe; `ensure_running()` sees `None` → respawns. |
+| Cold start stalls the runtime probe (ASR models loading concurrently) | The probe times out → `VenvVerdict::Unknown`, which is never cached as a verdict. Startup retries at 5 s / 15 s / 45 s and the next recording re-probes after `VENV_UNKNOWN_RETRY_INTERVAL`. Cleanup is deferred for one recording, never disabled for the process lifetime. |
+| The probe times out mid-session while cleanup is enabled | The stop path reports `Unavailable` with a reason naming the probe and pastes the raw transcript. The next recording re-probes and applies normally. |
+| The venv is repaired (or deleted) while the app runs | `setup_venv` resets the verdict cache on entry and on success, and `repair_llm_runtime` resets it unconditionally before installing, so a cached `Broken` cannot outlive the state it described. |
 | Cleanup succeeds but the pasted text is empty (model emitted empty string) | Catch at `pipeline.rs` before paste: if `cleaned.trim().is_empty()`, fall back to `raw` with `LlmCleanupStatus::Failed { reason: "empty output" }`. |
 | `libc::kill` fails because the PID has been recycled to another process | We only kill when `state.llm_pid != 0`, and we swap-to-0 immediately after kill. Worst case: we SIGKILL a short-lived recycled PID. On macOS, PID recycling inside a single user session takes minutes at minimum, and our cleanup timeout is 300 s — the window is not zero but is small. Mitigation: also check that the PID is still our own child by comparing against the `Child::id()` when we read it; if mismatch, skip the kill. |
 | Timeout fires, SIGKILL sent, then the blocking task completes and returns its (now-dead-subprocess) result | The `Ok((llm_back, Err(broken_pipe)))` arm catches this. The returned `LlmEngine` handle has a dead child; its Drop/quit() is a no-op since `wait()` sees the process is gone. The guard is left empty and next call respawns. |
@@ -466,6 +528,9 @@ impl LlmEngine {
 | `src-tauri/src/hotkeys/manager.rs` | Replace inline cleanup block with `run_cleanup()` helper call; emit `llm-cleanup-status` event; raise `MAX_RECORDING_SECS` to 20 min; raise `LLM_CLEANUP_TIMEOUT` to 300 s | Production pipeline |
 | `src-tauri/src/pipeline.rs` | Mirror the cleanup logic so production and test paths stay aligned; raise `MAX_RECORDING_SECS` and `MAX_AUDIO_BUFFER_SAMPLES`; fix the `llm_guard.is_none() → silently skip` path to use `ensure_running()` too | Keep test parity |
 | `src-tauri/src/commands/llm.rs` | Update `get_llm_status` to surface `llm_last_status` for settings page; no functional change | UI read path |
+| `src-tauri/src/commands/llm.rs` | Extract `prepare()` / `run_preparation()`; add `repair_llm_runtime`; gate the `Ensure` path so `Unknown` never escalates to a download | §4.6 |
+| `src-tauri/src/llm/download.rs` | Log the verdict before installing; never gate the install on the probe it repairs | §4.6 |
+| `src-tauri/src/lib.rs` | Register `repair_llm_runtime`; retry an inconclusive startup probe at 5 s / 15 s / 45 s | §4.6 |
 | `src-tauri/sidecar/llm_cleanup.py` | Replace `max_output_tokens = max(256, int(input_words * 1.5))` with `max_output_tokens = min(16384, max(4096, int(input_words * 2.5)))`; bump warmup `max_tokens=8` unchanged | Unlock trained capacity |
 | `src/lib/components/CleanupStatusBadge.svelte` | NEW — small Svelte component showing status badge | UI |
 | `src/lib/overlay/Overlay.svelte` | Listen for `llm-cleanup-status` event; render `CleanupStatusBadge` with timed dismissal | UI |

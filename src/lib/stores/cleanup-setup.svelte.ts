@@ -1,7 +1,8 @@
-import { getLlmStatus, prepareLlmModel } from '../utils/tauri';
+import { getLlmStatus, prepareLlmModel, repairLlmRuntime } from '../utils/tauri';
 import type { LlmStatus } from '../utils/tauri';
 
 const READY_NOTICE = 'Ready. Save to enable AI cleanup.';
+const REPAIRED_NOTICE = 'Cleanup runtime repaired.';
 
 /** Setup belongs to the settings window, so changing sections preserves intent. */
 export class CleanupSetup {
@@ -29,6 +30,41 @@ export class CleanupSetup {
   }
 
   async enable(onReady: () => void) {
+    await this.run(
+      prepareLlmModel,
+      (status) => {
+        if (!status.loaded || !status.downloaded || status.setup_error) {
+          throw new Error(status.setup_error || 'The cleanup model is not ready. Try setup again.');
+        }
+        onReady();
+      },
+      READY_NOTICE,
+    );
+  }
+
+  /** Rebuild the runtime after a broken-verdict failure. */
+  async repair() {
+    await this.run(
+      repairLlmRuntime,
+      (status) => {
+        if (!status.loaded || status.setup_error) {
+          throw new Error(status.setup_error || 'The cleanup runtime is still not ready. Try again.');
+        }
+      },
+      REPAIRED_NOTICE,
+    );
+  }
+
+  /**
+   * Shared envelope for the two explicit preparation actions: one owner at a
+   * time, a stale intent never overwrites a newer one, and the acknowledgement
+   * always outranks a status poll that began during the work.
+   */
+  private async run(
+    action: () => Promise<LlmStatus>,
+    accept: (status: LlmStatus) => void,
+    notice: string,
+  ) {
     if (this.pending) return;
     const intent = ++this.intent;
     ++this.statusRequest;
@@ -37,18 +73,15 @@ export class CleanupSetup {
     this.error = '';
     this.notice = '';
     try {
-      const status = await prepareLlmModel();
+      const status = await action();
       if (this.disposed || intent !== this.intent) return;
       // A poll begun during preparation may still describe the old unloaded
       // process. The preparation acknowledgement is newer and authoritative.
       ++this.statusRequest;
       this.loading = false;
       this.status = status;
-      if (!status.loaded || !status.downloaded || status.setup_error) {
-        throw new Error(status.setup_error || 'The cleanup model is not ready. Try setup again.');
-      }
-      onReady();
-      this.notice = READY_NOTICE;
+      accept(status);
+      this.notice = notice;
     } catch (error) {
       if (!this.disposed && intent === this.intent) this.error = error instanceof Error ? error.message : String(error);
     } finally {

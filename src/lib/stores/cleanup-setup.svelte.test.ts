@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-vi.mock('../utils/tauri', () => ({ getLlmStatus:vi.fn(), prepareLlmModel:vi.fn() }));
-import { getLlmStatus, prepareLlmModel } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({ getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), repairLlmRuntime:vi.fn() }));
+import { getLlmStatus, prepareLlmModel, repairLlmRuntime } from '../utils/tauri';
 import { CleanupSetup } from './cleanup-setup.svelte';
 import type { LlmStatus } from '../utils/tauri';
 const ready: LlmStatus = { available:true, unavailable_reason:null, downloaded:true, downloading:false, loaded:true, preparing:false, setup_error:null, model_name:'Test', model_url:'https://example.com', model_path:null, download_size_mb:227, update_available:false, last_cleanup_status:{kind:'idle'} };
@@ -58,4 +58,19 @@ it('coalesces status reads and clears stale loaded status after a read failure',
   expect(getLlmStatus).toHaveBeenCalledOnce();reading.resolve(ready);await first;
   vi.mocked(getLlmStatus).mockRejectedValueOnce(new Error('Connection lost'));await setup.refresh();
   expect(setup.status).toBeNull();expect(setup.error).toContain('Connection lost');
+});
+it('repairs through the repair command and rejects a still-unloaded runtime', async () => {
+  vi.mocked(repairLlmRuntime).mockResolvedValueOnce({ ...ready, loaded:false });
+  const setup = new CleanupSetup(); await setup.repair();
+  expect(repairLlmRuntime).toHaveBeenCalledOnce(); expect(prepareLlmModel).not.toHaveBeenCalled();
+  expect(setup.error).toContain('not ready');
+  vi.mocked(repairLlmRuntime).mockResolvedValueOnce(ready); await setup.repair();
+  expect(setup.error).toBe(''); expect(setup.notice).toContain('repaired');
+});
+it('never repairs while a preparation is already in flight', async () => {
+  const work = deferred<LlmStatus>(); vi.mocked(prepareLlmModel).mockReturnValue(work.promise);
+  const setup = new CleanupSetup(); const pending = setup.enable(vi.fn());
+  await setup.repair();
+  expect(repairLlmRuntime).not.toHaveBeenCalled();
+  work.resolve(ready); await pending;
 });

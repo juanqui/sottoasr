@@ -50,6 +50,19 @@ async fn current_status(app: &AppHandle, state: &AppState) -> Result<LlmStatus, 
     })
 }
 
+/// What an explicit preparation is allowed to do.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Preparation {
+    /// Install the runtime and download the model if either is missing, then
+    /// verify loading. An inconclusive probe stops here rather than escalating
+    /// a probe that never answered into a runtime rebuild and a multi-gigabyte
+    /// model download.
+    Ensure,
+    /// Rebuild the runtime unconditionally, then verify loading. This is the
+    /// user's repair lever and is never gated on the probe it repairs.
+    Repair,
+}
+
 /// Explicit enable intent: install the runtime, download if missing, and verify
 /// loading. Concurrent windows join this preparation instead of duplicating it.
 #[tauri::command]
@@ -57,36 +70,83 @@ pub async fn prepare_llm_model(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<LlmStatus, String> {
+    prepare(&app, &state, Preparation::Ensure).await
+}
+
+/// Explicit repair intent: force the verified runtime install, then reload.
+///
+/// The counterpart to `prepare_llm_model` for a broken runtime. It runs
+/// `setup_venv` unconditionally, so a stale or inconclusive verdict can never
+/// block the one action that can fix the runtime — the deadlock that previously
+/// left the runtime unrecoverable from the UI.
+#[tauri::command]
+pub async fn repair_llm_runtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<LlmStatus, String> {
+    prepare(&app, &state, Preparation::Repair).await
+}
+
+async fn prepare(
+    app: &AppHandle,
+    state: &AppState,
+    mode: Preparation,
+) -> Result<LlmStatus, String> {
     if !engine::is_feature_compiled() || !engine::is_platform_supported() {
         return Err("Local cleanup requires an Apple Silicon Mac".into());
     }
-    if !claim_preparation(&state).await {
+    if !claim_preparation(state).await {
         if let Some(error) = state.llm_setup_error.lock().await.clone() {
             return Err(error);
         }
-        return current_status(&app, &state).await;
+        return current_status(app, state).await;
     }
     *state.llm_setup_error.lock().await = None;
     let _ = app.emit("llm-preparation-changed", ());
-    let result = async {
-        let _operation = state.llm_operation.lock().await;
-        let ready = tokio::task::spawn_blocking(|| {
-            engine::is_venv_ready() && engine::is_model_downloaded()
-        })
-        .await
-        .map_err(|e| format!("Cleanup readiness check failed: {e}"))?;
-        if !ready {
-            download::download_model(&app).await?;
-        }
-        load_locked(&state).await
-    }
-    .await;
+    let result = run_preparation(app, state, mode).await;
     *state.llm_setup_error.lock().await = result.as_ref().err().cloned();
     state.llm_preparing.store(false, Ordering::SeqCst);
     state.llm_preparation_finished.notify_waiters();
     let _ = app.emit("llm-preparation-changed", ());
     result?;
-    current_status(&app, &state).await
+    current_status(app, state).await
+}
+
+async fn run_preparation(
+    app: &AppHandle,
+    state: &AppState,
+    mode: Preparation,
+) -> Result<(), String> {
+    let _operation = state.llm_operation.lock().await;
+    match mode {
+        Preparation::Ensure => {
+            let verdict = tokio::task::spawn_blocking(engine::venv_verdict)
+                .await
+                .map_err(|e| format!("Cleanup readiness check failed: {e}"))?;
+            if let engine::VenkVerdict::Unknown(reason) = &verdict {
+                // A probe that never answered says nothing about the runtime, so
+                // it must not trigger an install. The verdict expires after
+                // `VENV_UNKNOWN_RETRY_INTERVAL` and the next attempt re-probes.
+                log::warn!("Cleanup preparation deferred: {reason}");
+                return Err(verdict.unavailable_reason());
+            }
+            let model_present = tokio::task::spawn_blocking(engine::is_model_downloaded)
+                .await
+                .unwrap_or(false);
+            if !verdict.is_ready() || !model_present {
+                download::download_model(app).await?;
+            }
+        }
+        Preparation::Repair => {
+            tokio::task::spawn_blocking(|| {
+                engine::reset_venv_cache();
+                engine::setup_venv()
+            })
+            .await
+            .map_err(|e| format!("Cleanup repair task panicked: {e}"))??;
+        }
+    }
+    load_locked(state).await
 }
 
 /// Returns true only to the owner; other callers join the current preparation.

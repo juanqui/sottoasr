@@ -91,6 +91,7 @@ pub fn run() {
             // LLM transcript cleanup
             commands::llm::get_llm_status,
             commands::llm::prepare_llm_model,
+            commands::llm::repair_llm_runtime,
             commands::llm::check_llm_update,
             commands::llm::download_llm_model,
             commands::llm::update_llm_model,
@@ -209,16 +210,53 @@ pub fn run() {
             if llm::engine::is_feature_compiled() {
                 let llm_handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, AppState> = llm_handle.state();
-                    if !state.settings.lock().await.llm_cleanup_enabled {
-                        return;
+                    {
+                        let state: tauri::State<'_, AppState> = llm_handle.state();
+                        if !state.settings.lock().await.llm_cleanup_enabled {
+                            return;
+                        }
                     }
-                    // Reuse Settings preparation so upgrades with an enabled old
-                    // model also prepare the new pin, and concurrent callers join.
+                    // Cold start loads the ASR models concurrently, which can
+                    // stall the runtime probe past its budget. That verdict is
+                    // transient, so retry it here rather than leaving cleanup
+                    // disabled until the next app launch.
+                    const RETRY_DELAYS: [std::time::Duration; 3] = [
+                        std::time::Duration::from_secs(5),
+                        std::time::Duration::from_secs(15),
+                        std::time::Duration::from_secs(45),
+                    ];
                     log::info!("Preparing and warming enabled cleanup in background...");
-                    match commands::llm::prepare_llm_model(llm_handle.clone(), state).await {
-                        Ok(_) => log::info!("LLM sidecar pre-loaded, warmed and ready"),
-                        Err(error) => log::warn!("LLM preparation failed: {}", error),
+                    for attempt in 0..=RETRY_DELAYS.len() {
+                        let state: tauri::State<'_, AppState> = llm_handle.state();
+                        // Reuse Settings preparation so upgrades with an enabled
+                        // old model also prepare the new pin, and concurrent
+                        // callers join.
+                        match commands::llm::prepare_llm_model(llm_handle.clone(), state).await {
+                            Ok(_) => {
+                                log::info!("LLM sidecar pre-loaded, warmed and ready");
+                                return;
+                            }
+                            Err(error) => log::warn!("LLM preparation failed: {}", error),
+                        }
+                        let verdict = tokio::task::spawn_blocking(llm::engine::venv_verdict)
+                            .await
+                            .unwrap_or_else(|_| {
+                                llm::engine::VenkVerdict::Unknown("verdict task panicked".into())
+                            });
+                        // Only an inconclusive probe is worth retrying: a broken
+                        // runtime needs an explicit repair, and a ready one
+                        // failed for some other reason that a delay cannot fix.
+                        if !matches!(verdict, llm::engine::VenkVerdict::Unknown(_)) {
+                            return;
+                        }
+                        let Some(delay) = RETRY_DELAYS.get(attempt) else {
+                            return;
+                        };
+                        log::info!(
+                            "Cleanup runtime probe inconclusive; retrying preparation in {}s",
+                            delay.as_secs()
+                        );
+                        tokio::time::sleep(*delay).await;
                     }
                 });
             }

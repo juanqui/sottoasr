@@ -2,8 +2,8 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 const { listeners } = vi.hoisted(() => ({ listeners:new Map<string, () => void>() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (event:string, callback:()=>void) => {listeners.set(event,callback);return () => listeners.delete(event);}) }));
-vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn()}));
-import { getModelStatus } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn(),repairLlmRuntime:vi.fn()}));
+import { getModelStatus, repairLlmRuntime } from '../utils/tauri';
 import { CleanupSetup } from '../stores/cleanup-setup.svelte';
 import ModelDashboard from './model-dashboard.svelte';
 let target:HTMLDivElement;
@@ -34,4 +34,19 @@ it('clears stale ASR readiness after a failed status read and removes listeners 
   listeners.get('asr-init-error')!();await vi.waitFor(()=>expect(target.textContent).toContain('IPC disconnected'));
   expect(target.querySelector('[aria-label="Speech recognition model"] .ready')).toBeNull();
   await unmount(component!);component=undefined;expect(listeners.size).toBe(0);
+});
+it('offers a runtime repair only for runtime failures, and runs it on click', async () => {
+  vi.mocked(repairLlmRuntime).mockResolvedValue({...cleanup.status!, last_cleanup_status:{kind:'idle'}});
+  await render();
+  expect(target.textContent).not.toContain('Repair cleanup runtime');
+
+  cleanup.status = {...cleanup.status!, last_cleanup_status:{kind:'unavailable',detail:{reason:'Cleanup runtime needs repair: python3 is older than 3.11'}}};
+  flushSync();
+  const repair = [...target.querySelectorAll('button')].find((button)=>button.textContent?.includes('Repair cleanup runtime'));
+  expect(repair).toBeDefined();
+  repair!.click();
+  await vi.waitFor(()=>expect(repairLlmRuntime).toHaveBeenCalledOnce());
+  // The store's continuation runs after the mocked promise resolves, so wait
+  // for the render rather than asserting straight after the click.
+  await vi.waitFor(()=>expect(target.textContent).not.toContain('Repair cleanup runtime'));
 });

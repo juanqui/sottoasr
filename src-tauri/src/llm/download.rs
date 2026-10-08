@@ -22,7 +22,13 @@ pub async fn download_model(app: &AppHandle) -> Result<(), String> {
     log::info!("Starting model download via sidecar: {}...", config.id);
 
     let result = tokio::task::spawn_blocking(move || {
-        if !engine::is_venv_ready() {
+        // An explicit download/repair is the user's only lever to fix a broken
+        // runtime, so it is never gated on the probe it is meant to repair:
+        // `setup_venv` distinguishes a definitively unusable interpreter from
+        // an inconclusive probe and refuses only the former.
+        let verdict = engine::venv_verdict();
+        if !verdict.is_ready() {
+            log::info!("Cleanup runtime verdict before install: {verdict:?}");
             engine::setup_venv()?;
         }
         let mut sidecar = engine::LlmEngine::spawn()?;
