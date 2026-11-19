@@ -2,7 +2,9 @@
 
 All notable changes to SottoASR are documented in this file.
 
-## [Unreleased]
+## [0.12.1] — 2026-11-19
+
+Settings can delete the previous speech model, and "Restart Now" starts SottoASR again after an update.
 
 ### Fixed
 - "Restart Now" after an update starts SottoASR again. Before, the app could close and not come back, or come back without its Accessibility permission. SottoASR now quits first and is then started the way Finder starts it. This fix works from the next update on: the restart after the update to this version is still done by the old version, so you may have to open SottoASR by hand one more time.
