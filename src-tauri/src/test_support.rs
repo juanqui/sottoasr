@@ -9,8 +9,8 @@ use crate::audio::capture::AudioCaptureBackend;
 use crate::asr::engine::{AsrEngine, AsrResult};
 use crate::llm::engine::{BatchItem, LlmBackend};
 use crate::paste::PasteBackend;
-use crate::pipeline::PipelineEvents;
-use crate::models::{AppStateEnum, Transcription};
+use crate::pipeline::{Failure, Linger, Outcome, PipelineEvents};
+use crate::models::{AppStateEnum, LlmCleanupStatus, Transcription};
 
 // ======================== MockAudioCapture ========================
 
@@ -28,10 +28,10 @@ impl MockAudioCapture {
         Self { samples, sample_rate }
     }
 
-    /// Create a mock with 1 second of silence at 48kHz.
-    #[allow(dead_code)]
+    /// Create a mock with 1 second of near-silence at 48kHz. Real microphones
+    /// never deliver exact zeros, and an all-zero capture is an error.
     pub fn silence() -> Self {
-        Self::new(vec![0.0f32; 48_000], 48_000)
+        Self::new(low_level_noise(48_000), 48_000)
     }
 
     /// Create a mock with a synthetic 440Hz sine wave (1 second at 48kHz).
@@ -42,6 +42,11 @@ impl MockAudioCapture {
             .collect();
         Self::new(samples, sample_rate)
     }
+}
+
+/// Deterministic, inaudible, never-zero samples that stand in for a quiet room.
+pub fn low_level_noise(len: usize) -> Vec<f32> {
+    [1.0e-4_f32, -1.0e-4].into_iter().cycle().take(len).collect()
 }
 
 impl AudioCaptureBackend for MockAudioCapture {
@@ -324,60 +329,76 @@ impl PasteBackend for SharedMockPaste {
 // ======================== CollectingEvents ========================
 
 /// Collects all pipeline events for assertion in tests.
+#[derive(Default)]
 pub struct CollectingEvents {
     pub state_changes: Mutex<Vec<AppStateEnum>>,
+    pub busy: Mutex<Vec<AppStateEnum>>,
     pub recording_started: Mutex<bool>,
     pub recording_stopped: Mutex<bool>,
     pub recording_cancelled: Mutex<bool>,
+    pub time_warnings: Mutex<Vec<u64>>,
+    pub failures: Mutex<Vec<Failure>>,
+    pub cleanup_statuses: Mutex<Vec<LlmCleanupStatus>>,
+    /// `(id, clipboard_only)` for every completed delivery.
+    pub paste_ids: Mutex<Vec<(String, bool)>>,
     pub transcriptions: Mutex<Vec<Transcription>>,
-    pub errors: Mutex<Vec<String>>,
-    pub paste_ids: Mutex<Vec<String>>,
-    pub paste_errors: Mutex<Vec<(String, String)>>,
+    /// Whether each reported transcription reached durable history.
+    pub saved: Mutex<Vec<bool>>,
+    pub history_errors: Mutex<Vec<String>>,
+    pub recordings_changed: Mutex<usize>,
+    pub outcomes: Mutex<Vec<(u64, Outcome)>>,
 }
 
 impl CollectingEvents {
     pub fn new() -> Self {
-        Self {
-            state_changes: Mutex::new(Vec::new()),
-            recording_started: Mutex::new(false),
-            recording_stopped: Mutex::new(false),
-            recording_cancelled: Mutex::new(false),
-            transcriptions: Mutex::new(Vec::new()),
-            errors: Mutex::new(Vec::new()),
-            paste_ids: Mutex::new(Vec::new()),
-            paste_errors: Mutex::new(Vec::new()),
-        }
+        Self::default()
+    }
+
+    pub fn failures_of(&self, kind: crate::pipeline::FailureKind) -> Vec<Failure> {
+        self.failures.lock().unwrap().iter().filter(|failure| failure.kind == kind).cloned().collect()
     }
 }
 
 impl PipelineEvents for CollectingEvents {
-    fn emit_state_changed(&self, state: &AppStateEnum) {
-        self.state_changes.lock().unwrap().push(state.clone());
+    fn phase(&self, state: AppStateEnum) {
+        self.state_changes.lock().unwrap().push(state);
     }
-    fn emit_recording_started(&self) {
+    fn busy(&self, state: AppStateEnum) {
+        self.busy.lock().unwrap().push(state);
+    }
+    fn recording_started(&self, _generation: u64) {
         *self.recording_started.lock().unwrap() = true;
     }
-    fn emit_recording_stopped(&self) {
+    fn recording_stopped(&self, _generation: u64) {
         *self.recording_stopped.lock().unwrap() = true;
     }
-    fn emit_recording_cancelled(&self) {
+    fn recording_cancelled(&self, _generation: u64) {
         *self.recording_cancelled.lock().unwrap() = true;
     }
-    fn emit_transcription_complete(&self, t: &Transcription) {
-        self.transcriptions.lock().unwrap().push(t.clone());
+    fn time_warning(&self, remaining_secs: u64) {
+        self.time_warnings.lock().unwrap().push(remaining_secs);
     }
-    fn emit_transcription_error(&self, error: &str) {
-        self.errors.lock().unwrap().push(error.to_string());
+    fn failure(&self, failure: Failure) {
+        self.failures.lock().unwrap().push(failure);
     }
-    fn emit_paste_complete(&self, id: &str) {
-        self.paste_ids.lock().unwrap().push(id.to_string());
+    fn cleanup_status(&self, status: &LlmCleanupStatus) {
+        self.cleanup_statuses.lock().unwrap().push(status.clone());
     }
-    fn emit_paste_error(&self, error: &str, text: &str) {
-        self.paste_errors.lock().unwrap()
-            .push((error.to_string(), text.to_string()));
+    fn paste_complete(&self, id: &str, clipboard_only: bool) {
+        self.paste_ids.lock().unwrap().push((id.to_string(), clipboard_only));
     }
-    fn emit_audio_level(&self, _level: f32) {}
-    fn emit_recording_error(&self, error: &str) {
-        self.errors.lock().unwrap().push(error.to_string());
+    fn transcription_saved(&self, transcription: &Transcription, saved: &Result<Vec<String>, String>) {
+        self.transcriptions.lock().unwrap().push(transcription.clone());
+        self.saved.lock().unwrap().push(saved.is_ok());
+    }
+    fn history_error(&self, error: &str) {
+        self.history_errors.lock().unwrap().push(error.to_string());
+    }
+    fn recordings_changed(&self) {
+        *self.recordings_changed.lock().unwrap() += 1;
+    }
+    fn finished(&self, generation: u64, outcome: Outcome) -> Linger<'_> {
+        self.outcomes.lock().unwrap().push((generation, outcome));
+        Box::pin(std::future::ready(()))
     }
 }

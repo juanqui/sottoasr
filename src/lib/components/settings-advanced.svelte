@@ -13,6 +13,15 @@
   let confirmDelete = $state(false);
   let disposed = false;
 
+  const RETENTION_DAYS = [0, 1, 7, 30, 90, 365];
+  const retention = [
+    { key: 'history_retention_days', label: 'Keep transcripts', hint: 'Older transcripts are removed from History, together with the audio kept with them.',
+      warning: (period: string) => `Saving deletes transcripts older than ${period} and the audio kept with them. This cannot be undone.` },
+    { key: 'audio_retention_days', label: 'Keep recordings', hint: 'Older recordings are deleted, including recordings waiting for recovery.',
+      warning: (period: string) => `Saving deletes recordings older than ${period}, including recordings waiting for recovery. This cannot be undone.` },
+  ] as const;
+  const period = (days: number) => days === 1 ? '1 day' : `${days} days`;
+
   async function refreshPermissions() {
     if (checking) return;
     checking = true;
@@ -34,6 +43,27 @@
   }
   onMount(() => { void refreshPermissions(); return () => { disposed = true; }; });
 </script>
+<section class="setting-card">
+  <h3>History and recordings</h3>
+  <p class="setting-hint">Choose how long SottoASR keeps what you dictate. Nothing leaves your Mac.</p>
+  {#each retention as item (item.key)}
+    {@const days = settingsStore.current[item.key]}
+    {@const savedDays = settingsStore.saved?.[item.key] ?? 0}
+    {@const choices = RETENTION_DAYS.includes(days) ? RETENTION_DAYS : [...RETENTION_DAYS, days].sort((a, b) => a - b)}
+    <label class="setting-field">
+      <span class="field-label">{item.label}</span>
+      <select class="setting-select" value={days} onchange={(event) => settingsStore.update(item.key, Number(event.currentTarget.value))}>
+        {#each choices as choice (choice)}
+          <option value={choice}>{choice === 0 ? 'Keep until I delete' : period(choice)}</option>
+        {/each}
+      </select>
+    </label>
+    <p class="setting-hint">{item.hint}</p>
+    {#if days > 0 && (savedDays === 0 || days < savedDays)}
+      <p class="setting-warning" role="status">{item.warning(period(days))}</p>
+    {/if}
+  {/each}
+</section>
 <section class="setting-card">
   <h3>Permissions</h3>
   <p class="setting-hint">Microphone access records your voice. Accessibility lets SottoASR paste at your cursor.</p>
@@ -84,7 +114,7 @@
   .permission-row span:nth-child(2) { color:var(--text-dim); }
   .model-details { border-top:1px solid var(--border); margin-top:16px; padding-top:16px; }
   .model-details p { font-size:13px; overflow-wrap:anywhere; }
-  .model-details a { display:block; font-size:12px; margin:12px 0; color:var(--accent); }
+  .model-details a { display:block; font-size:12px; margin:12px 0; color:var(--accent-text); }
   .mode-options { display:grid; gap:10px; margin-top:14px; }
   .mode-option { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
   .mode-option:has(input:checked) { border-color:var(--accent); }

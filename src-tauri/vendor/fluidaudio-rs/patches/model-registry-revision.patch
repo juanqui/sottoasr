@@ -1,0 +1,37 @@
+--- a/Sources/FluidAudio/ModelRegistry.swift
++++ b/Sources/FluidAudio/ModelRegistry.swift
+@@ -1,3 +1,4 @@
++// Modified by SottoASR contributors: download pinned model repositories at a fixed revision.
+ import Foundation
+ import OSLog
+ 
+@@ -79,6 +80,20 @@
+         return repoPath
+     }
+ 
++    // MARK: - Pinned Revisions
++
++    /// Commits used instead of `main`, keyed by upstream repository path. The
++    /// application verifies the files it loads against a manifest of these commits.
++    static let pinnedRevisions: [String: String] = [
++        "FluidInference/parakeet-tdt-0.6b-v3-coreml": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
++        "FluidInference/parakeet-ctc-110m-coreml": "accdafd8cf8a2ff1cabe3c11e54416b405d409aa",
++    ]
++
++    /// The revision to read from `repoPath`: its pinned commit, otherwise `main`.
++    static func revision(for repoPath: String) -> String {
++        pinnedRevisions[repoPath] ?? "main"
++    }
++
+     // MARK: - URL Construction
+ 
+     /// Construct API URL for listing model repository contents
+@@ -92,7 +107,7 @@
+ 
+     /// Construct download URL for a model file
+     public static func resolveModel(_ repoPath: String, _ filePath: String) throws -> URL {
+-        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/main/\(filePath)"
++        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/\(revision(for: repoPath))/\(filePath)"
+         guard let url = URL(string: urlString) else {
+             throw Error.invalidURL(urlString)
+         }

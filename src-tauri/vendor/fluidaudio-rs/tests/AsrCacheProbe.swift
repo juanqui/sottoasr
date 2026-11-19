@@ -16,6 +16,13 @@ import Foundation
             userInfo: [NSLocalizedDescriptionKey: "Expected cache load to fail"])
     }
 
+    static func expectThrows(_ message: String, _ operation: () async throws -> Void) async throws {
+        do { try await operation() }
+        catch { return }
+        throw NSError(domain: "AsrCacheProbe", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
     static func main() async throws {
         // This is an isolated executable, so the global offline flag cannot
         // race the application's independent vocabulary download.
@@ -28,9 +35,22 @@ import Foundation
         let sentinel = Data("existing-cache-must-survive".utf8)
         try sentinel.write(to: sentinelPath)
 
-        // Missing artifacts cannot turn an offline setup failure into deletion.
+        // Loading never downloads: missing artifacts fail and nothing is deleted.
         try await expectFailure(directory)
         try require(Data(contentsOf: sentinelPath) == sentinel, "Incomplete cache was deleted")
+        // Downloading is a separate step. Offline it fails and keeps the cache.
+        try await expectThrows("Offline download succeeded") { try await AsrCache.download(to: directory) }
+        try require(Data(contentsOf: sentinelPath) == sentinel, "Failed download deleted cache")
+        try await expectThrows("Loaded a folder the SDK does not download to") {
+            _ = try await AsrCache.load(at: root.appendingPathComponent("other-folder"))
+        }
+        // Downloads read the pinned commits, never the mutable main branch.
+        for repo in [Repo.parakeetV3, Repo.parakeetCtc110m] {
+            let url = try ModelRegistry.resolveModel(repo.remotePath, "config.json").absoluteString
+            try require(!url.contains("/resolve/main/"), "\(repo.remotePath) downloads from main")
+        }
+        try require(ModelRegistry.resolveModel(Repo.vad.remotePath, "config.json").absoluteString
+            .contains("/resolve/main/"), "Unpinned repositories no longer resolve main")
 
         let names = ["Preprocessor.mlmodelc", "Encoder.mlmodelc", "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"]
         for name in names {
@@ -56,7 +76,7 @@ import Foundation
         try await expectFailure(directory)
         try require(Data(contentsOf: vocabularyPath) == invalidVocabulary, "Malformed vocabulary was overwritten")
         try require(Data(contentsOf: sentinelPath) == sentinel, "Malformed vocabulary deleted cache")
-        print("ASR cache: 3 cache failure cases passed; existing artifacts preserved")
+        print("ASR cache: 5 cache failure cases and 3 revision checks passed; existing artifacts preserved")
 
         if CommandLine.arguments.count == 3 {
             ModelHub.offlineMode = true

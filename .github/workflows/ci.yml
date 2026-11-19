@@ -15,16 +15,18 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: npm
-      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: dtolnay/rust-toolchain@46ce8032f0e3e2d70554c4eb1961fc1ca5fde79f # 1.94.0 branch
         with:
           targets: aarch64-apple-darwin
           components: clippy
-      - uses: swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: './src-tauri -> target'
       - run: npm ci
@@ -38,6 +40,11 @@ jobs:
       - name: Default CoreML backend tests
         working-directory: src-tauri
         run: cargo test --locked
+      - name: Parakeet backend build and resampler tests
+        working-directory: src-tauri
+        run: |
+          cargo check --locked --no-default-features --features custom-protocol,asr-parakeet
+          cargo test --locked --no-default-features --features custom-protocol,asr-parakeet --lib audio::resample
       - name: Pinned Swift correctness regressions
         run: python3 scripts/check-swift-regressions.py
       - name: Rust lint
@@ -46,19 +53,32 @@ jobs:
       - name: Audit Rust dependencies
         working-directory: src-tauri
         run: |
+          # .cargo/audit.toml ignores the zip advisories only because zip is not built for macOS.
+          if ! grep -qx 'name = "zip"' Cargo.lock; then
+            echo "::notice::zip is no longer in Cargo.lock. Delete its ignores from src-tauri/.cargo/audit.toml and the zip checks in .github/workflows and scripts/pre-release-check.sh."
+          else
+            ZIP_DEPENDENTS=$(cargo tree --locked -i zip --target aarch64-apple-darwin)
+            if [ -n "$ZIP_DEPENDENTS" ]; then
+              echo "$ZIP_DEPENDENTS"
+              echo "::error::zip is now built for aarch64-apple-darwin, so the zip ignores in src-tauri/.cargo/audit.toml no longer hold. Update zip and remove them."
+              exit 1
+            fi
+          fi
           cargo install cargo-audit --version 0.22.2 --locked --quiet
           cargo audit
+      - name: Audit npm dependencies
+        run: npm audit --omit=dev
       - name: Python protocol tests
         run: |
           python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
           python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Full macOS packaging without release credentials
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         with:
           args: >-
             --target aarch64-apple-darwin --bundles app,dmg
             --config '{"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pr-macos-${{ github.sha }}
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg

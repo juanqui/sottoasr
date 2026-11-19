@@ -59,3 +59,17 @@ it('inserts recovered recordings by their original date without splitting date g
   store.add(recovered); // IPC response and event acknowledge the same recording.
   expect(store.items.map((value) => value.id)).toEqual(['today', 'recovered', 'yesterday']);
 });
+it('shows a recording recovered after retention removed its entry, without letting a stale event return', () => {
+  const store = new TranscriptionStore(); store.items = [item('interrupted'), item('other')];
+  store.remove(['interrupted']);
+  store.add(item('interrupted')); // late event from the original save
+  expect(store.items.map((value) => value.id)).toEqual(['other']);
+  store.addSaved(item('interrupted')); // the recovery command's saved record
+  expect(store.items.map((value) => value.id).sort()).toEqual(['interrupted', 'other']);
+});
+it('accepts an event saved after the removal but not one saved before it', () => {
+  const store = new TranscriptionStore(); store.remove(['resaved', 'stale']);
+  store.add({...item('stale'), saved_at: new Date(Date.now() - 60_000).toISOString()});
+  store.add({...item('resaved'), saved_at: new Date(Date.now() + 60_000).toISOString()});
+  expect(store.items.map((value) => value.id)).toEqual(['resaved']);
+});

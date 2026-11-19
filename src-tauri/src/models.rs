@@ -62,7 +62,7 @@ pub enum LlmCleanupStatus {
     Idle,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Transcription {
     pub id: String,
     /// Ordinary output: ASR with vocabulary and explicit dictionary corrections.
@@ -88,6 +88,10 @@ pub struct Transcription {
     /// lack this field deserialize as `Idle`.
     #[serde(default = "default_llm_cleanup_status")]
     pub llm_cleanup_status: LlmCleanupStatus,
+    /// When this entry was first saved to history. Retention measures age from
+    /// here, because a recovered recording keeps its original `created_at`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -105,7 +109,7 @@ pub struct DictionaryEntry {
     pub replacement: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     pub push_to_talk_shortcut: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -123,9 +127,6 @@ pub struct Settings {
     pub restore_clipboard: bool,
     #[serde(default = "default_true")]
     pub restore_focus_before_paste: bool,
-    pub model_path: String,
-    pub language: String,
-    pub max_history: usize,
     pub launch_at_login: bool,
     #[serde(default)]
     pub llm_cleanup_enabled: bool,
@@ -137,14 +138,41 @@ pub struct Settings {
     pub vocabulary: Vec<String>,
     #[serde(default = "default_true")]
     pub auto_check_updates: bool,
+    /// cpal input device name. `None` follows the system default input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_device: Option<String>,
+    /// Play a system sound when recording starts, stops, is cancelled or fails.
+    #[serde(default)]
+    pub sound_cues: bool,
+    /// Delete history entries older than this many days. `0` keeps them until
+    /// the user deletes them.
+    #[serde(default)]
+    pub history_retention_days: u32,
+    /// Delete retained recordings older than this many days. `0` keeps them
+    /// until the user deletes them.
+    #[serde(default)]
+    pub audio_retention_days: u32,
 }
 
 impl Settings {
+    /// Longest retention the settings accept, in days.
+    pub const MAX_RETENTION_DAYS: u32 = 3650;
+
     pub fn normalize(&mut self) -> Result<(), String> {
         if self.vocabulary.iter().any(|term| term.chars().any(char::is_control)) {
             return Err("Vocabulary terms cannot contain control characters".into());
         }
         self.vocabulary.iter_mut().for_each(|term| *term = term.trim().to_owned());
+        // An untouched "Add replacement" row is not a replacement. Rows with
+        // only one side filled stay so validation can name them.
+        for entry in &mut self.dictionary {
+            entry.heard = entry.heard.trim().to_owned();
+            entry.replacement = entry.replacement.trim().to_owned();
+        }
+        self.dictionary.retain(|entry| !(entry.heard.is_empty() && entry.replacement.is_empty()));
+        self.input_device = self.input_device.take()
+            .map(|name| name.trim().to_owned())
+            .filter(|name| !name.is_empty());
         Ok(())
     }
 
@@ -158,9 +186,6 @@ impl Settings {
         if self.cancel_shortcut.trim().is_empty() {
             return Err("Cancel shortcut cannot be empty".into());
         }
-        // max_history is retained for file compatibility only. There is no
-        // retention control in Settings, so a legacy value must not prevent
-        // saving unrelated preferences or introduce a new deletion policy.
         // Parse with the same native shortcut library used for registration.
         // Modifier order/case and aliases such as Ctrl/Control must not bypass
         // conflict detection, including alternates and the Settings shortcut.
@@ -185,6 +210,19 @@ impl Settings {
                 return Err(format!("{label} and {previous} shortcuts cannot be the same"));
             }
         }
+        for (label, days) in [
+            ("History retention", self.history_retention_days),
+            ("Recording retention", self.audio_retention_days),
+        ] {
+            if days > Self::MAX_RETENTION_DAYS {
+                return Err(format!("{label} cannot exceed {} days", Self::MAX_RETENTION_DAYS));
+            }
+        }
+        if let Some(device) = &self.input_device {
+            if device.chars().count() > 256 || device.chars().any(char::is_control) {
+                return Err("Microphone name is invalid".into());
+            }
+        }
         crate::dictionary::validate(&self.dictionary)?;
         crate::asr::vocabulary::validate(&self.vocabulary)
     }
@@ -204,57 +242,17 @@ impl Default for Settings {
             auto_paste: true,
             restore_clipboard: true,
             restore_focus_before_paste: true,
-            model_path: String::new(),
-            language: "auto".into(),
-            max_history: 500,
             launch_at_login: false,
             llm_cleanup_enabled: false,
             llm_cleanup_mode: CleanupMode::default(),
             dictionary: Vec::new(),
             vocabulary: Vec::new(),
             auto_check_updates: true,
+            input_device: None,
+            sound_cues: false,
+            history_retention_days: 0,
+            audio_retention_days: 0,
         }
-    }
-}
-
-impl PartialEq for Settings {
-    fn eq(&self, other: &Self) -> bool {
-        self.push_to_talk_shortcut == other.push_to_talk_shortcut
-            && self.push_to_talk_shortcut_alt == other.push_to_talk_shortcut_alt
-            && self.toggle_shortcut == other.toggle_shortcut
-            && self.toggle_shortcut_alt == other.toggle_shortcut_alt
-            && self.cancel_shortcut == other.cancel_shortcut
-            && self.cancel_shortcut_alt == other.cancel_shortcut_alt
-            && self.open_settings_shortcut == other.open_settings_shortcut
-            && self.show_overlay == other.show_overlay
-            && self.auto_paste == other.auto_paste
-            && self.restore_clipboard == other.restore_clipboard
-            && self.restore_focus_before_paste == other.restore_focus_before_paste
-            && self.model_path == other.model_path
-            && self.language == other.language
-            && self.max_history == other.max_history
-            && self.launch_at_login == other.launch_at_login
-            && self.llm_cleanup_enabled == other.llm_cleanup_enabled
-            && self.llm_cleanup_mode == other.llm_cleanup_mode
-            && self.dictionary == other.dictionary
-            && self.vocabulary == other.vocabulary
-            && self.auto_check_updates == other.auto_check_updates
-    }
-}
-
-impl PartialEq for Transcription {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-            && self.text == other.text
-            && self.duration_ms == other.duration_ms
-            && self.created_at == other.created_at
-            && self.word_count == other.word_count
-            && self.cancelled == other.cancelled
-            && self.capture_error == other.capture_error
-            && self.raw_text == other.raw_text
-            && self.cleanup_suggestion == other.cleanup_suggestion
-            && self.llm_applied == other.llm_applied
-            && self.llm_cleanup_status == other.llm_cleanup_status
     }
 }
 
@@ -275,8 +273,6 @@ pub struct LlmStatus {
     pub model_url: String,
     pub download_size_mb: u64,
     pub model_path: Option<String>,
-    #[serde(default)]
-    pub update_available: bool,
     /// Most recent cleanup outcome — populated from `AppState.llm_last_status`.
     /// Frontend uses this to display a status badge in the settings panel.
     #[serde(default = "default_llm_cleanup_status")]
@@ -292,6 +288,10 @@ pub struct ModelStatus {
     pub path: Option<String>,
     pub name: String,
     pub size_bytes: Option<u64>,
+    /// The cached speech model differs from the files this build was qualified
+    /// with. Dictation still works; Settings offers a re-download.
+    #[serde(default)]
+    pub integrity_warning: Option<String>,
 }
 
 #[cfg(test)]
@@ -319,16 +319,56 @@ mod tests {
     }
 
     #[test]
-    fn legacy_history_limit_does_not_block_unrelated_preferences() {
-        for limit in [0, 9, 500, 10_001, usize::MAX] {
-            let mut settings = Settings { max_history: limit, ..Default::default() };
-            settings.vocabulary = vec!["Qwen".into()];
-            settings.normalize().unwrap();
-            let saved = serde_json::to_string(&settings).unwrap();
-            let loaded: Settings = serde_json::from_str(&saved).unwrap();
-            assert_eq!(loaded.max_history, limit);
-            assert_eq!(loaded.vocabulary, ["Qwen"]);
+    fn legacy_fields_are_ignored_by_the_model() {
+        let json = r#"{
+            "push_to_talk_shortcut": "Ctrl+Space",
+            "toggle_shortcut": "Ctrl+D",
+            "cancel_shortcut": "Escape",
+            "show_overlay": true,
+            "auto_paste": true,
+            "restore_clipboard": true,
+            "model_path": "/old/model",
+            "language": "en",
+            "max_history": 42,
+            "launch_at_login": false,
+            "vocabulary": ["Qwen"]
+        }"#;
+        let loaded: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(loaded.vocabulary, ["Qwen"]);
+        // A legacy history limit must never become a deletion policy.
+        assert_eq!(loaded.history_retention_days, 0);
+        assert_eq!(loaded.audio_retention_days, 0);
+        let saved = serde_json::to_string(&loaded).unwrap();
+        for legacy in ["model_path", "language", "max_history"] {
+            assert!(!saved.contains(legacy), "{legacy} must not be written back");
         }
+    }
+
+    #[test]
+    fn normalize_trims_dictionary_rows_and_drops_untouched_ones() {
+        let mut settings = Settings {
+            dictionary: vec![
+                DictionaryEntry { heard: String::new(), replacement: "  ".into() },
+                DictionaryEntry { heard: " quinn ".into(), replacement: " Qwen".into() },
+                DictionaryEntry { heard: "half".into(), replacement: String::new() },
+            ],
+            input_device: Some("   ".into()),
+            ..Default::default()
+        };
+        settings.normalize().unwrap();
+        assert_eq!(settings.dictionary.len(), 2);
+        assert_eq!(settings.dictionary[0], DictionaryEntry { heard: "quinn".into(), replacement: "Qwen".into() });
+        assert!(settings.input_device.is_none());
+        // A half-filled row is the user's mistake to fix, not ours to guess.
+        assert!(settings.validate().unwrap_err().contains("Dictionary row 2"));
+    }
+
+    #[test]
+    fn validate_bounds_retention() {
+        let mut settings = Settings { history_retention_days: Settings::MAX_RETENTION_DAYS, ..Default::default() };
+        assert!(settings.validate().is_ok());
+        settings.audio_retention_days = Settings::MAX_RETENTION_DAYS + 1;
+        assert!(settings.validate().unwrap_err().contains("Recording retention"));
     }
 
     #[test]
@@ -393,9 +433,10 @@ mod tests {
         assert!(s.auto_paste);
         assert!(s.restore_clipboard);
         assert!(s.restore_focus_before_paste);
-        assert_eq!(s.model_path, "");
-        assert_eq!(s.language, "auto");
-        assert_eq!(s.max_history, 500);
+        assert!(s.input_device.is_none());
+        assert!(!s.sound_cues);
+        assert_eq!(s.history_retention_days, 0);
+        assert_eq!(s.audio_retention_days, 0);
         assert!(!s.launch_at_login);
         assert!(!s.llm_cleanup_enabled);
         assert!(s.dictionary.is_empty());
@@ -417,7 +458,8 @@ mod tests {
         let original = Settings {
             push_to_talk_shortcut: "Ctrl+Space".into(),
             push_to_talk_shortcut_alt: Some("Alt+Space".into()),
-            max_history: 42,
+            history_retention_days: 30,
+            input_device: Some("MacBook Pro Microphone".into()),
             llm_cleanup_enabled: true,
             auto_check_updates: false,
             ..Default::default()
@@ -495,6 +537,7 @@ mod tests {
             cleanup_suggestion: None,
             llm_applied: true,
             llm_cleanup_status: LlmCleanupStatus::Applied { elapsed_ms: 1234 },
+            saved_at: Some(Utc::now()),
         };
         let json = serde_json::to_string(&t).unwrap();
         let deserialized: Transcription = serde_json::from_str(&json).unwrap();
@@ -533,6 +576,7 @@ mod tests {
             cleanup_suggestion: None,
             llm_applied: false,
             llm_cleanup_status: LlmCleanupStatus::Idle,
+            saved_at: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(!json.contains("raw_text"));

@@ -18,21 +18,47 @@ pub struct PermissionStatus {
 
 // ---- Individual permission checks ----
 
-#[tauri::command]
-pub async fn check_microphone_permission() -> Result<bool, String> {
-    #[cfg(target_os = "macos")]
-    {
-        tokio::task::spawn_blocking(|| Ok(check_mic_status() == "authorized"))
-            .await
-            .map_err(|e| format!("Task join error: {}", e))?
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(true)
+/// AVFoundation's microphone authorization for this app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) enum MicAuthorization {
+    Authorized,
+    Denied,
+    Restricted,
+    NotDetermined,
+}
+
+#[cfg(target_os = "macos")]
+impl MicAuthorization {
+    /// The `PermissionStatus.microphone` value the frontend reads.
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Authorized => "authorized",
+            Self::Denied => "denied",
+            Self::Restricted => "restricted",
+            Self::NotDetermined => "not_determined",
+        }
     }
 }
 
-#[tauri::command]
+/// Read without prompting; safe to call from any thread.
+pub(crate) fn microphone_authorization() -> MicAuthorization {
+    #[cfg(target_os = "macos")]
+    {
+        check_mic_status()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        MicAuthorization::Authorized
+    }
+}
+
+pub async fn check_microphone_permission() -> Result<bool, String> {
+    tokio::task::spawn_blocking(|| Ok(microphone_authorization() == MicAuthorization::Authorized))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+}
+
 pub async fn check_accessibility_permission() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
@@ -84,7 +110,7 @@ pub async fn check_all_permissions() -> Result<PermissionStatus, String> {
     #[cfg(target_os = "macos")]
     {
         tokio::task::spawn_blocking(|| {
-            let microphone = check_mic_status();
+            let microphone = check_mic_status().as_str().to_string();
             log::info!("Permission check: microphone={}", microphone);
 
             let accessibility_api = crate::paste::is_accessibility_trusted();
@@ -143,7 +169,7 @@ pub async fn check_all_permissions() -> Result<PermissionStatus, String> {
 pub async fn open_accessibility_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        std::process::Command::new("/usr/bin/open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
             .spawn()
             .map_err(|e| format!("Failed to open System Settings: {}", e))?;
@@ -164,7 +190,7 @@ pub async fn fix_accessibility_permission() -> Result<(), String> {
             reset_accessibility_with(
                 || {
                     crate::process::bounded_command(
-                        std::process::Command::new("tccutil").args([
+                        std::process::Command::new("/usr/bin/tccutil").args([
                             "reset",
                             "Accessibility",
                             "com.sottoasr.app",
@@ -204,7 +230,7 @@ fn reset_accessibility_with(
 pub async fn open_input_monitoring_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        std::process::Command::new("/usr/bin/open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
             .spawn()
             .map_err(|e| format!("Failed to open System Settings: {}", e))?;
@@ -216,7 +242,7 @@ pub async fn open_input_monitoring_settings() -> Result<(), String> {
 pub async fn open_microphone_settings() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
+        std::process::Command::new("/usr/bin/open")
             .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
             .spawn()
             .map_err(|e| format!("Failed to open System Settings: {}", e))?;
@@ -224,19 +250,35 @@ pub async fn open_microphone_settings() -> Result<(), String> {
     Ok(())
 }
 
-/// Open an HTTPS URL in the default browser.
+/// Hosts the app links to. Anything else could be a page a compromised
+/// webview wants the user to trust.
+const OPEN_URL_HOSTS: [&str; 3] = ["huggingface.co", "github.com", "sottoasr.app"];
+
+fn checked_url(url: &str) -> Result<tauri::Url, String> {
+    let parsed = tauri::Url::parse(url).map_err(|_| "This link is not a valid web address".to_string())?;
+    let allowed = parsed.scheme() == "https"
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.host_str().is_some_and(|host| OPEN_URL_HOSTS.contains(&host));
+    if !allowed {
+        return Err("SottoASR opens only HTTPS links to huggingface.co, github.com and sottoasr.app".into());
+    }
+    Ok(parsed)
+}
+
+/// Open an allowed HTTPS URL in the default browser.
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://") {
-        return Err("Only HTTPS URLs are allowed".into());
-    }
+    let url = checked_url(&url)?;
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
-            .arg(&url)
+        std::process::Command::new("/usr/bin/open")
+            .arg(url.as_str())
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = url;
     Ok(())
 }
 
@@ -289,13 +331,12 @@ pub fn prompt_accessibility() {
 }
 
 /// Check microphone permission status via AVFoundation.
-/// Returns: "authorized", "denied", "not_determined", or "restricted"
 ///
 /// On ARM64, objc_msgSend must be called via a typed function pointer cast,
 /// NOT as a variadic function. ARM64's calling convention passes variadic args
 /// on the stack, but objc_msgSend expects them in registers.
 #[cfg(target_os = "macos")]
-fn check_mic_status() -> String {
+fn check_mic_status() -> MicAuthorization {
     unsafe {
         extern "C" {
             fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
@@ -306,7 +347,7 @@ fn check_mic_status() -> String {
         let class = objc_getClass(c"AVCaptureDevice".as_ptr());
         if class.is_null() {
             log::warn!("AVCaptureDevice class not found — assuming not_determined");
-            return "not_determined".into();
+            return MicAuthorization::NotDetermined;
         }
 
         #[link(name = "AVFoundation", kind = "framework")]
@@ -317,7 +358,7 @@ fn check_mic_status() -> String {
         let media_type = AVMediaTypeAudio;
         if media_type.is_null() {
             log::warn!("AVMediaTypeAudio is null");
-            return "not_determined".into();
+            return MicAuthorization::NotDetermined;
         }
 
         let sel = sel_registerName(c"authorizationStatusForMediaType:".as_ptr());
@@ -335,13 +376,13 @@ fn check_mic_status() -> String {
         let status = msg_send(class, sel, media_type);
 
         match status {
-            0 => "not_determined".into(),
-            1 => "restricted".into(),
-            2 => "denied".into(),
-            3 => "authorized".into(),
+            0 => MicAuthorization::NotDetermined,
+            1 => MicAuthorization::Restricted,
+            2 => MicAuthorization::Denied,
+            3 => MicAuthorization::Authorized,
             _ => {
                 log::warn!("Unknown AVAuthorizationStatus: {}", status);
-                "not_determined".into()
+                MicAuthorization::NotDetermined
             }
         }
     }
@@ -352,12 +393,10 @@ fn check_mic_status() -> String {
 #[cfg(target_os = "macos")]
 fn request_mic_access() -> Result<bool, String> {
     // First check current status
-    let current = check_mic_status();
-    if current == "authorized" {
-        return Ok(true);
-    }
-    if current == "denied" || current == "restricted" {
-        return Ok(false);
+    match check_mic_status() {
+        MicAuthorization::Authorized => return Ok(true),
+        MicAuthorization::Denied | MicAuthorization::Restricted => return Ok(false),
+        MicAuthorization::NotDetermined => {}
     }
 
     // Status is "not_determined" — trigger the native prompt by attempting
@@ -374,12 +413,12 @@ fn request_mic_access() -> Result<bool, String> {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Re-check status
-    Ok(check_mic_status() == "authorized")
+    Ok(check_mic_status() == MicAuthorization::Authorized)
 }
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::reset_accessibility_with;
+    use super::{checked_url, reset_accessibility_with};
     use std::cell::Cell;
     use std::os::unix::process::ExitStatusExt;
     use std::process::{ExitStatus, Output};
@@ -411,5 +450,30 @@ mod tests {
         let prompts = Cell::new(0);
         reset_accessibility_with(|| Ok(output(0)), || prompts.set(prompts.get() + 1)).unwrap();
         assert_eq!(prompts.get(), 1);
+    }
+
+    #[test]
+    fn open_url_accepts_only_https_links_to_known_hosts() {
+        for allowed in [
+            "https://huggingface.co/mlx-community/model",
+            "https://github.com/juanqui/sottoasr/releases",
+            "https://SottoASR.app/help",
+        ] {
+            assert!(checked_url(allowed).is_ok(), "{allowed}");
+        }
+        for rejected in [
+            "http://github.com/juanqui/sottoasr",
+            "https://example.com/",
+            "https://github.com.example.com/",
+            "https://evilgithub.com/",
+            "https://api.github.com/",
+            "https://user@github.com/",
+            "https://user:secret@huggingface.co/",
+            "https://github.com@example.com/",
+            "file:///etc/passwd",
+            "not a url",
+        ] {
+            assert!(checked_url(rejected).is_err(), "{rejected}");
+        }
     }
 }

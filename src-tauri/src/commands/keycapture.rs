@@ -1,16 +1,56 @@
 //! Key capture for the shortcut recorder.
 //!
 //! Uses CGEventTap to intercept ALL key events (including system-level media keys)
-//! and emits them as Tauri events.
+//! and emits them as Tauri events. The tap is enabled only while a capture
+//! is active, and a capture holds `shortcuts_updating`, so no recording can
+//! start and the global shortcuts stay unregistered until it ends.
 
-use tauri::{AppHandle, Emitter, Manager};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use tauri::{AppHandle, Emitter, Manager, State};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
+use crate::state::AppState;
 
+struct CaptureSession {
+    /// Bumped by every start and end, so a start that a blur overtook fails.
+    generation: u64,
+    /// True from a successful start until `end_capture`. While true this
+    /// module owns `AppState::shortcuts_updating`.
+    active: bool,
+}
+
+/// Serializes start, end and tap enabling, so the tap's state always follows
+/// the latest capture state.
+static SESSION: Mutex<CaptureSession> = Mutex::new(CaptureSession { generation: 0, active: false });
+/// Lock-free mirror of `CaptureSession::active` for the tap callback.
 static CAPTURING: AtomicBool = AtomicBool::new(false);
-static CAPTURE_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(target_os = "macos")]
+static TAP: std::sync::atomic::AtomicPtr<std::ffi::c_void> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn CGEventTapEnable(tap: *const std::ffi::c_void, enable: bool);
+}
+
+fn session() -> MutexGuard<'static, CaptureSession> {
+    SESSION.lock().unwrap_or_else(|error| error.into_inner())
+}
+
+/// Enable the tap exactly while capturing. Callers hold the session lock.
+fn sync_tap(session: &CaptureSession) {
+    #[cfg(target_os = "macos")]
+    {
+        let tap = TAP.load(Ordering::SeqCst);
+        if !tap.is_null() {
+            unsafe { CGEventTapEnable(tap, session.active) };
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = session;
+}
 
 /// Start the CGEventTap background thread. Called once at app startup.
-/// The tap runs continuously but only emits events when CAPTURING is true.
+/// The tap stays disabled except while a capture is active.
 /// Retries every 5 seconds if permission is not yet granted.
 pub fn init_key_capture_thread(app: &AppHandle) {
     #[cfg(target_os = "macos")]
@@ -45,35 +85,91 @@ pub fn init_key_capture_thread(app: &AppHandle) {
     }
 }
 
-/// Native window events call this even if frontend cleanup never runs.
-pub fn reset_key_capture() {
-    CAPTURE_GENERATION.fetch_add(1, Ordering::SeqCst);
+/// End any capture and disable the tap. Returns true when a capture was
+/// active, so the caller must restore the shortcuts it paused.
+fn end_capture() -> bool {
+    let mut session = session();
+    session.generation += 1;
+    let ended = std::mem::replace(&mut session.active, false);
     CAPTURING.store(false, Ordering::SeqCst);
+    sync_tap(&session);
+    ended
+}
+
+/// Re-register the saved shortcuts under `settings_update`, as
+/// `apply_shortcuts` does, then release the guard `begin_capture` took.
+async fn restore_shortcuts(app: &AppHandle) -> Result<(), String> {
+    let state: State<'_, AppState> = app.state();
+    let _update = state.settings_update.lock().await;
+    let result = crate::commands::settings::register_saved_shortcuts(app, &state).await;
+    state.shortcuts_updating.store(false, Ordering::SeqCst);
+    if let Err(error) = &result {
+        log::error!("Keyboard shortcuts could not be restored after recording one: {error}");
+    }
+    result
+}
+
+/// Native window events call this even if frontend cleanup never runs.
+pub fn reset_key_capture(app: &AppHandle) {
+    if end_capture() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = restore_shortcuts(&app).await;
+        });
+    }
+}
+
+/// Runs on the main thread, where window focus and global shortcut
+/// registration are read and changed.
+fn begin_capture(app: &AppHandle, generation: u64) -> Result<(), String> {
+    let focused = app.get_webview_window("settings")
+        .is_some_and(|window| window.is_focused().unwrap_or(false));
+    let mut session = session();
+    if !focused || session.generation != generation {
+        return Err("Focus Settings before recording a keyboard shortcut".to_string());
+    }
+    if session.active {
+        return Ok(());
+    }
+    let state: State<'_, AppState> = app.state();
+    // Refuses unless Idle, and blocks recordings until `restore_shortcuts`.
+    let update = state.begin_shortcut_update()?;
+    // A pressed shortcut must reach the recorder instead of its action.
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    if let Err(error) = app.global_shortcut().unregister_all() {
+        log::warn!("Could not pause keyboard shortcuts while recording one: {error}");
+    }
+    // The flag outlives this call; `restore_shortcuts` clears it.
+    std::mem::forget(update);
+    session.active = true;
+    CAPTURING.store(true, Ordering::SeqCst);
+    sync_tap(&session);
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn start_key_capture(app: AppHandle) -> Result<(), String> {
-    let generation = CAPTURE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+pub async fn start_key_capture(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let generation = {
+        let mut session = session();
+        session.generation += 1;
+        session.generation
+    };
+    let _update = state.settings_update.lock().await;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     let handle = app.clone();
     app.run_on_main_thread(move || {
-        let focused = handle.get_webview_window("settings")
-            .is_some_and(|window| window.is_focused().unwrap_or(false));
-        let result = if focused && CAPTURE_GENERATION.load(Ordering::SeqCst) == generation {
-            CAPTURING.store(true, Ordering::SeqCst);
-            Ok(())
-        } else {
-            Err("Focus Settings before recording a keyboard shortcut".to_string())
-        };
-        let _ = sender.send(result);
+        let _ = sender.send(begin_capture(&handle, generation));
     }).map_err(|error| error.to_string())?;
     receiver.await.map_err(|_| "Keyboard shortcut capture did not start".to_string())?
 }
 
 #[tauri::command]
-pub async fn stop_key_capture() -> Result<(), String> {
-    reset_key_capture();
-    Ok(())
+pub async fn stop_key_capture(app: AppHandle) -> Result<(), String> {
+    if end_capture() {
+        restore_shortcuts(&app).await
+    } else {
+        Ok(())
+    }
 }
 
 // Correct undocumented CGEventField IDs for NX_SYSDEFINED events
@@ -110,6 +206,11 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
             | (1 << 12)  // kCGEventFlagsChanged (modifier changes, some special keys)
             | (1 << 14); // NX_SYSDEFINED (media keys)
 
+        // macOS sends these instead of an event after it turns the tap off,
+        // and it never turns the tap back on by itself.
+        const TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
+        const TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFF_FFFF;
+
         extern "C" fn callback(
             _proxy: *const std::ffi::c_void,
             event_type_raw: u32,
@@ -117,6 +218,15 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
             user_info: *mut std::ffi::c_void,
         ) -> *const std::ffi::c_void {
             unsafe {
+                if event_type_raw == TAP_DISABLED_BY_TIMEOUT || event_type_raw == TAP_DISABLED_BY_USER_INPUT {
+                    let session = session();
+                    if session.active {
+                        log::warn!("macOS paused key capture; resuming it");
+                        sync_tap(&session);
+                    }
+                    return event;
+                }
+
                 if !CAPTURING.load(Ordering::SeqCst) {
                     return event;
                 }
@@ -236,7 +346,6 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
             fn CFMachPortCreateRunLoopSource(alloc: *const std::ffi::c_void, port: *const std::ffi::c_void, order: i64) -> *const std::ffi::c_void;
             fn CFRunLoopGetCurrent() -> *const std::ffi::c_void;
             fn CFRunLoopAddSource(rl: *const std::ffi::c_void, source: *const std::ffi::c_void, mode: *const std::ffi::c_void);
-            fn CGEventTapEnable(tap: *const std::ffi::c_void, enable: bool);
             static kCFRunLoopCommonModes: *const std::ffi::c_void;
         }
 
@@ -248,12 +357,17 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
             return false;
         }
 
-        CGEventTapEnable(tap, true);
+        {
+            let session = session();
+            TAP.store(tap as *mut std::ffi::c_void, Ordering::SeqCst);
+            // A new tap starts enabled; keep it off unless a capture is active.
+            sync_tap(&session);
+        }
         let source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
         let run_loop = CFRunLoopGetCurrent();
         CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
 
-        log::info!("CGEventTap created and enabled, entering run loop");
+        log::info!("CGEventTap created (off until key capture starts), entering run loop");
 
         extern "C" {
             fn CFRunLoopRun();
@@ -264,6 +378,8 @@ fn try_create_cgevent_tap(app: &AppHandle) -> bool {
         CFRunLoopRun();
 
         // If we get here, the run loop exited — tap was invalidated
+        let _session = session();
+        TAP.store(std::ptr::null_mut(), Ordering::SeqCst);
         true
     }
 }

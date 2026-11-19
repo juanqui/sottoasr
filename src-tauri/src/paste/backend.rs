@@ -1,5 +1,5 @@
 /// Trait for paste/clipboard operations.
-/// Production: CGEvent Cmd+V + arboard clipboard on macOS.
+/// Production: CGEvent Cmd+V with arboard and NSPasteboard on macOS.
 /// Tests: records pasted text for assertion.
 pub trait PasteBackend: Send + Sync {
     /// Paste text at the cursor position in the target app.
@@ -39,7 +39,7 @@ pub async fn write_text(
     }).await.map_err(|error| format!("Clipboard worker failed: {error}"))?
 }
 
-/// Production paste backend using macOS CGEvent + arboard.
+/// Production paste backend using macOS CGEvent, arboard and NSPasteboard.
 #[cfg(target_os = "macos")]
 pub struct MacOsPasteBackend;
 

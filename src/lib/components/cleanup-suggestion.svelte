@@ -49,15 +49,15 @@
 </section>
 
 <style>
-  .suggestion { margin:0 16px 14px; padding:12px; border:1px solid #fbbf2438; border-radius:8px; background:#fbbf2408; }
-  h3 { margin:0 0 5px; font-size:12px; font-weight:600; color:#fcd34d; }
+  .suggestion { margin:0 16px 14px; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--warning-bg); }
+  h3 { margin:0 0 5px; font-size:12px; font-weight:600; color:var(--warning); }
   .warning, .legend { margin:0 0 10px; font-size:11px; line-height:1.5; color:var(--text-dim); }
   .suggestion-diff { font-size:14px; line-height:1.6; color:var(--text-bright); white-space:pre-wrap; overflow-wrap:anywhere; }
-  del { color:#fca5a5; background:#ef44442e; text-decoration:line-through; }
-  ins { color:#86efac; background:#22c55e2e; }
+  del { color:var(--danger); background:var(--diff-removed-bg); text-decoration:line-through; }
+  ins { color:var(--success); background:var(--diff-added-bg); }
   .legend { margin:7px 0 10px; }
   button { padding:5px 9px; border:1px solid var(--border); border-radius:6px; font:inherit; font-size:11px; background:var(--card-bg); color:var(--text-bright); cursor:pointer; }
   button:disabled { opacity:.6; cursor:default; }
   button:hover:not(:disabled) { border-color:var(--border-hover); }
-  .feedback { margin-left:8px; font-size:11px; color:var(--accent); }
+  .feedback { margin-left:8px; font-size:11px; color:var(--accent-text); }
 </style>

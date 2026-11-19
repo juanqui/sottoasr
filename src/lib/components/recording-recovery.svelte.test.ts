@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 vi.mock('@tauri-apps/api/event', () => ({listen:vi.fn(async () => vi.fn())}));
-vi.mock('../utils/tauri', () => ({getRecoverableRecordings:vi.fn(), getRecoveryNotice:vi.fn(), recoverRecording:vi.fn(), revealRecoveryRecording:vi.fn()}));
-import { getRecoverableRecordings, getRecoveryNotice, recoverRecording, revealRecoveryRecording } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({getRecoverableRecordings:vi.fn(), getRecoveryNotice:vi.fn(), recoverRecording:vi.fn(), revealRecoveryRecording:vi.fn(), deleteRecoveryRecording:vi.fn()}));
+import { deleteRecoveryRecording, getRecoverableRecordings, getRecoveryNotice, recoverRecording, revealRecoveryRecording } from '../utils/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { transcriptionStore } from '../stores/transcriptions.svelte';
 import RecordingRecovery from './recording-recovery.svelte';
@@ -18,6 +18,8 @@ beforeEach(() => {
   vi.mocked(getRecoveryNotice).mockResolvedValue(null);
   vi.mocked(recoverRecording).mockResolvedValue(recovered as never);
   vi.mocked(revealRecoveryRecording).mockResolvedValue(undefined);
+  vi.mocked(deleteRecoveryRecording).mockResolvedValue(undefined);
+  HTMLDialogElement.prototype.showModal = function () {this.open=true;}; HTMLDialogElement.prototype.close = function () {this.open=false;};
 });
 afterEach(async () => {if(component) await unmount(component);component=undefined;target?.remove();});
 function render() { target=document.createElement('div');document.body.append(target);component=mount(RecordingRecovery,{target});flushSync(); }
@@ -84,6 +86,15 @@ it('reprocesses once: disables the action while active, saves to history, and re
   await vi.waitFor(()=>expect(transcriptionStore.items.map((item)=>item.id)).toContain('recovered-1'));
   await vi.waitFor(()=>expect(target.querySelector('.recovery-item')).toBeNull());
   expect(target.querySelector('.recovery-status')).not.toBeNull();
+});
+
+it('shows a reprocessed recording in history after retention removed its earlier entry', async () => {
+  transcriptionStore.remove([recovered.id]); // interrupted entry expired; its audio stays pending
+  vi.mocked(getRecoverableRecordings).mockResolvedValueOnce([pendingItem]);
+  render();
+  await vi.waitFor(()=>expect(target.querySelector('.recovery-item')).not.toBeNull());
+  button('Reprocess').click();
+  await vi.waitFor(()=>expect(transcriptionStore.items.map((item)=>item.id)).toContain(recovered.id));
 });
 
 it('keeps the pending item and offers retry when reprocessing fails, then succeeds on retry', async () => {
@@ -164,4 +175,32 @@ it('disables Reprocess but keeps Show in Finder for an item the backend flagged 
   expect(target.querySelector<HTMLButtonElement>('.reveal')!.disabled).toBe(false);
   button('Show in Finder').click();
   await vi.waitFor(()=>expect(revealRecoveryRecording).toHaveBeenCalledWith(broken.id));
+});
+
+it('deletes pending audio only after a confirmation that names it, then drops the row', async () => {
+  vi.mocked(getRecoverableRecordings).mockResolvedValueOnce([pendingItem]).mockResolvedValue([]);
+  render();
+  await vi.waitFor(()=>expect(target.querySelector('.recovery-item')).not.toBeNull());
+  button('Delete audio').click(); flushSync();
+  const dialog = target.querySelector('dialog')!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.querySelector('p')?.textContent).toContain('permanently deletes the audio');
+  expect(deleteRecoveryRecording).not.toHaveBeenCalled();
+  dialog.querySelector<HTMLButtonElement>('button.confirm')!.click();
+  await vi.waitFor(()=>expect(target.querySelector('.recovery-item')).toBeNull());
+  expect(deleteRecoveryRecording).toHaveBeenCalledWith(pendingItem.id);
+  expect(target.querySelector('.recovery-status')?.textContent).toContain('Recording deleted');
+  expect(dialog.open).toBe(false);
+});
+
+it('keeps the recording and shows the backend text when deletion is refused', async () => {
+  vi.mocked(getRecoverableRecordings).mockResolvedValue([pendingItem]);
+  vi.mocked(deleteRecoveryRecording).mockRejectedValueOnce('Finish the current recording or transcription, then try again.');
+  render();
+  await vi.waitFor(()=>expect(target.querySelector('.recovery-item')).not.toBeNull());
+  button('Delete audio').click(); flushSync();
+  target.querySelector<HTMLButtonElement>('dialog button.confirm')!.click();
+  await vi.waitFor(()=>expect(target.querySelector('.recovery-item-error')?.textContent).toContain('Finish the current recording or transcription'));
+  expect(target.querySelector('.recovery-item')).not.toBeNull();
+  expect(target.querySelector('dialog')!.open).toBe(false);
 });

@@ -3,11 +3,13 @@ THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
 
 SottoASR incorporates third-party software components listed below.
 Generated: 2026-03-22
+Edited: 2026-11-19. Entries for packages that no longer ship were removed.
+The versions of the other packages are as of 2026-03-22.
 
 
 LICENSE SUMMARY
 ------------------------------------------------------------------------------
-Total packages: 660 (600 Rust, 60 JavaScript)
+Total packages: 650 (596 Rust, 54 JavaScript)
 
   License                                                 Count
   ------------------------------------------------------- -----
@@ -26,8 +28,8 @@ Total packages: 660 (600 Rust, 60 JavaScript)
   BSL-1.0                                                     2
   CC0-1.0 OR MIT-0 OR Apache-2.0                              1
   ISC                                                         3
-  MIT                                                       201
-  MIT OR Apache-2.0                                         344
+  MIT                                                       200
+  MIT OR Apache-2.0                                         335
   MIT OR Apache-2.0 OR LGPL-2.1-or-later                      2
   MIT OR Apache-2.0 OR Zlib                                   5
   MIT OR Zlib OR Apache-2.0                                   1
@@ -2083,26 +2085,6 @@ tauri-plugin-log 2.8.0
   Authors: Tauri Programme within The Commons Conservancy
   Repository: https://github.com/tauri-apps/plugins-workspace
 
-tauri-plugin-os 2.3.2
-  License: Apache-2.0 OR MIT
-  Authors: Tauri Programme within The Commons Conservancy
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-tauri-plugin-positioner 2.3.1
-  License: Apache-2.0 OR MIT
-  Authors: Tauri Programme within The Commons Conservancy
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-tauri-plugin-process 2.3.1
-  License: Apache-2.0 OR MIT
-  Authors: Tauri Programme within The Commons Conservancy
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-tauri-plugin-store 2.4.2
-  License: Apache-2.0 OR MIT
-  Authors: Tauri Programme within The Commons Conservancy
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
 tauri-runtime 2.10.1
   License: Apache-2.0 OR MIT
   Authors: Tauri Programme within The Commons Conservancy
@@ -3004,37 +2986,13 @@ JAVASCRIPT DEPENDENCIES (via npm)
   License: MIT OR Apache-2.0
   Repository: https://github.com/tauri-apps/plugins-workspace
 
-@tauri-apps/plugin-global-shortcut 2.3.1
-  License: MIT OR Apache-2.0
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
 @tauri-apps/plugin-log 2.8.0
-  License: MIT OR Apache-2.0
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-@tauri-apps/plugin-os 2.3.2
-  License: MIT OR Apache-2.0
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-@tauri-apps/plugin-positioner 2.3.1
-  License: MIT OR Apache-2.0
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-@tauri-apps/plugin-process 2.3.1
-  License: MIT OR Apache-2.0
-  Repository: https://github.com/tauri-apps/plugins-workspace
-
-@tauri-apps/plugin-store 2.4.2
   License: MIT OR Apache-2.0
   Repository: https://github.com/tauri-apps/plugins-workspace
 
 @tsconfig/svelte 5.0.8
   License: MIT
   Repository: https://github.com/tsconfig/bases
-
-@types/diff 7.0.2
-  License: MIT
-  Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
 
 @types/estree 1.0.8
   License: MIT
@@ -3244,8 +3202,7 @@ NVIDIA Parakeet TDT v3 (0.6B)
   Copyright: NVIDIA Corporation
   URL: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
 
-SottoASR Cleanup (fine-tuned LFM2.5-350M, via juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit)
-  License: LFM-1.0 (Liquid Foundation Model License)
-  Base model copyright: LiquidAI
-  URL: https://huggingface.co/LiquidAI/LFM2.5-350M-Base
-  Fine-tuned: https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m
+OpenBMB MiniCPM5 2B (openbmb/MiniCPM5-2B-MLX, 4-bit MLX)
+  License: Apache-2.0
+  Author: OpenBMB
+  URL: https://huggingface.co/openbmb/MiniCPM5-2B-MLX

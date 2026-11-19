@@ -33,6 +33,8 @@ REQUEST_TIMEOUT_SECONDS = 10
 WARMUP_TEXT = "Please um keep this readiness check local."
 WARMUP_TEXT_SECOND = "Please um keep the second readiness check local too."
 VERIFICATION_FILE = "sotto-verified.json"
+# The four qualified top-level packages; the full set is sidecar/requirements.lock.
+# Must match RUNTIME_PINS in src/llm/engine.rs (a Rust test checks both and the lock).
 RUNTIME_PINS = {"mlx": "0.32.2", "mlx-lm": "0.31.3", "transformers": "5.3.0", "huggingface-hub": "1.7.2"}
 MODEL_FILES = {
     "model.safetensors": (1_416_035_216, "c207798696a4a454e7ac211b25227625466c693335941cee8904fb922f295cc1"),
@@ -492,10 +494,6 @@ def handle_request(request):
                 "downloaded": downloaded, "loaded": warmed, "warmed": warmed, "model_name": MODEL_NAME,
                 "model_id": MODEL_ID, "local_revision": MODEL_REVISION if downloaded else None,
                 "prompt_sha256": PROMPT_SHA256}
-    if action == "check_update":
-        # An app release changes the qualified pin; remote main is never installed.
-        return {"ok": True, "update_available": False, "local_revision": MODEL_REVISION if cached_model_path() else None,
-                "remote_revision": MODEL_REVISION}
     if action == "download":
         prepare_model()
         return {"ok": True}

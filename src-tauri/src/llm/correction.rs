@@ -18,14 +18,15 @@
 
 use std::collections::HashMap;
 use std::ops::Range;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::llm::cleanup::sidecar_cleanup_batch;
+use crate::llm::cleanup::{LLM_CLEANUP_TIMEOUT, sidecar_cleanup_batch};
 use crate::models::CleanupMode;
-use crate::llm::engine::BatchItem;
+use crate::llm::engine::{BatchItem, CLEANUP_BATCH_TIMEOUT};
 use crate::llm::validation::{
-    DeletionContext, WorkMask, authorized_caps, caps_flips, deletions_candidate,
-    sentence_boundaries, validate_cleanup_with_edits, validate_deletions, word_spans,
+    DeletionContext, MAX_CLEANUP_BYTES, ProtectedTerms, WorkMask, authorized_caps, caps_flips,
+    deletions_candidate, sentence_boundaries, validate_cleanup_with_edits, validate_deletions,
+    word_spans,
 };
 use crate::models::LlmCleanupStatus;
 use crate::state::AppState;
@@ -65,6 +66,12 @@ impl Default for CorrectionConfig {
 /// truth: the engine's wire-level item budget.
 const MAX_REQUEST_BYTES_SOFT: usize = crate::llm::engine::MAX_ITEM_BYTES;
 
+/// Total time one cleanup may spend dispatching (R-04). The stop path waits
+/// for cleanup before it pastes, so cleanup ends within this budget: a chunk
+/// is sent only while the budget still holds the engine's own batch deadline
+/// (`chunk_limit`), and windows not sent keep their raw text.
+const CLEANUP_DISPATCH_BUDGET: Duration = Duration::from_secs(60);
+
 /// One window to clean: exact source bytes + byte range of the TARGET inside
 /// them + the absolute byte offset of the key inside `F`. Context earns no
 /// authority; stop-path offsets are authoritative (never derived by searching).
@@ -91,7 +98,11 @@ pub fn plan_windows(text: &str, cfg: &CorrectionConfig) -> Vec<WindowRequest> {
     let mut cursor = 0usize;
     while cursor < spans.len() {
         let cap_end = (cursor + cfg.max_target_words).min(spans.len());
-        let boundary = boundaries.iter().copied().find(|&b| b > cursor);
+        // `boundaries` ascends, so the first one past `cursor` is a binary
+        // search; a scan from the start for every window was quadratic.
+        let boundary = boundaries
+            .get(boundaries.partition_point(|&b| b <= cursor))
+            .copied();
         // Chunk target ends at the sentence terminator inside the cap, else
         // at the cap (overlong span piece).
         let chunk_end = boundary.filter(|&b| b <= cap_end).unwrap_or(cap_end);
@@ -158,15 +169,6 @@ fn build_request(
 /// accepted alongside them.
 type WindowAuthority = (Vec<bool>, Vec<(usize, char)>);
 
-/// Turn one sidecar proposal into target-only deletion + caps authority for a
-/// window, or `None` (rejected). The target subset of the frozen edit set is
-/// re-adjudicated against the FULL window bytes via `validate_deletions`
-/// (context rules recompute jointly — deletions legal in a joint edit can be
-/// illegal alone) and re-derived by the frozen pass over the subset's own
-/// output, so what a window earns is exactly what the frozen gate accepts. An
-/// all-false result is still settled NO-CHANGE authority. Caps flips the
-/// frozen pass accepted for TARGET tokens ride alongside the flags (key-token
-/// indices); they are applied globally at terminal time, never here.
 /// Apply a Replace-mode edit script to the window's key bytes, returning the
 /// reconstructed proposal — or `None` when the reply is not an edit script at
 /// all (fail-closed: the region stays raw). Byte-exact port of the benchmark
@@ -178,7 +180,10 @@ type WindowAuthority = (Vec<bool>, Vec<(usize, char)>);
 /// every non-overlapping occurrence, left to right, sequentially. A `find`
 /// matching nothing is a harmless no-op (measured copy-fidelity: attempted
 /// edits are byte-exact; misses carry no authority because the result still
-/// passes the frozen validator).
+/// passes the frozen validator). A script whose working text grows past
+/// `MAX_CLEANUP_BYTES` is rejected as soon as it does (R-11): the validator
+/// refuses such a proposal anyway, and lines that each double the text
+/// would otherwise exhaust memory.
 fn apply_edit_lines(reply: &str, key: &str) -> Option<String> {
     let s = reply.replace("<transcript>", "").replace("</transcript>", "");
     let s = s.trim();
@@ -203,17 +208,32 @@ fn apply_edit_lines(reply: &str, key: &str) -> Option<String> {
             out.push_str(&text[cur..cur + rel]);
             out.push_str(new);
             cur = cur + rel + old.len();
+            if out.len() > MAX_CLEANUP_BYTES {
+                return None;
+            }
         }
         out.push_str(&text[cur..]);
+        if out.len() > MAX_CLEANUP_BYTES {
+            return None;
+        }
         text = out;
     }
     Some(text)
 }
 
+/// Turn one sidecar proposal into target-only deletion + caps authority for a
+/// window, or `None` (rejected). The target subset of the frozen edit set is
+/// re-adjudicated against the FULL window bytes via `validate_deletions`
+/// (context rules recompute jointly — deletions legal in a joint edit can be
+/// illegal alone) and re-derived by the frozen pass over the subset's own
+/// output, so what a window earns is exactly what the frozen gate accepts. An
+/// all-false result is still settled NO-CHANGE authority. Caps flips the
+/// frozen pass accepted for TARGET tokens ride alongside the flags (key-token
+/// indices); they are applied globally at terminal time, never here.
 fn target_authority(
     request: &WindowRequest,
     proposal: &str,
-    terms: &[String],
+    terms: &ProtectedTerms,
 ) -> Option<WindowAuthority> {
     let edits = validate_cleanup_with_edits(&request.key, proposal, terms).ok()?;
     let spans = word_spans(&request.key);
@@ -369,6 +389,55 @@ struct Authority<'a> {
     request: &'a WindowRequest,
 }
 
+/// R-04: whether a failed chunk ends dispatch for the rest of this cleanup.
+/// A sidecar that could not start (`Unavailable`), a deadline (`TimedOut`),
+/// or a handle that was not put back (retired: dead pipe, untrustworthy
+/// reply, panic, killed orphan) would cost every later chunk the same wait or
+/// a respawn, so their regions stay raw. A typed decline that kept the handle
+/// costs only its own chunk.
+fn ends_dispatch(status: &LlmCleanupStatus, sidecar_resident: bool) -> bool {
+    !sidecar_resident
+        || matches!(
+            status,
+            LlmCleanupStatus::Unavailable { .. } | LlmCleanupStatus::TimedOut { .. }
+        )
+}
+
+/// R-04: the deadline for a chunk sent after `spent` of the budget, or
+/// `None` when the budget no longer holds the engine's own batch deadline. A
+/// sent chunk always gets at least that deadline, so a healthy sidecar (its
+/// own alarm answers at 10 s) replies before this limit could kill it and
+/// keeps its resident handle; the limit never ends after the budget.
+fn chunk_limit(spent: Duration) -> Option<Duration> {
+    let remaining = CLEANUP_DISPATCH_BUDGET.checked_sub(spent)?;
+    (remaining >= CLEANUP_BATCH_TIMEOUT).then_some(LLM_CLEANUP_TIMEOUT.min(remaining))
+}
+
+/// Take the `llm_operation` permit for one cleanup pass.
+///
+/// Ordinary contention (download, prepare, another cleanup) answers
+/// `None` immediately — the existing "busy" semantics. The one exception
+/// is the recording-start speculative prewarm: while `llm_prewarming` counts
+/// one in flight, a cleanup that arrives mid-prewarm waits up to
+/// `handoff_wait` for the sentinel generation to finish and the permit to
+/// drop, because that generation IS the page-in this cleanup needs anyway.
+/// `handoff_wait` is a parameter so tests can exercise the expiry without a
+/// 10 s real wait.
+async fn acquire_cleanup_operation(
+    state: &AppState,
+    handoff_wait: Duration,
+) -> Option<tokio::sync::MutexGuard<'_, ()>> {
+    match state.llm_operation.try_lock() {
+        Ok(guard) => Some(guard),
+        Err(_) if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) != 0 => {
+            tokio::time::timeout(handoff_wait, state.llm_operation.lock())
+                .await
+                .ok()
+        }
+        Err(_) => None,
+    }
+}
+
 /// The shared cleanup engine — EVERY caller, session or not.
 ///
 /// `f` (the full-file ASR text) is planned into bounded windows at known
@@ -385,45 +454,37 @@ struct Authority<'a> {
 /// Terminal authority: the shared `DeletionContext` adjudicates the composed
 /// vector. Output is constructed from `f`'s own bytes — no model-proposal
 /// alignment, no byte/word cap — so one failed chunk can never cost the
-/// whole transcript: later chunks still run and their regions still apply
+/// whole transcript: chunks already answered still apply their regions
 /// (per-window isolation became per-chunk + per-item isolation).
-/// Take the `llm_operation` permit for one cleanup pass.
 ///
-/// Ordinary contention (download, prepare, another cleanup) answers
-/// `None` immediately — the existing "busy" semantics. The one exception
-/// is the recording-start speculative prewarm: while `llm_prewarming` is
-/// set, a cleanup that arrives mid-prewarm waits up to `handoff_wait` for
-/// the sentinel generation to finish and the permit to drop, because that
-/// generation IS the page-in this cleanup needs anyway. `handoff_wait` is
-/// a parameter so tests can exercise the expiry without a 10 s real wait.
-async fn acquire_cleanup_operation(
-    state: &AppState,
-    handoff_wait: Duration,
-) -> Option<tokio::sync::MutexGuard<'_, ()>> {
-    match state.llm_operation.try_lock() {
-        Ok(guard) => Some(guard),
-        Err(_) if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) => {
-            tokio::time::timeout(handoff_wait, state.llm_operation.lock())
-                .await
-                .ok()
-        }
-        Err(_) => None,
-    }
-}
-
+/// Dispatch stops after the first transport-level failure and once less
+/// than the engine's batch deadline is left of `CLEANUP_DISPATCH_BUDGET`
+/// (R-04); the regions not sent stay raw while validated edits elsewhere
+/// still apply.
 pub(crate) async fn plan_cleanup(
     state: &AppState,
     f: &str,
     terms: &[String],
 ) -> (String, LlmCleanupStatus) {
-    let started = std::time::Instant::now();
+    let started = Instant::now();
+    plan_cleanup_with_clock(state, f, terms, move || started.elapsed()).await
+}
+
+/// `plan_cleanup` with an injected clock: `elapsed` reports the time since
+/// cleanup began, so a test can spend the dispatch budget deterministically.
+async fn plan_cleanup_with_clock(
+    state: &AppState,
+    f: &str,
+    terms: &[String],
+    elapsed: impl Fn() -> Duration + Send + Sync,
+) -> (String, LlmCleanupStatus) {
     // Busy gate. An ordinary collision (download, prepare, a real cleanup)
     // answers immediately with raw preserved, exactly as before. The one
     // exception is the recording-start speculative prewarm: it holds
     // llm_operation for a single tiny generation whose whole purpose is to
     // page the weights in, so waiting for it IS the fast path — skipping
     // correction then would silently discard a real cleanup opportunity.
-    // Hence the bounded handoff wait, gated on the prewarm flag.
+    // Hence the bounded handoff wait, gated on the prewarm count.
     let operation = acquire_cleanup_operation(state, crate::llm::cleanup::PREWARM_HANDOFF_WAIT).await;
     let Some(_operation) = operation else {
         return (
@@ -448,13 +509,15 @@ pub(crate) async fn plan_cleanup(
         return (f.to_string(), LlmCleanupStatus::NoChanges);
     }
 
+    // Compiled once for every validation in this cleanup (L-04).
+    let terms = ProtectedTerms::new(terms);
     let f_tokens = word_spans(f);
     // One shared whole-F adjudication context: repeat/restart/protection
     // analysis depends only on (f, terms), never on the flag vector, so the
     // work mask, the per-run compose gate and the terminal gate all reuse
     // it (35x on long transcripts; equivalence-proven against per-call
     // validate_deletions).
-    let del_ctx = DeletionContext::prepare(f, terms);
+    let del_ctx = DeletionContext::prepare(f, &terms);
     // The no-work mask (§4.3) runs on DeletionContext's own tokenization.
     // Any protection-analysis error fails safe: ALL windows active (ask
     // everything) — never a silent no-work, never a panic, never a
@@ -541,9 +604,11 @@ pub(crate) async fn plan_cleanup(
     // count-of-16 chunks (§4.5: the static line budgets dominate every
     // valid chunk — count is the only criterion, no packer). The owned
     // chunk vector is materialized ONCE per dispatch at this IPC boundary
-    // and MOVED into the client. A chunk failure strikes only its own
-    // regions: later chunks still RUN (each gets its own deadline) and
-    // their proposals are still derived.
+    // and MOVED into the client. A typed chunk decline strikes only its own
+    // regions: later chunks still RUN (each gets its own deadline) and their
+    // proposals are still derived. A transport-level failure, or a budget
+    // that no longer holds the engine's batch deadline (`chunk_limit`), ends
+    // dispatch (R-04): the chunks not sent stay raw.
     //
     // ONLY the raw proposal is cached per key (the deduped reply over the
     // key's own bytes). Authority is NEVER key-local: `target_authority`
@@ -552,13 +617,43 @@ pub(crate) async fn plan_cleanup(
     // target differs (and let a first owner's rejection hide a later
     // owner's legal subset). Phase D re-derives it per occurrence.
     let mut per_key: Vec<Option<String>> = vec![None; slots.len()];
+    let chunk_count = slots.len().div_ceil(crate::llm::engine::BATCH_CAP);
     for (base, chunk) in slots.chunks(crate::llm::engine::BATCH_CAP).enumerate() {
+        let spent = elapsed();
+        let Some(limit) = chunk_limit(spent) else {
+            log::info!(
+                "cleanup: dispatch budget spent after {base} of {chunk_count} chunks; later regions stay raw"
+            );
+            first_status.get_or_insert(LlmCleanupStatus::TimedOut {
+                elapsed_ms: spent.as_millis() as u64,
+            });
+            break;
+        };
         let texts: Vec<String> = chunk.iter().map(|slot| slot.request.key.clone()).collect();
-        let items = match sidecar_cleanup_batch(state, texts, mode).await {
+        let items = match sidecar_cleanup_batch(state, texts, mode, limit).await {
             Ok(items) => items,
             Err(status) => {
-                log::info!("cleanup: batch chunk failed: {status:?}");
+                let resident = state.llm_engine.lock().await.is_some();
+                log::info!("cleanup: batch chunk {} of {chunk_count} failed: {status:?}", base + 1);
+                let stop = ends_dispatch(&status, resident);
+                // A chunk whose limit the budget shortened reports what a
+                // budget stop reports: the time since cleanup began.
+                let status = match status {
+                    LlmCleanupStatus::TimedOut { .. } if limit < LLM_CLEANUP_TIMEOUT => {
+                        LlmCleanupStatus::TimedOut {
+                            elapsed_ms: elapsed().as_millis() as u64,
+                        }
+                    }
+                    other => other,
+                };
                 first_status.get_or_insert(status);
+                if stop {
+                    log::info!(
+                        "cleanup: dispatch stopped after chunk {} of {chunk_count}; later regions stay raw",
+                        base + 1
+                    );
+                    break;
+                }
                 continue;
             }
         };
@@ -585,7 +680,7 @@ pub(crate) async fn plan_cleanup(
                         slot.request.source_start
                     );
                     first_status.get_or_insert(LlmCleanupStatus::TimedOut {
-                        elapsed_ms: started.elapsed().as_millis() as u64,
+                        elapsed_ms: elapsed().as_millis() as u64,
                     });
                     continue;
                 }
@@ -651,7 +746,7 @@ pub(crate) async fn plan_cleanup(
             Some(text) => text,
             None => proposal.as_str(),
         };
-        let Some((deleted, flips)) = target_authority(occ.request, proposal, terms) else {
+        let Some((deleted, flips)) = target_authority(occ.request, proposal, &terms) else {
             log::info!("cleanup: window proposal rejected by validator");
             first_rejected.get_or_insert_with(|| LlmCleanupStatus::Rejected {
                 reason: "model proposal rejected by validator".into(),
@@ -695,7 +790,7 @@ pub(crate) async fn plan_cleanup(
         "cleanup complete windows={n_windows} active_windows={active_windows} active_keys={} applied_runs={applied_runs} f_tokens={} elapsed_ms={}",
         slots.len(),
         f_tokens.len(),
-        started.elapsed().as_millis()
+        elapsed().as_millis()
     );
 
     // Terminal authority. compose_runs keeps the vector admissible at every
@@ -710,13 +805,13 @@ pub(crate) async fn plan_cleanup(
             let output = if all_flips.is_empty() {
                 candidate
             } else {
-                authorized_caps(f, &flags, &all_flips, terms)
+                authorized_caps(f, &flags, &all_flips, &terms)
             };
             if output != f {
                 (
                     output,
                     LlmCleanupStatus::Applied {
-                        elapsed_ms: started.elapsed().as_millis() as u64,
+                        elapsed_ms: elapsed().as_millis() as u64,
                     },
                 )
             } else {
@@ -753,7 +848,7 @@ mod tests {
     use crate::llm::validation::validate;
     use crate::models::Settings;
     use crate::test_support::{MockAsrEngine, MockAudioCapture, MockLlmBackend, MockPasteBackend};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
     /// Mock that deletes every standalone occurrence of one hesitation from
@@ -820,7 +915,7 @@ mod tests {
     #[test]
     fn out_of_order_authority_still_applies_in_window_order() {
         let f = "um the um the";
-        let terms: Vec<String> = Vec::new();
+        let terms = ProtectedTerms::new(&[]);
         let ctx = DeletionContext::prepare(f, &terms);
         assert_eq!(word_spans(f).len(), 4);
         // Two planned windows; dispatch answers LATER window first.
@@ -842,7 +937,7 @@ mod tests {
     fn composition_rejects_only_the_run_that_breaks_the_repeat() {
         // tokens: one(0) the(1) the(2) two(3) three(4) the(5) the(6) four(7)
         let f = "one the the two three the the four";
-        let terms: Vec<String> = Vec::new();
+        let terms = ProtectedTerms::new(&[]);
         let ctx = DeletionContext::prepare(f, &terms);
         let mut flags = vec![false; 8];
         // run 1..2 deletes the(1): sibling block 2..3 fully kept → valid.
@@ -884,7 +979,7 @@ mod tests {
         assert!(matches!(status, LlmCleanupStatus::Applied { .. }), "{status:?}");
         assert_eq!(out, "Never do that. keep this.", "{out:?}");
         // Terminal authority reproduces it from f's bytes alone.
-        let terms: Vec<String> = Vec::new();
+        let terms = ProtectedTerms::new(&[]);
         assert!(validate(raw, &out, &terms).is_ok(), "frozen validator agrees");
     }
 
@@ -1357,6 +1452,213 @@ mod tests {
         assert!(matches!(status, LlmCleanupStatus::Failed { .. }), "{status:?}");
     }
 
+    /// R-04: a transport-level failure ends dispatch. The first chunk hits
+    /// the sidecar's own generation deadline (the handle stays resident), so
+    /// the second chunk is never sent and every region stays raw. A typed
+    /// decline that kept the handle does not stop dispatch
+    /// (`failed_chunk_never_sinks_later_chunks`); a retired handle does.
+    #[tokio::test]
+    async fn transport_failure_stops_dispatch() {
+        struct DeadlineThenStrip {
+            calls: Arc<AtomicUsize>,
+        }
+        impl LlmBackend for DeadlineThenStrip {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
+                if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(crate::llm::engine::RESPONDED_TIMEOUT_ERROR.to_string());
+                }
+                Ok(texts
+                    .iter()
+                    .map(|t| BatchItem::Proposal(Some(t.replace(" um ", " "))))
+                    .collect())
+            }
+            fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
+                Err("no protocol requests expected".into())
+            }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let state = state_with_llm(DeadlineThenStrip {
+            calls: Arc::clone(&calls),
+        });
+        // 20 one-sentence windows ⇒ two chunks (16 + 4).
+        let f: String = (0..20)
+            .map(|i| format!("sentence {i} um filler. "))
+            .collect::<Vec<_>>()
+            .join("");
+        let (out, status) = plan_cleanup(&state, &f, &[]).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "no chunk is sent after the deadline");
+        assert_eq!(out, f, "every region stays raw");
+        assert!(matches!(status, LlmCleanupStatus::TimedOut { .. }), "{status:?}");
+        assert!(state.llm_engine.lock().await.is_some(), "the responded deadline kept the handle");
+
+        // A retired handle stops dispatch even though its status is Failed;
+        // a decline that kept the handle does not. (A retire is not driven
+        // end to end: if dispatch wrongly went on, the next chunk would try
+        // to start a real sidecar.)
+        let failed = LlmCleanupStatus::Failed {
+            reason: "retired".into(),
+        };
+        assert!(ends_dispatch(&failed, false));
+        assert!(!ends_dispatch(&failed, true));
+    }
+
+    /// R-04: dispatch stops once less than the engine's batch deadline is
+    /// left of the budget, so a sent chunk is never cut short. The first
+    /// chunk ends with exactly that deadline left and the second is still
+    /// sent; it ends 1 ms later and the last two are never sent. Their
+    /// windows stay raw, earlier edits apply, the sidecar handle stays
+    /// resident, and with nothing to edit the status is the budget stop.
+    #[tokio::test]
+    async fn budget_stops_dispatch_before_a_chunk_it_cannot_cover() {
+        struct BudgetChunks {
+            now_ms: Arc<AtomicU64>,
+            sizes: Arc<Mutex<Vec<usize>>>,
+            first_chunk_ms: u64,
+            strip: bool,
+        }
+        impl LlmBackend for BudgetChunks {
+            fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
+                let first = {
+                    let mut sizes = self.sizes.lock().unwrap();
+                    sizes.push(texts.len());
+                    sizes.len() == 1
+                };
+                let step = if first { self.first_chunk_ms } else { 1 };
+                self.now_ms.fetch_add(step, Ordering::SeqCst);
+                Ok(texts
+                    .iter()
+                    .map(|t| {
+                        let reply = if self.strip { t.replace(" um ", " ") } else { t.clone() };
+                        BatchItem::Proposal(Some(reply))
+                    })
+                    .collect())
+            }
+            fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
+                Err("no protocol requests expected".into())
+            }
+        }
+        async fn run(strip: bool) -> (String, String, LlmCleanupStatus, Vec<usize>, bool) {
+            let now_ms = Arc::new(AtomicU64::new(0));
+            let sizes = Arc::new(Mutex::new(Vec::new()));
+            let state = state_with_llm(BudgetChunks {
+                now_ms: Arc::clone(&now_ms),
+                sizes: Arc::clone(&sizes),
+                first_chunk_ms: (CLEANUP_DISPATCH_BUDGET - CLEANUP_BATCH_TIMEOUT).as_millis() as u64,
+                strip,
+            });
+            // 64 one-sentence windows ⇒ four chunks of 16.
+            let f: String = (0..64)
+                .map(|i| format!("sentence {i} um filler. "))
+                .collect::<Vec<_>>()
+                .join("");
+            let clock = Arc::clone(&now_ms);
+            let (out, status) = plan_cleanup_with_clock(&state, &f, &[], move || {
+                Duration::from_millis(clock.load(Ordering::SeqCst))
+            })
+            .await;
+            let resident = state.llm_engine.lock().await.is_some();
+            let sizes = sizes.lock().unwrap().clone();
+            (f, out, status, sizes, resident)
+        }
+
+        let (_, out, status, sizes, resident) = run(true).await;
+        assert_eq!(sizes, vec![16, 16], "only chunks the budget can cover are sent");
+        assert!(resident, "no chunk was cut short, so the handle stays resident");
+        assert!(matches!(status, LlmCleanupStatus::Applied { .. }), "{status:?}");
+        assert!(out.contains("sentence 0 filler."), "{out:?}");
+        assert!(out.contains("sentence 31 filler."), "{out:?}");
+        assert!(out.contains("sentence 32 um filler."), "{out:?}");
+        assert!(out.contains("sentence 63 um filler."), "{out:?}");
+
+        // Same budget, nothing to edit: the status is the budget stop.
+        let (f, out, status, sizes, resident) = run(false).await;
+        assert_eq!(sizes, vec![16, 16]);
+        assert!(resident);
+        assert_eq!(out, f);
+        assert!(matches!(status, LlmCleanupStatus::TimedOut { .. }), "{status:?}");
+    }
+
+    /// R-04: a sent chunk's limit never drops below the engine's own batch
+    /// deadline, even with exactly that deadline left, so the engine answers
+    /// first and keeps its handle; and no limit runs past the budget.
+    #[test]
+    fn dispatched_chunk_keeps_the_engine_deadline() {
+        let last_start = CLEANUP_DISPATCH_BUDGET - CLEANUP_BATCH_TIMEOUT;
+        let limit = chunk_limit(last_start).expect("exactly the deadline left is enough");
+        assert!(limit >= CLEANUP_BATCH_TIMEOUT, "{limit:?}");
+        assert!(last_start + limit <= CLEANUP_DISPATCH_BUDGET, "{limit:?}");
+        assert_eq!(chunk_limit(Duration::ZERO), Some(LLM_CLEANUP_TIMEOUT));
+        assert_eq!(chunk_limit(last_start + Duration::from_millis(1)), None);
+        assert_eq!(chunk_limit(CLEANUP_DISPATCH_BUDGET + Duration::from_secs(1)), None);
+    }
+
+    /// Backend `tripwire_clock` installs once the resident handle is gone. A
+    /// cleanup that wrongly kept dispatching would reach it instead of
+    /// starting a real sidecar; the tests assert it is never called.
+    struct Tripwire(Arc<AtomicUsize>);
+
+    impl LlmBackend for Tripwire {
+        fn cleanup_batch(&mut self, texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(texts.iter().map(|t| BatchItem::Proposal(Some(t.clone()))).collect())
+        }
+        fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
+            Err("no protocol requests expected".into())
+        }
+    }
+
+    /// Clock for `plan_cleanup_with_clock` that reads `now_ms` and, whenever
+    /// the sidecar slot is empty, fills it with a `Tripwire`. Dispatch checks
+    /// the slot right after a failed chunk, before it reads the clock again,
+    /// so the tripwire never hides a lost handle from that check.
+    fn tripwire_clock<'a>(
+        state: &'a AppState,
+        now_ms: Arc<AtomicU64>,
+        tripped: Arc<AtomicUsize>,
+    ) -> impl Fn() -> Duration + Send + Sync + 'a {
+        move || {
+            if let Ok(mut slot) = state.llm_engine.try_lock() {
+                if slot.is_none() {
+                    *slot = Some(Box::new(Tripwire(Arc::clone(&tripped))));
+                }
+            }
+            Duration::from_millis(now_ms.load(Ordering::SeqCst))
+        }
+    }
+
+    /// R-04: a retired sidecar ends dispatch although its status is only
+    /// `Failed`: the handle is not put back, so the resident check after the
+    /// failed chunk finds the slot empty. The tripwire clock refills the slot
+    /// after that check, so a cleanup that wrongly went on would reach the
+    /// tripwire, never a real sidecar.
+    #[tokio::test]
+    async fn retired_sidecar_stops_dispatch() {
+        struct RetiresAtOnce(Arc<AtomicUsize>);
+        impl LlmBackend for RetiresAtOnce {
+            fn cleanup_batch(&mut self, _texts: &[String], _mode: CleanupMode) -> Result<Vec<BatchItem>, String> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Err("Cleanup runtime requires restart (operation_failed); original text preserved".into())
+            }
+            fn request_raw(&mut self, _: &serde_json::Value) -> Result<serde_json::Value, String> {
+                Err("no protocol requests expected".into())
+            }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let tripped = Arc::new(AtomicUsize::new(0));
+        let state = state_with_llm(RetiresAtOnce(Arc::clone(&calls)));
+        // 20 one-sentence windows ⇒ two chunks (16 + 4).
+        let f: String = (0..20)
+            .map(|i| format!("sentence {i} um filler. "))
+            .collect::<Vec<_>>()
+            .join("");
+        let clock = tripwire_clock(&state, Arc::new(AtomicU64::new(0)), Arc::clone(&tripped));
+        let (out, status) = plan_cleanup_with_clock(&state, &f, &[], clock).await;
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(tripped.load(Ordering::SeqCst), 0, "no chunk is sent after the retire");
+        assert_eq!(out, f, "every region stays raw");
+        assert!(matches!(status, LlmCleanupStatus::Failed { .. }), "{status:?}");
+    }
+
     /// Long dictation (>32 KB, the old whole-text refusal boundary): the
     /// planner processes window-by-window and applies every proposal's
     /// deletions, keeping everything else byte-exact.
@@ -1423,7 +1725,7 @@ mod tests {
             "the later-boundary cap must compose from the reply"
         );
         assert!(matches!(status, LlmCleanupStatus::Applied { .. }), "{status:?}");
-        let terms: Vec<String> = Vec::new();
+        let terms = ProtectedTerms::new(&[]);
         assert!(validate(f, &out, &terms).is_ok(), "frozen validator agrees");
     }
 
@@ -1471,7 +1773,7 @@ mod tests {
             });
             let (out, _status) = plan_cleanup(&state, f, &[]).await;
             // Delivered text is always frozen-validator admissible (or raw).
-            let terms: Vec<String> = Vec::new();
+            let terms = ProtectedTerms::new(&[]);
             assert!(
                 out == f || validate(f, &out, &terms).is_ok(),
                 "delivered text inadmissible for {f:?}: {out:?}"
@@ -1548,6 +1850,20 @@ mod tests {
         assert_eq!(apply_edit_lines("a|||x<D>", "a").as_deref(), Some("x<D>"));
     }
 
+    /// R-11: Replace-mode lines that each double the text are rejected as
+    /// soon as the working text passes `MAX_CLEANUP_BYTES`, and so is one
+    /// line that blows a key up past it; a script under the cap still applies.
+    #[test]
+    fn doubled_edit_lines_are_rejected() {
+        assert_eq!(apply_edit_lines(&"a|||a a\n".repeat(15), "a"), None);
+        let wide = format!("a|||{}", "b".repeat(64));
+        assert_eq!(apply_edit_lines(&wide, &"a ".repeat(1_000)), None);
+        assert_eq!(
+            apply_edit_lines(&"a|||a a\n".repeat(3), "a").as_deref(),
+            Some("a a a a a a a a")
+        );
+    }
+
     /// End-to-end Replace mode: a mock sidecar replying with edit SCRIPTS
     /// must yield exactly the same cleaned output Retype yields for the same
     /// intended edits; an unparseable reply keeps the region raw.
@@ -1607,7 +1923,7 @@ mod tests {
             }
         }
         // Delivered text is always frozen-validator admissible.
-        assert!(out == f || validate(&f, &out, &[]).is_ok(), "{out:?}");
+        assert!(out == f || validate(&f, &out, &ProtectedTerms::new(&[])).is_ok(), "{out:?}");
     }
 
     /// Retype mode must be byte-identical to pre-0.10.0 behavior: the mode
@@ -1645,19 +1961,19 @@ mod tests {
         let holder = state.clone();
         let prewarming = tokio::spawn(async move {
             let _operation = holder.llm_operation.lock().await;
-            holder.llm_prewarming.store(true, std::sync::atomic::Ordering::SeqCst);
+            crate::llm::cleanup::begin_prewarm(&holder);
             tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         });
-        // Deterministic rendezvous: proceed only once the flag is observable
-        // (the setter runs before it ever takes the lock, so the lock being
-        // held plus the flag set is the exact collision state).
+        // Deterministic rendezvous: proceed only once the count is observable
+        // (the holder counts the prewarm only after taking the lock, so the
+        // lock being held plus a non-zero count is the exact collision state).
         for _ in 0..2000 {
-            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) {
+            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) != 0 {
                 break;
             }
             tokio::task::yield_now().await;
         }
-        assert!(state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst));
+        assert_ne!(state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst), 0);
         let (out, status) = plan_cleanup(&state, "hello there", &[]).await;
         assert!(
             matches!(status, LlmCleanupStatus::Applied { .. }),
@@ -1677,11 +1993,11 @@ mod tests {
         let holder = state.clone();
         let prewarming = tokio::spawn(async move {
             let _operation = holder.llm_operation.lock().await;
-            holder.llm_prewarming.store(true, std::sync::atomic::Ordering::SeqCst);
+            crate::llm::cleanup::begin_prewarm(&holder);
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         });
         for _ in 0..2000 {
-            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) {
+            if state.llm_prewarming.load(std::sync::atomic::Ordering::SeqCst) != 0 {
                 break;
             }
             tokio::task::yield_now().await;

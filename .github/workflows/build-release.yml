@@ -28,14 +28,14 @@ jobs:
             target: aarch64-apple-darwin
             label: Apple Silicon
     runs-on: ${{ matrix.platform }}
-    env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # Nothing pushes: tauri-action calls the API with GITHUB_TOKEN and the
+          # release-target check reads public tags with git ls-remote and gh.
+          persist-credentials: false
 
       - name: Verify release target
         if: github.event_name != 'workflow_dispatch' || inputs.create_release
@@ -45,19 +45,19 @@ jobs:
         run: python3 scripts/check-release-target.py
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: 'npm'
 
       - name: Install verified Rust 1.94.0
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@46ce8032f0e3e2d70554c4eb1961fc1ca5fde79f # 1.94.0 branch
         with:
           targets: ${{ matrix.target }}
           components: clippy
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: './src-tauri -> target'
 
@@ -65,9 +65,7 @@ jobs:
         run: npm ci
 
       - name: Run CI assertions
-        run: |
-          chmod +x scripts/ci-checks.sh
-          CI_SKIP_CARGO_TEST=1 CI_SKIP_NPM_CHECK=1 scripts/ci-checks.sh
+        run: bash scripts/ci-checks.sh
 
       - name: Build frontend
         # Required before cargo test: tauri::generate_context!() validates that
@@ -99,18 +97,29 @@ jobs:
       - name: Audit Rust dependencies
         working-directory: src-tauri
         run: |
+          # .cargo/audit.toml ignores the zip advisories only because zip is not built for macOS.
+          if ! grep -qx 'name = "zip"' Cargo.lock; then
+            echo "::notice::zip is no longer in Cargo.lock. Delete its ignores from src-tauri/.cargo/audit.toml and the zip checks in .github/workflows and scripts/pre-release-check.sh."
+          else
+            ZIP_DEPENDENTS=$(cargo tree --locked -i zip --target aarch64-apple-darwin)
+            if [ -n "$ZIP_DEPENDENTS" ]; then
+              echo "$ZIP_DEPENDENTS"
+              echo "::error::zip is now built for aarch64-apple-darwin, so the zip ignores in src-tauri/.cargo/audit.toml no longer hold. Update zip and remove them."
+              exit 1
+            fi
+          fi
           cargo install cargo-audit --version 0.22.2 --locked --quiet
           cargo audit
 
       - name: Audit npm dependencies
-        run: npm audit --omit=dev || true
+        run: npm audit --omit=dev
 
       - name: Import Apple Developer Certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
@@ -142,9 +151,12 @@ jobs:
 
       - name: Build and release
         # Keep the established v0 action contract; PR CI exercises the same action.
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
@@ -170,13 +182,13 @@ jobs:
             2. Open the DMG and drag SottoASR to Applications
             3. Launch SottoASR — it will appear in your menu bar
             4. On first launch, ~500 MB of speech recognition models will be downloaded automatically
-            5. Grant Accessibility and Input Monitoring permissions when prompted
+            5. Grant Microphone and Accessibility access when prompted
 
             ### Requirements
 
             - macOS 14 Sonoma or later
             - Apple Silicon (M1 or later)
-            - Python 3.11+ (only required for optional AI Transcript Cleanup feature)
+            - Optional AI Transcript Cleanup: about 1.4 GB for the cleanup model, plus its Python runtime. If no native arm64 Python 3.11 to 3.14 is installed, SottoASR downloads its own Python.
 
             This build is signed and notarized by Apple.
           releaseDraft: true
@@ -184,7 +196,7 @@ jobs:
           args: --target ${{ matrix.target }}
 
       - name: Upload verified macOS packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: signed-macos-${{ github.sha }}
           path: |

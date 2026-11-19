@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
@@ -23,11 +23,6 @@ pub struct UpdateState {
     pub downloading: AtomicBool,
     /// Whether the update has been installed and a restart is pending.
     pub restart_pending: AtomicBool,
-    /// Whether a newer AI model is available on HuggingFace.
-    pub model_update_available: AtomicBool,
-    /// Consecutive model update check failures. Reset on success.
-    /// After 3 failures (~12h), model_update_available is cleared to prevent stale indicators.
-    pub model_update_consecutive_errors: AtomicU32,
 }
 
 impl UpdateState {
@@ -38,8 +33,6 @@ impl UpdateState {
             release_notes: Mutex::new(None),
             downloading: AtomicBool::new(false),
             restart_pending: AtomicBool::new(false),
-            model_update_available: AtomicBool::new(false),
-            model_update_consecutive_errors: AtomicU32::new(0),
         }
     }
 }
@@ -55,7 +48,12 @@ pub struct UpdateStatus {
     pub release_notes: Option<String>,
     pub downloading: bool,
     pub restart_pending: bool,
-    pub model_update_available: bool,
+}
+
+/// Payload of `"update-installed"`, emitted once an install completes.
+#[derive(serde::Serialize, Clone)]
+struct UpdateInstalled {
+    version: String,
 }
 
 /// Download progress payload emitted to the frontend via `"update-download-progress"`.
@@ -105,22 +103,14 @@ pub fn start_update_checker(app: &AppHandle) {
             // Respect the user's auto-check setting (default: true).
             let auto_check = read_auto_check_setting(&handle).await.unwrap_or(false);
             if auto_check {
-                // Panic isolation: wrap each check in tokio::spawn so a panic
-                // in one check doesn't kill the entire loop.
+                // Panic isolation: wrap the check in tokio::spawn so a panic
+                // doesn't kill the entire loop.
                 let app_check = tokio::spawn({
                     let h = handle.clone();
                     async move { check_for_update(&h).await }
                 });
-                let model_check = tokio::spawn({
-                    let h = handle.clone();
-                    async move { check_for_model_update(&h).await }
-                });
-
                 if let Err(e) = app_check.await {
                     log::warn!("App update check panicked: {}", e);
-                }
-                if let Err(e) = model_check.await {
-                    log::warn!("Model update check panicked: {}", e);
                 }
 
                 // Refresh tray from canonical state (reads UpdateState directly).
@@ -138,7 +128,7 @@ pub fn start_update_checker(app: &AppHandle) {
 async fn read_auto_check_setting(app: &AppHandle) -> Option<bool> {
     let state = app.try_state::<crate::state::AppState>()?;
     // A contended preference must never become permission to access the network.
-    Some(auto_checks_enabled(&state.settings, state.settings_load_error.is_none()).await)
+    Some(auto_checks_enabled(&state.settings, state.settings_load_error().is_none()).await)
 }
 
 async fn auto_checks_enabled(settings: &Mutex<crate::models::Settings>, settings_loaded: bool) -> bool {
@@ -205,70 +195,6 @@ pub async fn check_for_update(
     }
 }
 
-/// Check if a newer AI model is available on HuggingFace.
-/// Only runs when the LLM cleanup feature is compiled and enabled in settings.
-/// Returns Err on persistent failures so the loop can log warnings.
-async fn check_for_model_update(
-    app: &AppHandle,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Compile-time feature guard (runtime check, matches lib.rs pattern).
-    if !crate::llm::engine::is_feature_compiled() {
-        if let Some(updater) = app.try_state::<UpdateState>() {
-            updater.model_update_available.store(false, Ordering::SeqCst);
-        }
-        return Ok(());
-    }
-
-    // Runtime settings guard — skip this optional model check on contention.
-    let state = app
-        .try_state::<crate::state::AppState>()
-        .ok_or("AppState not available")?;
-    let settings = state
-        .settings
-        .try_lock()
-        .map_err(|_| "Settings lock contended — skipping model check this cycle")?;
-    let llm_enabled = settings.llm_cleanup_enabled;
-    drop(settings);
-
-    if !llm_enabled {
-        if let Some(updater) = app.try_state::<UpdateState>() {
-            updater.model_update_available.store(false, Ordering::SeqCst);
-            updater.model_update_consecutive_errors.store(0, Ordering::SeqCst);
-        }
-        return Ok(());
-    }
-
-    // Delegate to llm::engine (NOT commands::llm — avoids layer crossing).
-    let result = crate::llm::engine::check_model_update(app).await;
-
-    let updater = app.state::<UpdateState>();
-    match result {
-        Ok(available) => {
-            updater.model_update_consecutive_errors.store(0, Ordering::SeqCst);
-            updater.model_update_available.store(available, Ordering::SeqCst);
-            if available {
-                log::info!("AI model update available");
-                let _ = tauri::Emitter::emit(app, "llm-update-available", ());
-            } else {
-                let _ = tauri::Emitter::emit(app, "llm-update-up-to-date", ());
-            }
-        }
-        Err(e) => {
-            let errors = updater.model_update_consecutive_errors.fetch_add(1, Ordering::SeqCst) + 1;
-            if errors >= 3 {
-                updater.model_update_available.store(false, Ordering::SeqCst);
-                updater.model_update_consecutive_errors.store(0, Ordering::SeqCst);
-                log::warn!("Model update check failed {} times — clearing stale flag: {}", errors, e);
-            } else {
-                log::debug!("Model update check failed ({}/3): {}", errors, e);
-            }
-            return Err(e.into());
-        }
-    }
-
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Tauri commands (called from frontend or tray menu handlers)
 // ---------------------------------------------------------------------------
@@ -309,6 +235,7 @@ pub async fn perform_app_update(app: AppHandle) -> Result<String, String> {
 
             // Refresh tray from canonical state.
             crate::tray::menu::refresh_tray_from_state(&app).await;
+            let _ = app.emit("update-installed", UpdateInstalled { version: version.clone() });
 
             Ok(version)
         }
@@ -328,7 +255,6 @@ pub async fn get_update_status(app: AppHandle) -> Result<UpdateStatus, String> {
         release_notes,
         downloading: state.downloading.load(Ordering::SeqCst),
         restart_pending: state.restart_pending.load(Ordering::SeqCst),
-        model_update_available: state.model_update_available.load(Ordering::SeqCst),
     };
     Ok(status)
 }

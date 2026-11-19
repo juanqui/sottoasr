@@ -1,18 +1,20 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
   import { createEventScope } from '../utils/event-scope';
   import { onMount, tick } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
   import Waveform from './waveform.svelte';
   import RecordingTimer from './recording-timer.svelte';
-  import { getOverlaySnapshot } from '../utils/tauri';
-  import type { DictationError, LlmCleanupStatus, OverlaySnapshot } from '../utils/tauri';
+  import {
+    cancelRecording, dismissOverlayError, getOverlaySnapshot, openTranscriptionHistory,
+    overlayStartDrag, revealRecordingAudio, stopRecording,
+  } from '../utils/tauri';
+  import type { DictationError, HotkeyBusy, LlmCleanupStatus, OverlaySnapshot } from '../utils/tauri';
   const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)');
 
   async function handleStop() {
     try {
-      await invoke('stop_recording');
+      await stopRecording();
     } catch (e) {
       console.error('Stop failed:', e);
     }
@@ -20,7 +22,7 @@
 
   async function handleCancel() {
     try {
-      await invoke('cancel_recording');
+      await cancelRecording();
     } catch (e) {
       console.error('Cancel failed:', e);
     }
@@ -33,7 +35,7 @@
     if (e.button !== 0) return;
     // Buttons stopPropagation their own mousedown — so if we got here, the
     // user clicked the pill background or a non-interactive child.
-    invoke('overlay_start_drag').catch((err) => {
+    overlayStartDrag().catch((err) => {
       console.error('overlay_start_drag failed:', err);
     });
   }
@@ -95,6 +97,24 @@
     }
   }
 
+  // A start request while the last dictation is still processing gets a brief
+  // notice instead of being dropped silently. An error card always wins.
+  const BUSY_NOTICE_MS = 1500;
+  let showBusy = $state(false);
+  let busyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearBusy() {
+    showBusy = false;
+    if (busyTimer) { clearTimeout(busyTimer); busyTimer = null; }
+  }
+
+  function noteBusy() {
+    if (failure) return;
+    clearBusy();
+    showBusy = true;
+    busyTimer = setTimeout(() => { showBusy = false; busyTimer = null; }, BUSY_NOTICE_MS);
+  }
+
   type FailureKind = 'recording' | 'transcription' | 'paste' | 'history';
   const failureTitles: Record<FailureKind, string> = {
     recording: 'Recording unavailable', transcription: 'Transcription failed',
@@ -116,12 +136,13 @@
     errorAction = '';
     if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer = null; }
     clearWarning();
+    clearBusy();
   }
 
-  async function errorCommand(command: string, args?: Record<string, unknown>) {
+  async function errorCommand(action: () => Promise<void>) {
     const currentFailure = failure;
     errorAction = '';
-    try { await invoke(command, args); }
+    try { await action(); }
     catch (error) { if (failure === currentFailure) errorAction = String(error); }
   }
 
@@ -130,7 +151,7 @@
     const currentFailure = failure;
     dismissing = true;
     errorAction = '';
-    try { await invoke('dismiss_overlay_error', { revision: overlayRevision }); if (failure === currentFailure) failure = null; }
+    try { await dismissOverlayError(overlayRevision); if (failure === currentFailure) failure = null; }
     catch (error) { if (failure === currentFailure) errorAction = String(error); }
     finally { dismissing = false; }
   }
@@ -167,7 +188,7 @@
       if (newRecording) {
         showSlowMessage = false; cleanupStatus = null;
         if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer = null; }
-        audioLevel = 0; audioSequence = 0; waveformRef?.reset(); clearWarning();
+        audioLevel = 0; audioSequence = 0; waveformRef?.reset(); clearWarning(); clearBusy();
         if (Date.now() - startTime >= MAX_DURATION_MS - 60_000) startCountdown();
       }
     } else if (snapshot.state === 'CleaningUp') {
@@ -249,12 +270,15 @@
       showSlowMessage = false;
     });
 
+    scope.listen<HotkeyBusy>('hotkey-busy', () => noteBusy());
+
     return () => {
       disposed = true;
       scope.dispose();
       window.removeEventListener('keydown', dismissWithEscape);
       if (cleanupTimer) clearTimeout(cleanupTimer);
       clearWarning();
+      clearBusy();
     };
   });
 </script>
@@ -265,13 +289,16 @@
       <strong>{failureTitle}</strong>
       <p title={errorAction || failure.error}>{errorAction || failure.error}</p>
       <div class="error-actions">
-        {#if failure.audio_path}<button type="button" onclick={() => errorCommand('reveal_recording_audio', {path: failure!.audio_path})}>Show audio</button>
-        {:else if failure.kind === 'paste'}<button type="button" onclick={() => errorCommand('open_transcription_history')}>History</button>{/if}
+        {#if failure.audio_path}{@const audioPath = failure.audio_path}<button type="button" onclick={() => errorCommand(() => revealRecordingAudio(audioPath))}>Show audio</button>
+        {:else if failure.kind === 'paste'}<button type="button" onclick={() => errorCommand(openTranscriptionHistory)}>History</button>{/if}
         {#if failure.clipboard_available}<span>Text is on the clipboard</span>{/if}
         <button class="dismiss-error" type="button" disabled={dismissing || !canDismissFailure} onclick={dismissError}>Dismiss</button>
       </div>
     </div>
   {:else}
+  {#if showBusy}
+    <div class="busy-banner" role="status">Still working. Try again in a moment.</div>
+  {/if}
   {#if showWarning}
     <div class="warning-banner" in:fade={{ duration: reducedMotion.current ? 0 : 200 }}>
       <span class="warning-text">Recording stops in {countdownDisplay}</span>
@@ -314,7 +341,7 @@
         {:else if showSlowMessage}
           <span class="status-text">Taking a bit longer<br/>than usual, please wait</span>
         {:else}
-          <span class="status-text">Preparing suggestion...</span>
+          <span class="status-text">Cleaning up...</span>
         {/if}
       </div>
     {:else if isTranscribing || isPasting}
@@ -423,6 +450,18 @@
 
   .pill.warning {
     border-color: rgba(239, 68, 68, 0.5);
+  }
+
+  .busy-banner {
+    padding: 7px 16px;
+    border-radius: 14px;
+    background: rgba(20, 20, 22, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
   }
 
   .warning-banner {

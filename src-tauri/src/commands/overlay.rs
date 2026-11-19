@@ -145,19 +145,42 @@ pub fn restart_app(app: AppHandle, state: tauri::State<'_, crate::state::AppStat
 pub fn show_busy_exit_warning(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        let _ = app.run_on_main_thread(|| {
-            use tauri_nspanel::{objc2::MainThreadMarker, objc2_app_kit::NSAlert, objc2_foundation::NSString};
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            use tauri_nspanel::{objc2::MainThreadMarker, objc2_app_kit::{NSAlert, NSAlertSecondButtonReturn}, objc2_foundation::NSString};
             if let Some(main_thread) = MainThreadMarker::new() {
                 let alert = NSAlert::new(main_thread);
                 alert.setMessageText(&NSString::from_str("Finish dictation before quitting"));
-                alert.setInformativeText(&NSString::from_str("Stop or cancel the recording, then wait for transcription to finish. SottoASR will stay open to finish your dictation."));
+                alert.setInformativeText(&NSString::from_str("Stop or cancel the recording, then wait for transcription to finish. If SottoASR is not responding, choose Quit Anyway: an unfinished recording is offered again when SottoASR opens."));
                 alert.addButtonWithTitle(&NSString::from_str("Keep SottoASR Open"));
-                alert.runModal();
+                alert.addButtonWithTitle(&NSString::from_str("Quit Anyway"));
+                if alert.runModal() == NSAlertSecondButtonReturn {
+                    quit_anyway(&handle);
+                }
             }
         });
     }
     #[cfg(not(target_os = "macos"))]
     { let _ = app; }
+}
+
+/// Exit while busy. The claim is synchronous, so a simultaneous key release
+/// or auto-stop cannot also take the writer; the WAV is then finalized so
+/// the next launch offers it for recovery. When a stop claimed it first,
+/// the exit waits briefly for that stop to finish the WAV.
+#[cfg(target_os = "macos")]
+fn quit_anyway(app: &AppHandle) {
+    let claimed = crate::pipeline::claim_for_exit(&app.state::<crate::state::AppState>());
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<crate::state::AppState>();
+        if claimed {
+            crate::pipeline::finalize_for_exit(&state).await;
+        } else {
+            crate::pipeline::wait_for_capture_finalized(&state).await;
+        }
+        app.exit(0);
+    });
 }
 
 #[tauri::command]
@@ -193,7 +216,7 @@ pub async fn reveal_recording_audio(path: String) -> Result<(), String> {
             .or_else(|_| recovery_audio_path(std::path::Path::new(&path), &crate::audio::recovery::recordings_dir()?))?;
         #[cfg(target_os = "macos")]
         {
-            let status = std::process::Command::new("open").arg("-R").arg(path).status()
+            let status = std::process::Command::new("/usr/bin/open").arg("-R").arg(path).status()
                 .map_err(|error| format!("Could not reveal recording: {error}"))?;
             if status.success() { Ok(()) } else { Err("Finder could not reveal the recording".into()) }
         }

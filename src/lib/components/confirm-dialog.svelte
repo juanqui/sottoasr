@@ -19,12 +19,14 @@
   </div>
 </dialog>
 <style>
-  dialog { box-sizing:border-box; max-width:calc(100vw - 40px); width:420px; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:24px; box-shadow:0 20px 60px #0007; }
-  dialog::backdrop { background:#0007; }
+  dialog { box-sizing:border-box; max-width:calc(100vw - 40px); width:420px; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:24px; box-shadow:var(--shadow-lg); }
+  /* Literal colours: WebKit before Safari 17.4 (macOS 14.0–14.3) does not pass custom properties to ::backdrop. */
+  dialog::backdrop { background:rgba(0, 0, 0, 0.5); }
+  @media (prefers-color-scheme: light) { dialog::backdrop { background:rgba(0, 0, 0, 0.35); } }
   h2 { margin:0 0 10px; font-size:18px; color:var(--text-bright); }
   p { font-size:13px; line-height:1.6; margin:0 0 22px; }
   .dialog-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   button { border:1px solid var(--border); border-radius:8px; background:var(--card-bg); color:var(--text); padding:8px 11px; font:inherit; font-size:12px; cursor:pointer; }
-  button.confirm { background:var(--accent); color:white; border-color:var(--accent); }
+  button.confirm { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
 </style>

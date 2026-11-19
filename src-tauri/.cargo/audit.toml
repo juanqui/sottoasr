@@ -1,0 +1,17 @@
+# cargo-audit configuration for SottoASR.
+#
+# `zip` 4.x is pulled in only by tauri-plugin-updater's Windows installer path.
+# SottoASR ships for aarch64-apple-darwin, where it is not compiled:
+#   cargo tree -i zip --target aarch64-apple-darwin   # prints nothing
+# CI fails if that ever changes (see the audit step in .github/workflows).
+# The fixed zip (>= 9) needs tauri-plugin-updater >= 2.14, which requires
+# Tauri 2.12. Remove these entries when the Tauri stack is upgraded.
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0367", # zip: SUID/SGID bits preserved on extraction
+    "RUSTSEC-2026-0368", # zip: symlink targets outside the destination
+    "RUSTSEC-2026-0369", # zip: permissions applied through symlinks
+    "RUSTSEC-2026-0429", # zip: abort on oversized symlink entry
+    "RUSTSEC-2026-0545", # zip: AES entries returned without authentication
+    "RUSTSEC-2026-0548", # zip: local-header names differ from central directory
+]

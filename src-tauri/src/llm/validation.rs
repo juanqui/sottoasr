@@ -1,6 +1,9 @@
 //! Source-preserving validation of a completed cleanup proposal.
 //!
 //! Policy port of frozen experimental v6 (SHA256 4a8bc2a49feb6b944e765ec238f7bdc381a65576907d1b8ddddf9a4b172b177b).
+//! One deliberate extension: number words never count as a single-word
+//! stutter (`SINGLE_REPEAT_PROTECTED`), because "four four seven" and "four
+//! seven" are different numbers. Every frozen fixture case is unchanged.
 //! The model chooses edits; this module permits only bounded source deletions
 //! and reconstructs the delivered text from the source. Rejection must retain
 //! the original transcript. Syntactic guards do not establish semantic safety.
@@ -58,6 +61,24 @@ const SINGLE_REPEAT_PROTECTED: &[&str] = &[
     "wait",
     "stop",
     "please",
+    // Number words: a repeated one is part of the number ("four four
+    // seven", "oh oh seven"), not a stutter.
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "oh",
+    "hundred",
+    "thousand",
 ];
 const HONORIFICS: &[&str] = &["dr", "mr", "mrs", "ms", "mx", "prof", "rev", "hon"];
 const LITERAL_NOUNS: &[&str] = &[
@@ -486,10 +507,51 @@ fn literal_context_spans(text: &str, tokens: &[Token<'_>]) -> Vec<Range<usize>> 
     spans
 }
 
+/// Protected terms compiled into their match patterns once per cleanup
+/// (L-04). The planner validates every window, and the composed text, against
+/// the same terms; compiling one pattern per term on each of those calls made
+/// long dictations slow. A term whose pattern exceeds the regex size limit is
+/// kept as that error, and `protected_spans` reports it where the frozen
+/// validator compiled the patterns, so every outcome is unchanged.
+pub struct ProtectedTerms {
+    patterns: Result<Vec<Regex>, String>,
+}
+
+impl ProtectedTerms {
+    pub fn new(terms: &[String]) -> Self {
+        let patterns = terms
+            .iter()
+            .filter(|term| !term.is_empty())
+            .map(|term| {
+                // Python re.IGNORECASE has the dotted/dotless I equivalence in
+                // addition to Unicode simple folding; it deliberately does not
+                // expand ß to ss.
+                let pattern: String = term
+                    .chars()
+                    .map(|c| {
+                        if matches!(c, 'i' | 'I' | 'İ' | 'ı') {
+                            "[iIİı]".to_string()
+                        } else {
+                            regex::escape(&c.to_string())
+                        }
+                    })
+                    .collect();
+                Regex::new(&format!("(?i:{pattern})"))
+                    .map_err(|_| "Protected term pattern limit exceeded".to_string())
+            })
+            .collect();
+        Self { patterns }
+    }
+
+    fn patterns(&self) -> Result<&[Regex], String> {
+        self.patterns.as_deref().map_err(Clone::clone)
+    }
+}
+
 fn protected_spans(
     text: &str,
     tokens: &[Token<'_>],
-    terms: &[String],
+    terms: &ProtectedTerms,
     repeats: &[RepeatGroup],
 ) -> Result<Vec<Protected>, String> {
     let mut spans: Vec<_> = quote_code_spans(text)
@@ -517,21 +579,7 @@ fn protected_spans(
             kind: Protection::Exact,
         });
     }
-    for term in terms.iter().filter(|term| !term.is_empty()) {
-        // Python re.IGNORECASE has the dotted/dotless I equivalence in addition
-        // to Unicode simple folding; it deliberately does not expand ß to ss.
-        let pattern: String = term
-            .chars()
-            .map(|c| {
-                if matches!(c, 'i' | 'I' | 'İ' | 'ı') {
-                    "[iIİı]".to_string()
-                } else {
-                    regex::escape(&c.to_string())
-                }
-            })
-            .collect();
-        let pattern = Regex::new(&format!("(?i:{pattern})"))
-            .map_err(|_| "Protected term pattern limit exceeded".to_string())?;
+    for pattern in terms.patterns()? {
         let mut search = 0;
         while let Some(m) = pattern.find_at(text, search) {
             if text[..m.start()].chars().next_back().is_some_and(word_char)
@@ -666,17 +714,31 @@ fn paired_filler_dashes(text: &str, tokens: &[Token<'_>], deleted: &[bool]) -> V
     pairs
 }
 
+/// A deletion vector applied to its source text.
+struct Reconstruction {
+    output: String,
+    pairs: Vec<DashPair>,
+    /// Source byte ranges absent from `output`, ascending and disjoint. A
+    /// range that held a paired filler dash became one space; every other
+    /// source byte is in `output` verbatim and in order.
+    removed: Vec<Range<usize>>,
+}
+
 fn reconstruct(
     text: &str,
     tokens: &[Token<'_>],
     deleted: &[bool],
-) -> Option<(String, Vec<DashPair>)> {
+) -> Option<Reconstruction> {
     if deleted.iter().all(|&d| d) {
         return (text
             .chars()
             .all(|c| word_char(c) || python_space(c) || matches!(c, ',' | '.'))
             && !text.contains('\n'))
-        .then(|| (String::new(), Vec::new()));
+        .then(|| Reconstruction {
+            output: String::new(),
+            pairs: Vec::new(),
+            removed: std::iter::once(0..text.len()).collect(),
+        });
     }
     // The per-token suffix test inside the loop ("is everything from `i` on
     // deleted?") is true exactly when `i` is past the last kept token; one
@@ -723,7 +785,7 @@ fn reconstruct(
     }
     let mut output = String::new();
     let mut position = 0;
-    for span in merged {
+    for span in &merged {
         output.push_str(&text[position..span.start]);
         if pairs
             .iter()
@@ -734,7 +796,11 @@ fn reconstruct(
         position = span.end;
     }
     output.push_str(&text[position..]);
-    Some((output, pairs))
+    Some(Reconstruction {
+        output,
+        pairs,
+        removed: merged,
+    })
 }
 
 fn proposal_local_gaps(
@@ -788,7 +854,7 @@ fn punctuation_signature(text: &str, keep_commas: bool) -> String {
 pub fn validate(
     source: &str,
     proposal: &str,
-    protected_terms: &[String],
+    protected_terms: &ProtectedTerms,
 ) -> Result<String, String> {
     validate_inner(source, proposal, protected_terms).map(|(output, _)| output)
 }
@@ -800,7 +866,7 @@ pub fn validate(
 fn validate_inner(
     source: &str,
     proposal: &str,
-    protected_terms: &[String],
+    protected_terms: &ProtectedTerms,
 ) -> Result<(String, Vec<bool>), String> {
     if source.len().max(proposal.len()) > MAX_CLEANUP_BYTES {
         return Err("Input/output byte limit exceeded".into());
@@ -828,7 +894,7 @@ fn validate_inner(
     // stay enforced token-wise by `locked` above, exactly as this loop
     // always skipped them). One implementation for this helper, the deletion
     // adjudicator, and the caps renderer.
-    if !LiteralGuard::from_protected(source, &protected).all_safe(proposal) {
+    if !LiteralGuard::from_protected(source, &protected, false).all_safe(proposal) {
         return Err("Protected span changed".into());
     }
     let restarts = restart_groups(source, &tokens);
@@ -919,7 +985,10 @@ fn validate_inner(
         if deleted != allowed {
             continue;
         }
-        let Some((mut output, pairs)) = reconstruct(source, &tokens, &deleted) else {
+        let Some(Reconstruction {
+            mut output, pairs, ..
+        }) = reconstruct(source, &tokens, &deleted)
+        else {
             continue;
         };
         let output_tokens = tokenize(&output);
@@ -1053,14 +1122,14 @@ pub fn authorized_caps(
     source: &str,
     deleted: &[bool],
     flips: &[(usize, char)],
-    terms: &[String],
+    terms: &ProtectedTerms,
 ) -> String {
     let tokens = tokenize(source);
     let fallback = source.to_string();
     if tokens.len() != deleted.len() {
         return fallback;
     }
-    let Some((base, _)) = reconstruct(source, &tokens, deleted) else {
+    let Some(Reconstruction { output: base, .. }) = reconstruct(source, &tokens, deleted) else {
         return fallback;
     };
     if flips.is_empty() {
@@ -1077,7 +1146,7 @@ pub fn authorized_caps(
     let Ok(protected) = protected_spans(source, &tokens, terms, &repeats) else {
         return base;
     };
-    let guard = LiteralGuard::from_protected(source, &protected);
+    let guard = LiteralGuard::from_protected(source, &protected, false);
     let mut apply: Vec<(usize, char)> = Vec::new();
     for &(token, letter) in flips {
         let Some(t) = tokens.get(token) else { continue };
@@ -1137,7 +1206,7 @@ pub struct CleanupEdits {
 pub fn validate_cleanup_with_edits(
     source: &str,
     proposal: &str,
-    protected_terms: &[String],
+    protected_terms: &ProtectedTerms,
 ) -> Result<CleanupEdits, String> {
     let reason = match validate_inner(source, proposal, protected_terms) {
         Ok((output, deleted)) => return Ok(CleanupEdits { output, deleted }),
@@ -1192,8 +1261,8 @@ pub fn validate_cleanup_with_edits(
     for run in runs {
         let mut deleted = vec![false; n];
         deleted[run.clone()].fill(true);
-        if let Some((candidate, _)) = reconstruct(source, &tokens, &deleted) {
-            if validate(source, &candidate, protected_terms).is_ok() {
+        if let Some(candidate) = reconstruct(source, &tokens, &deleted) {
+            if validate(source, &candidate.output, protected_terms).is_ok() {
                 accepted[run].fill(true);
             }
         }
@@ -1201,13 +1270,13 @@ pub fn validate_cleanup_with_edits(
     if !accepted.iter().any(|&deleted| deleted) {
         return Err(reason);
     }
-    let Some((candidate, _)) = reconstruct(source, &tokens, &accepted) else {
+    let Some(candidate) = reconstruct(source, &tokens, &accepted) else {
         return Err(reason);
     };
     // Composition can change literal/repeat context; validate the whole set.
     // The alignment's own deletion flags are the authority (composition can
     // re-align repeated words), so return them, not `accepted`.
-    let (output, deleted) = validate_inner(source, &candidate, protected_terms)?;
+    let (output, deleted) = validate_inner(source, &candidate.output, protected_terms)?;
     Ok(CleanupEdits { output, deleted })
 }
 
@@ -1220,7 +1289,7 @@ pub fn deletions_candidate(source: &str, deleted: &[bool]) -> Option<String> {
     if tokens.len() != deleted.len() {
         return None;
     }
-    reconstruct(source, &tokens, deleted).map(|(output, _)| output)
+    reconstruct(source, &tokens, deleted).map(|rebuilt| rebuilt.output)
 }
 
 /// Immutable-source literal-preservation guard, the SAME rules `validate_inner`
@@ -1240,6 +1309,10 @@ struct GuardItem {
     value: String,
     quoted: bool,
     need: usize,
+    /// Source byte offsets of the `need` occurrences an Exact value is
+    /// counted by. Recorded only for a guard that checks deletion
+    /// reconstructions (`all_safe_after_removal`); empty otherwise.
+    starts: Vec<usize>,
 }
 
 struct LiteralGuard {
@@ -1249,8 +1322,9 @@ struct LiteralGuard {
 impl LiteralGuard {
     /// Build from already-detected spans (the caps path has them for its
     /// overlap vetoes; one detection serves both). Word spans are skipped
-    /// exactly as `validate_inner` skips them.
-    fn from_protected(source: &str, protected: &[Protected]) -> Self {
+    /// exactly as `validate_inner` skips them. `locate` also records where
+    /// each Exact value occurs in the source.
+    fn from_protected(source: &str, protected: &[Protected], locate: bool) -> Self {
         let mut items: Vec<GuardItem> = Vec::new();
         let mut canon_source: Option<String> = None;
         for protection in protected {
@@ -1269,13 +1343,24 @@ impl LiteralGuard {
             {
                 continue;
             }
-            let need = if quoted {
+            let (need, starts) = if quoted {
                 let canon = canon_source.get_or_insert_with(|| canonical_quotes(source));
-                canon.matches(&value).count()
+                (canon.matches(&value).count(), Vec::new())
+            } else if locate {
+                let starts: Vec<usize> = source
+                    .match_indices(value.as_str())
+                    .map(|(start, _)| start)
+                    .collect();
+                (starts.len(), starts)
             } else {
-                source.matches(value.as_str()).count()
+                (source.matches(value.as_str()).count(), Vec::new())
             };
-            items.push(GuardItem { value, quoted, need });
+            items.push(GuardItem {
+                value,
+                quoted,
+                need,
+                starts,
+            });
         }
         Self { items }
     }
@@ -1298,6 +1383,34 @@ impl LiteralGuard {
     fn all_safe(&self, output: &str) -> bool {
         let mut canon = None;
         self.items.iter().all(|item| Self::item_ok(item, output, &mut canon))
+    }
+
+    /// `all_safe` for a deletion reconstruction: `output` is the source with
+    /// exactly the `removed` byte ranges (ascending, disjoint) cut out. An
+    /// Exact item whose located source occurrences all avoid `removed` still
+    /// has each of them verbatim and disjoint in `output`, and the
+    /// left-to-right non-overlapping count of one literal finds the most
+    /// disjoint occurrences there are, so the item meets `need` without a
+    /// scan. Every other item is counted as in `all_safe`; Quote items always
+    /// are, because a deletion can change how the remaining quotes pair. The
+    /// verdict equals `all_safe(output)`; only scans that cannot fail are
+    /// skipped (L-04: the composer checks the whole text once per accepted
+    /// run, and scanning every literal each time made long dictations cubic).
+    fn all_safe_after_removal(&self, output: &str, removed: &[Range<usize>]) -> bool {
+        let touched = |start: usize, len: usize| {
+            let first = removed.partition_point(|span| span.end <= start);
+            removed.get(first).is_some_and(|span| span.start < start + len)
+        };
+        let mut canon = None;
+        self.items.iter().all(|item| {
+            let untouched = !item.quoted
+                && item.starts.len() == item.need
+                && !item
+                    .starts
+                    .iter()
+                    .any(|&start| touched(start, item.value.len()));
+            untouched || Self::item_ok(item, output, &mut canon)
+        })
     }
 }
 
@@ -1334,7 +1447,7 @@ pub struct WorkMask {
 /// keeps returning `source` even with an over-budget term set.
 pub struct DeletionContext<'a> {
     source: &'a str,
-    terms: &'a [String],
+    terms: &'a ProtectedTerms,
     tokens: Vec<Token<'a>>,
     repeats: Vec<RepeatGroup>,
     restarts: Vec<(Range<usize>, usize)>,
@@ -1346,7 +1459,7 @@ impl<'a> DeletionContext<'a> {
     /// Analyze `source` for deletion vectors under `terms`. Infallible: the
     /// only erroring stage (term patterns) is deferred to first use, matching
     /// the frozen helper's precedence.
-    pub fn prepare(source: &'a str, terms: &'a [String]) -> Self {
+    pub fn prepare(source: &'a str, terms: &'a ProtectedTerms) -> Self {
         let tokens = tokenize(source);
         let repeats = repeat_groups(source, &tokens);
         let restarts = restart_groups(source, &tokens);
@@ -1377,7 +1490,7 @@ impl<'a> DeletionContext<'a> {
                     .collect();
                 Ok(CachedProtections {
                     hit,
-                    guard: LiteralGuard::from_protected(self.source, &protected),
+                    guard: LiteralGuard::from_protected(self.source, &protected, true),
                 })
             })
             .as_ref()
@@ -1434,7 +1547,10 @@ impl<'a> DeletionContext<'a> {
         {
             return Err("Deletions require protected/unsupported edits".into());
         }
-        let Some((output, _pairs)) = reconstruct(self.source, &self.tokens, deleted) else {
+        let Some(Reconstruction {
+            output, removed, ..
+        }) = reconstruct(self.source, &self.tokens, deleted)
+        else {
             return Err("Deletion reconstruction failed".into());
         };
         // Immutable-source literal guard: the reconstructed text must keep
@@ -1444,7 +1560,8 @@ impl<'a> DeletionContext<'a> {
         // literals). It catches bytes erased OUTSIDE every deleted token:
         // gap-character terms (a terminal "." or "..." in an emptied or
         // re-flowed text) and substring material that no token overlaps.
-        if !cached.guard.all_safe(&output) {
+        // Only literals the removed ranges touch are recounted.
+        if !cached.guard.all_safe_after_removal(&output, &removed) {
             return Err("Protected span changed".into());
         }
         // Mirror validate_inner's output-token-count gate (dash-pair/merge
@@ -1562,7 +1679,7 @@ impl<'a> DeletionContext<'a> {
 pub fn validate_deletions(
     source: &str,
     deleted: &[bool],
-    protected_terms: &[String],
+    protected_terms: &ProtectedTerms,
 ) -> Result<String, String> {
     DeletionContext::prepare(source, protected_terms).adjudicate(deleted)
 }
@@ -1579,8 +1696,14 @@ mod tests {
         proposal: &str,
         protected_terms: &[String],
     ) -> Result<String, String> {
-        validate_cleanup_with_edits(source, proposal, protected_terms)
+        validate_cleanup_with_edits(source, proposal, &ProtectedTerms::new(protected_terms))
             .map(|edits| edits.output)
+    }
+
+    /// Compiled protected terms for one test case.
+    fn compiled(values: &[&str]) -> ProtectedTerms {
+        let owned: Vec<String> = values.iter().map(|value| value.to_string()).collect();
+        ProtectedTerms::new(&owned)
     }
 
     #[test]
@@ -1589,7 +1712,7 @@ mod tests {
         let proposal = "I need the summary. Please keep the final instruction.";
         let cleaned = validate_cleanup(source, proposal, &[]).unwrap();
         assert_eq!(cleaned, "I need the report. Please keep the final instruction and number 859");
-        assert!(validate(source, &cleaned, &[]).is_ok());
+        assert!(validate(source, &cleaned, &compiled(&[])).is_ok());
     }
 
     #[test]
@@ -1601,7 +1724,7 @@ mod tests {
         ] {
             let cleaned = validate_cleanup(source, proposal, &terms).unwrap();
             assert_eq!(cleaned, expected);
-            assert!(validate(source, &cleaned, &terms).is_ok());
+            assert!(validate(source, &cleaned, &ProtectedTerms::new(&terms)).is_ok());
         }
     }
 
@@ -1635,7 +1758,7 @@ mod tests {
             let result = validate(
                 case["source"].as_str().unwrap(),
                 case["proposal"].as_str().unwrap(),
-                &terms,
+                &ProtectedTerms::new(&terms),
             );
             assert_eq!(
                 result.is_ok(),
@@ -1661,7 +1784,10 @@ mod tests {
             let proposal = case["proposal"].as_str().unwrap();
             let terms: Vec<String> = serde_json::from_value(case["protected_terms"].clone()).unwrap();
             if let Ok(output) = validate_cleanup(source, proposal, &terms) {
-                assert_eq!(validate(source, &output, &terms).unwrap(), output);
+                assert_eq!(
+                    validate(source, &output, &ProtectedTerms::new(&terms)).unwrap(),
+                    output
+                );
             }
         }
         assert!(validate_cleanup(&"x".repeat(MAX_CLEANUP_BYTES + 1), "x", &[]).is_err());
@@ -1671,49 +1797,53 @@ mod tests {
     #[test]
     fn preserves_source_punctuation_and_protected_content() {
         assert_eq!(
-            validate("Uh, not yet.", "Not yet.", &[]).unwrap(),
+            validate("Uh, not yet.", "Not yet.", &compiled(&[])).unwrap(),
             "Not yet."
         );
-        assert!(validate("Dr. Um um approved it.", "Dr. approved it.", &[]).is_err());
+        assert!(validate("Dr. Um um approved it.", "Dr. approved it.", &compiled(&[])).is_err());
         assert!(validate(
             "Keep \"um,\nuh next\" verbatim.",
             "Keep \"next\" verbatim.",
-            &[]
+            &compiled(&[])
         )
         .is_err());
-        assert!(validate("The parameter um is fixed.", "The parameter is fixed.", &[]).is_err());
+        assert!(
+            validate("The parameter um is fixed.", "The parameter is fixed.", &compiled(&[]))
+                .is_err()
+        );
         assert_eq!(
-            validate("I, I need the form.", "I need the form.", &[]).unwrap(),
+            validate("I, I need the form.", "I need the form.", &compiled(&[])).unwrap(),
             "I need the form."
         );
     }
 
     #[test]
     fn rejects_resource_limits_before_alignment() {
-        assert!(validate(&"x".repeat(MAX_CLEANUP_BYTES + 1), "", &[]).is_err());
-        assert!(validate(&"um ".repeat(MAX_CLEANUP_WORDS + 1), "", &[]).is_err());
-        assert!(validate(&"um ".repeat(100), &"um ".repeat(50), &[]).is_err());
+        let none = compiled(&[]);
+        assert!(validate(&"x".repeat(MAX_CLEANUP_BYTES + 1), "", &none).is_err());
+        assert!(validate(&"um ".repeat(MAX_CLEANUP_WORDS + 1), "", &none).is_err());
+        assert!(validate(&"um ".repeat(100), &"um ".repeat(50), &none).is_err());
     }
 
     #[test]
     fn overlapping_invalid_dictionary_match_does_not_hide_a_valid_phrase() {
-        assert!(validate("sum um um", "sum", &["um um".into()]).is_err());
-        assert!(validate("éum um um", "éum", &["um um".into()]).is_err());
+        assert!(validate("sum um um", "sum", &compiled(&["um um"])).is_err());
+        assert!(validate("éum um um", "éum", &compiled(&["um um"])).is_err());
     }
 
     #[test]
     fn unicode_casefold_and_dictionary_boundaries_match_python_oracle() {
         assert_eq!(
-            validate("Straße strasse ready.", "Straße ready.", &[]).unwrap(),
+            validate("Straße strasse ready.", "Straße ready.", &compiled(&[])).unwrap(),
             "Straße ready."
         );
         assert_eq!(
-            validate("We σς σσ paused.", "We σς paused.", &[]).unwrap(),
+            validate("We σς σσ paused.", "We σς paused.", &compiled(&[])).unwrap(),
             "We σς paused."
         );
-        assert_eq!(validate("ß um", "ß", &["ss um".into()]).unwrap(), "ß");
-        assert!(validate("ı um", "ı", &["I um".into()]).is_err());
-        assert!(validate("um\u{301} hi", "\u{301} hi", &["um".into()]).is_err());
+        assert_eq!(validate("ß um", "ß", &compiled(&["ss um"])).unwrap(), "ß");
+        assert!(validate("ı um", "ı", &compiled(&["I um"])).is_err());
+        assert!(validate("um\u{301} hi", "\u{301} hi", &compiled(&["um"])).is_err());
     }
 
     /// The edit flags returned by `validate_cleanup_with_edits` are the
@@ -1734,6 +1864,7 @@ mod tests {
             let proposal = case["proposal"].as_str().unwrap();
             let terms: Vec<String> =
                 serde_json::from_value(case["protected_terms"].clone()).unwrap();
+            let terms = ProtectedTerms::new(&terms);
             let Ok(edits) = validate_cleanup_with_edits(source, proposal, &terms) else {
                 continue;
             };
@@ -1764,7 +1895,8 @@ mod tests {
     fn target_subset_revalidates_in_full_window_context() {
         let window = "As I said before, um we should um ship the report. Uh tomorrow, um yes.";
         let proposal = "As I said before we should ship the report. Tomorrow yes.";
-        let edits = validate_cleanup_with_edits(window, proposal, &[]).unwrap();
+        let none = compiled(&[]);
+        let edits = validate_cleanup_with_edits(window, proposal, &none).unwrap();
         let spans = word_spans(window);
         // Target = second sentence *from its terminator boundary*: the driver
         // attaches a leading hesitation to its sentence (spec §4.3), so the
@@ -1789,7 +1921,7 @@ mod tests {
         );
         // Context-side deletions ("before, um", "we should um") stayed raw.
         assert!(candidate.contains("before, um we should um ship"));
-        assert!(validate(window, &candidate, &[]).is_ok());
+        assert!(validate(window, &candidate, &none).is_ok());
         assert!(deletions_candidate(window, &[true; 3]).is_none());
     }
 
@@ -1803,7 +1935,8 @@ mod tests {
     #[test]
     fn protection_seams_observed_through_admission_and_caps() {
         // Term lock: "um um" as a literal term outlives the hesitation rule.
-        let terms = vec!["um um".to_string()];
+        let terms = compiled(&["um um"]);
+        let none = compiled(&[]);
         let text = "say um um then go";
         let spans = word_spans(text);
         let mut flags = vec![false; spans.len()];
@@ -1822,7 +1955,7 @@ mod tests {
                 qflags[i] = true;
             }
         }
-        assert!(validate_deletions(quoted, &qflags, &[]).is_err(), "quote interior edited");
+        assert!(validate_deletions(quoted, &qflags, &none).is_err(), "quote interior edited");
         // Unpaired opener protects everything after it to end of text.
         let open = "The client said \"we um ship";
         let ospans = word_spans(open);
@@ -1832,17 +1965,17 @@ mod tests {
                 oflags[i] = true;
             }
         }
-        assert!(validate_deletions(open, &oflags, &[]).is_err(), "unpaired quote seam");
+        assert!(validate_deletions(open, &oflags, &none).is_err(), "unpaired quote seam");
         // Caps replay: an Exact-locked capital and quoted words are immune —
         // a recorded flip letter reaching them is dropped fail-closed.
         let src = "um Dr Smith said \"go home\" now.";
         let sspans = word_spans(src);
         let mut sflags = vec![false; sspans.len()];
         sflags[0] = true; // delete "um"
-        let base = validate_deletions(src, &sflags, &[]).expect("filler deletable");
+        let base = validate_deletions(src, &sflags, &none).expect("filler deletable");
         assert_eq!(base, "Dr Smith said \"go home\" now.");
         let bogus = vec![(2usize, 'G'), (4usize, 'H')]; // "Smith"→"G…", "go"→"H…"
-        assert_eq!(authorized_caps(src, &sflags, &bogus, &[]), base, "flip letters must not rewrite");
+        assert_eq!(authorized_caps(src, &sflags, &bogus, &none), base, "flip letters must not rewrite");
     }
 
     /// A Word-locked negation at a sentence start accepts the capitalized
@@ -1852,19 +1985,20 @@ mod tests {
     fn word_locked_negation_caps_at_sentence_start() {
         let source = "um never do that. keep this.";
         let proposal = "Never do that. keep this.";
-        let edits = validate_cleanup_with_edits(source, proposal, &[]).expect("cap admitted");
+        let none = compiled(&[]);
+        let edits = validate_cleanup_with_edits(source, proposal, &none).expect("cap admitted");
         assert_eq!(edits.output, proposal);
         assert_eq!(edits.deleted, vec![true, false, false, false, false, false]);
-        let deletions = validate_deletions(source, &edits.deleted, &[]).expect("vector stands");
+        let deletions = validate_deletions(source, &edits.deleted, &none).expect("vector stands");
         assert_eq!(deletions, "never do that. keep this.");
         let flips = caps_flips(source, &edits.output, &edits.deleted).expect("caps extractable");
-        assert_eq!(authorized_caps(source, &edits.deleted, &flips, &[]), proposal);
+        assert_eq!(authorized_caps(source, &edits.deleted, &flips, &none), proposal);
     }
 
     #[test]
     fn no_op_and_shape_rejects_precede_protection_pattern_errors() {
         let term = "a".repeat(2_000_000);
-        let terms = [term.clone()];
+        let terms = compiled(&[term.as_str()]);
         let source = "um hello there ok";
         let flags = vec![false; word_spans(source).len()];
         assert_eq!(validate_deletions(source, &flags, &terms).as_deref(), Ok(source));
@@ -1885,12 +2019,13 @@ mod tests {
     fn bad_gap_maximal_run_does_not_shadow_ordinary_suffix_run() {
         let source = "the the.\nthe the";
         let flags = [false, false, false, true];
-        let out = validate_deletions(source, &flags, &[]).expect("suffix run authorized");
+        let none = compiled(&[]);
+        let out = validate_deletions(source, &flags, &none).expect("suffix run authorized");
         assert_eq!(out, "the the.\nthe");
         // Deleting both trailing copies empties the only authorized group —
         // the frozen per-block kept-sibling rule rejects it.
         let both = [false, false, true, true];
-        assert!(validate_deletions(source, &both, &[]).is_err());
+        assert!(validate_deletions(source, &both, &none).is_err());
     }
 
     /// The frozen validator requires every Exact/Quote literal occurrence in
@@ -1903,7 +2038,7 @@ mod tests {
     #[test]
     fn adjudicated_deletions_preserve_gap_term_literals() {
         let source = "um .";
-        let terms = [".".to_string()];
+        let terms = compiled(&["."]);
         let flags = [true];
         assert_eq!(
             validate_deletions(source, &flags, &terms).unwrap_err(),
@@ -1914,16 +2049,16 @@ mod tests {
         // Control: with no term protecting the period, emptying an all-
         // hesitation source is the frozen legacy contract — it ACCEPTS, and
         // the guard must not change that.
-        assert_eq!(validate_deletions(source, &flags, &[]).as_deref(), Ok(""));
+        assert_eq!(validate_deletions(source, &flags, &compiled(&[])).as_deref(), Ok(""));
         // Control: the comma attached to a word forms NO span (the term
         // pattern is word-delimited), so nothing is required and the
         // filler-only deletion stands.
         let keep = "keep um,";
         assert_eq!(
-            validate_deletions(keep, &[false, true], &[",".to_string()]).as_deref(),
+            validate_deletions(keep, &[false, true], &compiled(&[","])).as_deref(),
             Ok("keep")
         );
-        assert!(validate(keep, "keep", &[",".to_string()]).is_ok());
+        assert!(validate(keep, "keep", &compiled(&[","])).is_ok());
     }
 
     /// `authorized_caps` vetoes flips that OVERLAP a protection span, but a
@@ -1937,7 +2072,7 @@ mod tests {
     #[test]
     fn caps_flips_revert_only_literal_count_losses() {
         let source = "um inside the warehouse. the roof beams rest on oak posts and steel clamps keep them steady while workers calibrate torque twice daily panels are measured in.";
-        let terms = ["in".to_string()];
+        let terms = compiled(&["in"]);
         let mut deleted = vec![false; word_spans(source).len()];
         deleted[0] = true; // delete "um"
         let out = authorized_caps(source, &deleted, &[(1, 'I')], &terms);
@@ -1950,5 +2085,101 @@ mod tests {
         assert!(both.starts_with("inside the warehouse."), "unsafe cap leaked: {both}");
         assert!(both.contains(". The roof "), "safe cap dropped: {both}");
         assert!(validate(source, &both, &terms).is_ok());
+    }
+
+    /// L-04: the deletion gate recounts only literals whose source
+    /// occurrences a deletion touches, with the frozen verdict either way.
+    /// Deleting "um" erases the "u" inside it, so a "u" term loses an
+    /// occurrence and is rejected exactly as the frozen validator rejects
+    /// the same text; a number the deletion never touches stays satisfied.
+    #[test]
+    fn deletion_gate_counts_only_literals_the_deletion_touches() {
+        let source = "keep um u";
+        let terms = compiled(&["u"]);
+        assert_eq!(
+            validate_deletions(source, &[false, true, false], &terms).unwrap_err(),
+            "Protected span changed"
+        );
+        assert!(validate(source, "keep u", &terms).is_err());
+
+        let source = "call 12 um then 12 again";
+        let none = compiled(&[]);
+        let flags = [false, false, true, false, false, false];
+        assert_eq!(
+            validate_deletions(source, &flags, &none).as_deref(),
+            Ok("call 12 then 12 again")
+        );
+        assert!(validate(source, "call 12 then 12 again", &none).is_ok());
+    }
+
+    /// L-04: across the frozen fixture, skipping the literals a deletion does
+    /// not touch never changes the literal guard's verdict. For every case
+    /// and every one-token deletion, the frozen pass's own deletions, all
+    /// hesitations, and everything, `all_safe_after_removal` agrees with the
+    /// full recount of `all_safe`.
+    #[test]
+    fn removal_aware_literal_check_matches_full_recount_across_the_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/cleanup-validation-v6.json"
+        ))
+        .unwrap();
+        let (mut compared, mut rejected) = (0, 0);
+        for case in fixture["cases"].as_array().unwrap() {
+            let source = case["source"].as_str().unwrap();
+            let proposal = case["proposal"].as_str().unwrap();
+            let terms: Vec<String> =
+                serde_json::from_value(case["protected_terms"].clone()).unwrap();
+            let terms = ProtectedTerms::new(&terms);
+            let tokens = tokenize(source);
+            let repeats = repeat_groups(source, &tokens);
+            let Ok(protected) = protected_spans(source, &tokens, &terms, &repeats) else {
+                continue;
+            };
+            let guard = LiteralGuard::from_protected(source, &protected, true);
+            let n = tokens.len();
+            let mut vectors: Vec<Vec<bool>> =
+                (0..n).map(|i| (0..n).map(|j| j == i).collect()).collect();
+            vectors.push(tokens.iter().map(|t| t.in_set(HESITATIONS)).collect());
+            vectors.push(vec![true; n]);
+            if let Ok(edits) = validate_cleanup_with_edits(source, proposal, &terms) {
+                vectors.push(edits.deleted);
+            }
+            for deleted in &vectors {
+                let Some(rebuilt) = reconstruct(source, &tokens, deleted) else {
+                    continue;
+                };
+                let full = guard.all_safe(&rebuilt.output);
+                assert_eq!(
+                    guard.all_safe_after_removal(&rebuilt.output, &rebuilt.removed),
+                    full,
+                    "{source:?} deleting {deleted:?}"
+                );
+                compared += 1;
+                rejected += usize::from(!full);
+            }
+        }
+        assert!(compared > 1_000, "only {compared} reconstructions compared");
+        assert!(rejected > 0, "no deletion removed a protected literal");
+    }
+
+    /// R-13: one of a repeated pair of number words is part of the number,
+    /// so it is never deleted as a stutter ("four four seven" is not "four
+    /// seven"), while an ordinary repeated word still is.
+    #[test]
+    fn repeated_number_words_are_kept() {
+        let none = compiled(&[]);
+        for (source, proposal) in [
+            ("four four seven", "four seven"),
+            ("call me at oh oh seven", "call me at oh seven"),
+            ("it costs two two hundred", "it costs two hundred"),
+            ("we sold one thousand thousand units", "we sold one thousand units"),
+        ] {
+            assert!(validate(source, proposal, &none).is_err(), "{source:?}");
+        }
+        assert!(validate_deletions("four four seven", &[true, false, false], &none).is_err());
+        assert_eq!(
+            validate("the the report", "the report", &none).as_deref(),
+            Ok("the report")
+        );
     }
 }

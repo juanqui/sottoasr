@@ -1,14 +1,12 @@
 <script lang="ts">
   import { getVersion } from '@tauri-apps/api/app';
-  import { invoke } from '@tauri-apps/api/core';
   import { createEventScope } from '../utils/event-scope';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
-  import { getUpdateStatus, checkAppUpdate, performAppUpdate, updateLlmModel } from '../utils/tauri';
+  import { getUpdateStatus, checkAppUpdate, performAppUpdate, restartApp } from '../utils/tauri';
   import type { UpdateDownloadProgress } from '../utils/tauri';
 
-  type UpdateStep = 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'error'
-    | 'model_available' | 'model_downloading' | 'model_ready' | 'model_error';
+  type UpdateStep = 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'error';
 
   let step = $state<UpdateStep>('checking');
   let currentVersion = $state('');
@@ -34,18 +32,28 @@
     currentVersion = await getVersion();
     if (disposed) return;
 
-    // Register event listeners before triggering check.
+    // Register event listeners before triggering check. Background checks
+    // emit the same three check events, so they only answer a check this
+    // window is waiting for.
     await scope.listen<string>('update-available', async () => {
+      if (step !== 'checking') return;
       const status = await getUpdateStatus();
-      if (disposed) return;
+      if (disposed || step !== 'checking') return;
       availableVersion = status.version ?? '';
       releaseNotes = status.release_notes ?? '';
       step = 'available';
     });
 
     await scope.listen('update-up-to-date', () => {
+      if (step !== 'checking') return;
       step = 'up_to_date';
       startAutoClose();
+    });
+
+    await scope.listen<string>('update-check-error', (event) => {
+      if (step !== 'checking') return;
+      errorMessage = event.payload;
+      step = 'error';
     });
 
     await scope.listen<UpdateDownloadProgress>('update-download-progress', (event) => {
@@ -58,30 +66,13 @@
       }
     });
 
-    await scope.listen<string>('update-check-error', (event) => {
-      errorMessage = event.payload;
-      step = 'error';
-    });
-
-    // Model update events.
-    await scope.listen('llm-update-available', () => {
+    // An install started from this window or elsewhere has finished.
+    await scope.listen<{ version: string }>('update-installed', (event) => {
+      clearDownloadStallTimer();
       clearAutoClose();
-      if (step === 'checking' || step === 'up_to_date') {
-        step = 'model_available';
-      }
-    });
-
-    await scope.listen('llm-download-complete', () => {
-      if (step === 'model_downloading') {
-        step = 'model_ready';
-      }
-    });
-
-    await scope.listen<{ message: string }>('llm-download-error', (event) => {
-      if (step === 'model_downloading') {
-        errorMessage = event.payload.message || 'Model download failed';
-        step = 'model_error';
-      }
+      if (event.payload.version) availableVersion = event.payload.version;
+      errorMessage = '';
+      step = 'ready';
     });
 
     // Determine initial state from existing update status.
@@ -89,22 +80,20 @@
       const status = await getUpdateStatus();
       if (disposed) return;
       if (status.restart_pending) {
+        availableVersion = status.version ?? '';
         step = 'ready';
       } else if (status.downloading) {
-        step = 'downloading';
+        availableVersion = status.version ?? '';
+        watchDownload();
       } else if (status.update_available && status.version) {
         availableVersion = status.version;
         releaseNotes = status.release_notes ?? '';
         step = 'available';
-      } else if (status.model_update_available) {
-        step = 'model_available';
       } else {
-        step = 'checking';
         doCheck();
       }
     } catch {
       if (disposed) return;
-      step = 'checking';
       doCheck();
     }
   }
@@ -140,7 +129,7 @@
         // Guard: skip if the event listener already transitioned us.
         if (step === 'checking') {
           const status = await getUpdateStatus();
-          if (disposed) return;
+          if (disposed || step !== 'checking') return;
           availableVersion = status.version ?? version;
           releaseNotes = status.release_notes ?? '';
           step = 'available';
@@ -151,24 +140,23 @@
           startAutoClose();
         }
       }
-    } catch (err: any) {
-      if (disposed) return;
-      errorMessage = err?.toString() || 'Check failed';
+    } catch (err) {
+      if (disposed || step !== 'checking') return;
+      errorMessage = String(err) || 'Check failed';
       step = 'error';
     } finally {
       clearCheckTimeout();
     }
   }
 
-  async function handleDownload() {
+  /** Show download progress and fail the step if no progress arrives for 60 s. */
+  function watchDownload() {
     step = 'downloading';
     downloadProgress = 0;
     downloadedMB = '0';
     totalMB = '';
     errorMessage = '';
     lastProgressTime = Date.now();
-
-    // Detect stalled downloads — if no progress events for 60 s, abort.
     clearDownloadStallTimer();
     downloadStallTimer = setInterval(() => {
       if (step === 'downloading' && Date.now() - lastProgressTime > 60_000) {
@@ -177,13 +165,18 @@
         step = 'error';
       }
     }, 10_000);
+  }
 
+  async function handleDownload() {
+    watchDownload();
     try {
-      await performAppUpdate();
-      step = 'ready';
-    } catch (err: any) {
+      const version = await performAppUpdate();
       if (disposed) return;
-      errorMessage = err?.toString() || 'Update failed';
+      if (version) availableVersion = version;
+      step = 'ready';
+    } catch (err) {
+      if (disposed) return;
+      errorMessage = String(err) || 'Update failed';
       step = 'error';
     } finally {
       clearDownloadStallTimer();
@@ -209,7 +202,7 @@
     restarting = true;
     errorMessage = '';
     try {
-      await invoke('restart_app');
+      await restartApp();
     } catch (error) { if (!disposed) errorMessage = String(error); }
     finally { if (!disposed) restarting = false; }
   }
@@ -234,33 +227,6 @@
     if (autoCloseTimer) {
       clearInterval(autoCloseTimer);
       autoCloseTimer = null;
-    }
-  }
-
-  async function handleModelUpdate() {
-    step = 'model_downloading';
-    errorMessage = '';
-    lastProgressTime = Date.now();
-
-    // Detect stalled downloads — if no progress events for 60 s, abort.
-    clearDownloadStallTimer();
-    downloadStallTimer = setInterval(() => {
-      if (step === 'model_downloading' && Date.now() - lastProgressTime > 60_000) {
-        clearDownloadStallTimer();
-        errorMessage = 'Download appears to have stalled. Please try again.';
-        step = 'model_error';
-      }
-    }, 10_000);
-
-    try {
-      await updateLlmModel();
-      step = 'model_ready';
-    } catch (err: any) {
-      if (disposed) return;
-      errorMessage = err?.toString() || 'Model update failed';
-      step = 'model_error';
-    } finally {
-      clearDownloadStallTimer();
     }
   }
 </script>
@@ -319,7 +285,7 @@
   {:else if step === 'downloading'}
     <div class="step">
       <h2>Downloading Update</h2>
-      <p class="subtitle">v{availableVersion}</p>
+      {#if availableVersion}<p class="subtitle">v{availableVersion}</p>{/if}
 
       <div class="progress-section">
         <div class="progress-bar-container">
@@ -351,7 +317,7 @@
         </svg>
       </div>
       <h2>Update Ready</h2>
-      <p class="subtitle">SottoASR v{availableVersion || 'latest'} has been downloaded. Restart to apply.</p>
+      <p class="subtitle">{availableVersion ? `SottoASR v${availableVersion}` : 'The update'} has been downloaded. Restart to apply.</p>
       {#if errorMessage}<p class="error-message" role="alert">{errorMessage}</p>{/if}
 
       <div class="button-row">
@@ -377,75 +343,6 @@
         <button class="primary" onclick={doCheck}>Try Again</button>
       </div>
     </div>
-
-  <!-- Model update available -->
-  {:else if step === 'model_available'}
-    <div class="step">
-      <div class="icon-circle available">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <polyline points="19 12 12 19 5 12"></polyline>
-        </svg>
-      </div>
-      <h2>AI Model Update Available</h2>
-      <p class="subtitle">
-        A newer cleanup model is available.
-        <span class="current-hint">SottoASR v{currentVersion} is up to date.</span>
-      </p>
-      <p class="subtitle" style="margin-bottom: 1.5rem;">Installing the latest model improves transcription cleanup quality.</p>
-
-      <div class="button-row">
-        <button class="secondary" onclick={handleLater}>Later</button>
-        <button class="primary" onclick={handleModelUpdate}>Update Model</button>
-      </div>
-    </div>
-
-  <!-- Model downloading -->
-  {:else if step === 'model_downloading'}
-    <div class="step">
-      <h2>Updating AI Model</h2>
-      <p class="subtitle">Downloading the latest cleanup model...</p>
-
-      <div class="progress-section">
-        <div class="progress-bar-container">
-          <div class="progress-bar indeterminate"></div>
-        </div>
-      </div>
-    </div>
-
-  <!-- Model update ready -->
-  {:else if step === 'model_ready'}
-    <div class="step">
-      <div class="icon-circle success">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-      </div>
-      <h2>Model Updated</h2>
-      <p class="subtitle">The cleanup model has been updated. New transcriptions will use the improved model.</p>
-
-      <div class="button-row">
-        <button class="primary" onclick={handleLater} style="flex: 1;">Done</button>
-      </div>
-    </div>
-
-  <!-- Model update error -->
-  {:else if step === 'model_error'}
-    <div class="step">
-      <div class="icon-circle error-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </div>
-      <h2>Model Update Failed</h2>
-      <p class="error-message">{errorMessage}</p>
-
-      <div class="button-row">
-        <button class="secondary" onclick={handleLater}>Close</button>
-        <button class="primary" onclick={handleModelUpdate}>Try Again</button>
-      </div>
-    </div>
   {/if}
 </div>
 
@@ -457,9 +354,9 @@
     justify-content: center;
     min-height: 100vh;
     padding: 2rem;
-    background: var(--bg, #1a1a1a);
-    color: var(--text, #e0e0e0);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
     user-select: none;
   }
 
@@ -473,23 +370,23 @@
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0 0 0.4rem;
-    color: #fff;
+    color: var(--text-bright);
   }
 
   .subtitle {
-    color: #999;
+    color: var(--text-dim);
     font-size: 0.85rem;
     line-height: 1.5;
     margin: 0 0 1.25rem;
   }
 
   .current-hint {
-    color: #666;
+    color: var(--text-dim);
   }
 
   .auto-close {
     font-size: 0.75rem;
-    color: #555;
+    color: var(--text-dim);
     margin: 0;
   }
 
@@ -504,24 +401,24 @@
     margin: 0 auto 1rem;
   }
   .icon-circle.success {
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
+    background: var(--success-bg);
+    color: var(--success);
   }
   .icon-circle.available {
-    background: rgba(59, 130, 246, 0.12);
-    color: #3b82f6;
+    background: var(--accent-bg);
+    color: var(--accent);
   }
   .icon-circle.error-icon {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
+    background: var(--danger-bg);
+    color: var(--danger);
   }
 
   /* ---- Spinner ---- */
   .spinner {
     width: 48px;
     height: 48px;
-    border: 3px solid #333;
-    border-top-color: var(--accent, #3b82f6);
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
     border-radius: 50%;
     margin: 0 auto 1rem;
     animation: spin 1s linear infinite;
@@ -537,13 +434,13 @@
   .progress-bar-container {
     width: 100%;
     height: 6px;
-    background: #333;
+    background: var(--border);
     border-radius: 3px;
     overflow: hidden;
   }
   .progress-bar {
     height: 100%;
-    background: var(--accent, #3b82f6);
+    background: var(--accent);
     border-radius: 3px;
     transition: width 0.3s ease;
   }
@@ -559,11 +456,11 @@
     display: flex;
     justify-content: space-between;
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-dim);
     margin-top: 0.5rem;
   }
   .progress-bytes {
-    color: #666;
+    color: var(--text-dim);
   }
 
   /* ---- Release notes ---- */
@@ -571,21 +468,21 @@
     text-align: left;
     margin: 0 0 1.25rem;
     padding: 0.75rem;
-    background: var(--card-bg, #242424);
+    background: var(--card-bg);
     border-radius: 8px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
   }
   .release-notes-label {
     font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #666;
+    color: var(--text-dim);
     margin: 0 0 0.4rem;
   }
   .release-notes-content {
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--text);
     line-height: 1.5;
     max-height: 100px;
     overflow-y: auto;
@@ -594,12 +491,11 @@
 
   /* ---- Error ---- */
   .error-message {
-    color: #ef4444;
+    color: var(--danger);
     font-size: 0.85rem;
     padding: 0.75rem;
-    background: rgba(239, 68, 68, 0.06);
+    background: var(--danger-bg);
     border-radius: 8px;
-    border: 1px solid rgba(239, 68, 68, 0.2);
     margin: 0 0 1.25rem;
     word-break: break-word;
     text-align: left;
@@ -620,12 +516,13 @@
   button:active { opacity: 0.8; }
 
   .primary {
-    background: var(--accent, #3b82f6);
-    color: #fff;
+    background: var(--accent);
+    color: var(--on-accent);
   }
   .secondary {
-    background: #333;
-    color: #ccc;
+    background: var(--card-bg);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border-hover);
   }
 
   .button-row {

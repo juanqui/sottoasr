@@ -165,6 +165,16 @@ pub fn restore_cached(app: AppHandle) {
     }
 }
 
+/// Loads the vocabulary model again after a re-download replaced its files.
+/// The model in use keeps working until the new one is attached.
+pub fn reload_cached(app: AppHandle) {
+    let state: State<'_, AppState> = app.state();
+    let was_loaded = std::mem::take(&mut state.vocabulary_runtime.lock().unwrap_or_else(|error| error.into_inner()).loaded);
+    if was_loaded {
+        start_preparation(app, false);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

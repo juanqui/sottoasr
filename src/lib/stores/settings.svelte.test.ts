@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-vi.mock('../utils/tauri', () => ({ getSettings: vi.fn(), updateSettings: vi.fn() }));
-import { getSettings, updateSettings } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({ getSettings: vi.fn(), updateSettings: vi.fn(), getSettingsLoadError: vi.fn(), resetSettings: vi.fn() }));
+import { getSettings, getSettingsLoadError, resetSettings, updateSettings } from '../utils/tauri';
 import { SettingsStore, createDefaultSettings } from './settings.svelte';
 import type { Settings, UpdateSettingsResult } from '../utils/tauri';
 const deferred = <T>() => { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+/** The backend skips `None` options when it serializes settings. */
+const asSerialized = (settings: Settings) => Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== null)) as Settings;
 let store: SettingsStore;
-beforeEach(() => { vi.resetAllMocks(); store = new SettingsStore(); vi.mocked(getSettings).mockResolvedValue(createDefaultSettings()); });
+beforeEach(() => { vi.resetAllMocks(); store = new SettingsStore(); vi.mocked(getSettings).mockResolvedValue(createDefaultSettings()); vi.mocked(getSettingsLoadError).mockResolvedValue(null); });
 
 describe('settings draft lifecycle', () => {
   it('migrates missing fields conservatively and preserves explicit choices', async () => {
@@ -71,5 +73,79 @@ describe('settings draft lifecycle', () => {
     expect(store.saved?.llm_cleanup_enabled).toBe(false);
     expect(store.saving).toBe(false);
     expect(store.error).toContain('Disk full');
+  });
+  it('treats a no-op edit after Save as clean when the backend omits empty alternates', async () => {
+    vi.mocked(getSettings).mockResolvedValueOnce(asSerialized(createDefaultSettings()));
+    await store.load();
+    expect(store.dirty).toBe(false);
+    store.update('show_overlay', false);
+    vi.mocked(updateSettings).mockImplementationOnce(async (settings) => ({ settings: asSerialized(settings), warnings: [] }));
+    await store.save();
+    expect(store.dirty).toBe(false);
+    // Clearing an alternate that is already empty writes null.
+    store.update('toggle_shortcut_alt', null);
+    store.update('input_device', null);
+    expect(store.dirty).toBe(false);
+  });
+});
+
+describe('replacement rows', () => {
+  it('blocks Save while a row has only one field filled in', async () => {
+    await store.load();
+    store.update('dictionary', [{ heard: 'Quen', replacement: '  ' }]);
+    expect(store.validationError).toContain('incomplete replacement');
+    await expect(store.save()).rejects.toThrow('incomplete replacement');
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(store.saving).toBe(false);
+  });
+  it('submits trimmed rows and drops rows with both fields empty', async () => {
+    await store.load();
+    store.update('dictionary', [{ heard: ' Quen ', replacement: 'Qwen ' }, { heard: ' ', replacement: '' }]);
+    expect(store.validationError).toBe('');
+    vi.mocked(updateSettings).mockImplementationOnce(async (settings) => ({ settings, warnings: [] }));
+    await store.save();
+    expect(vi.mocked(updateSettings).mock.calls[0][0].dictionary).toEqual([{ heard: 'Quen', replacement: 'Qwen' }]);
+    expect(store.current.dictionary).toEqual([{ heard: 'Quen', replacement: 'Qwen' }]);
+    expect(store.dirty).toBe(false);
+  });
+});
+
+describe('unreadable settings file', () => {
+  it('offers a reset only when the backend reports why loading failed', async () => {
+    vi.mocked(getSettings).mockRejectedValueOnce('Settings unavailable');
+    vi.mocked(getSettingsLoadError).mockResolvedValueOnce('expected value at line 1 column 1');
+    expect(await store.load()).toBe(false);
+    expect(store.loadError).toBe('expected value at line 1 column 1');
+    vi.mocked(resetSettings).mockResolvedValueOnce(asSerialized(createDefaultSettings()));
+    expect(await store.reset()).toBe(true);
+    expect(store.loaded).toBe(true);
+    expect(store.loadError).toBeNull();
+    expect(store.dirty).toBe(false);
+  });
+  it('keeps the reset available when the backend refuses it', async () => {
+    vi.mocked(getSettings).mockRejectedValue('Settings unavailable');
+    vi.mocked(getSettingsLoadError).mockResolvedValue('trailing characters');
+    await store.load();
+    vi.mocked(resetSettings).mockRejectedValueOnce('Finish dictation before resetting settings.');
+    expect(await store.reset()).toBe(false);
+    expect(store.loaded).toBe(false);
+    expect(store.loadError).toBe('trailing characters');
+    expect(store.error).toBe('Could not reset settings: Finish dictation before resetting settings.');
+    expect(store.resetting).toBe(false);
+  });
+  it('shows the written defaults when the reset fails after writing them', async () => {
+    vi.mocked(getSettings).mockRejectedValueOnce('Settings unavailable');
+    vi.mocked(getSettingsLoadError).mockResolvedValueOnce('trailing characters');
+    await store.load();
+    // The backend wrote the defaults and cleared the load error, then could not register a shortcut.
+    const written = asSerialized(createDefaultSettings());
+    vi.mocked(resetSettings).mockRejectedValueOnce('Settings were reset, but keyboard shortcuts could not be turned on. Choose other shortcuts and save.');
+    vi.mocked(getSettings).mockResolvedValueOnce(written);
+    expect(await store.reset()).toBe(false);
+    expect(store.loaded).toBe(true);
+    expect(store.loadError).toBeNull();
+    expect(store.dirty).toBe(false);
+    expect(store.error).toBe('Settings were reset, but keyboard shortcuts could not be turned on. Choose other shortcuts and save.');
+    expect(store.resetting).toBe(false);
   });
 });

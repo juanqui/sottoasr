@@ -5,10 +5,16 @@ use tokio::sync::Mutex;
 /// Both FluidAudio (CoreML/ANE) and parakeet-rs (ONNX/CPU) implement this.
 #[allow(dead_code)]
 pub trait AsrEngine: Send {
-    /// Initialize the engine and load/download models.
-    /// For FluidAudio: triggers CoreML model download + Neural Engine compilation on first run.
+    /// Load the prepared model files. Never downloads: preparation
+    /// (`model::prepare_speech_model`) runs first, outside the engine lock.
+    /// For FluidAudio: loads verified CoreML bundles and compiles for the Neural Engine.
     /// For parakeet-rs: loads ONNX model from disk (must be pre-downloaded).
     fn init(&mut self) -> Result<(), String>;
+
+    /// Load the model files again after they were replaced on disk.
+    fn reload(&mut self) -> Result<(), String> {
+        self.init()
+    }
 
     /// Check if the engine is ready for transcription.
     fn is_ready(&self) -> bool;
@@ -59,9 +65,36 @@ pub enum PreparedVocabulary {
 }
 
 impl PreparedVocabulary {
+    /// Downloads when allowed, verifies the files against the pinned manifest,
+    /// then loads them. Runs on a blocking worker without the engine lock.
     pub fn load(allow_download: bool) -> Result<Self, String> {
         #[cfg(feature = "asr-fluidaudio")]
-        { fluidaudio_rs::VocabularyModel::load(allow_download).map(Self::FluidAudio) }
+        {
+            let directory = super::model::vocabulary_model_dir()
+                .ok_or("Could not find your Application Support folder.")?;
+            let manifest = super::integrity::vocabulary();
+            let hash = &fluidaudio_rs::sha256_file;
+            let report = {
+                // Preparation may delete, restore or download files that a
+                // dictation would read; it keeps dictations off the folder.
+                let _files = super::model::VOCABULARY_FILES.write().unwrap_or_else(|error| error.into_inner());
+                if allow_download {
+                    // Deletes rejected files first, so a retry fetches them again.
+                    manifest.prepare(&directory, || fluidaudio_rs::download_vocabulary_model(&directory, true), hash)?
+                } else {
+                    manifest.check(&directory, hash)?
+                }
+            };
+            super::model::set_vocabulary_mismatch(report.has_mismatch());
+            if report.blocks_loading() {
+                return Err(if report.missing.is_empty() {
+                    "The downloaded vocabulary model failed verification, so it was not loaded. Prepare it again to download it again."
+                } else {
+                    "The vocabulary model is not fully downloaded. Prepare it again while online."
+                }.into());
+            }
+            fluidaudio_rs::VocabularyModel::load(&directory).map(Self::FluidAudio)
+        }
         #[cfg(not(feature = "asr-fluidaudio"))]
         { let _ = allow_download; Err("Vocabulary assistance is unavailable for this ASR backend".into()) }
     }

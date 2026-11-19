@@ -1,9 +1,9 @@
 # SottoASR — Architecture & Design Document
 
-- **Version**: 2.2
-- **Date**: 2026-09-08
-- **Status**: Implemented
-- **Author**: juanqui + Claude
+- **Version:** 3.0
+- **Date:** 2026-11-19
+- **Status:** Implemented
+- **Author:** juanqui + Claude
 
 ---
 
@@ -28,19 +28,19 @@
 17. [Testing Strategy](#17-testing-strategy)
 18. [Security Considerations](#18-security-considerations)
 19. [Performance Targets](#19-performance-targets)
-20. [Future: Cross-Platform Support](#20-future-cross-platform-support)
+20. [Cross-Platform Support](#20-cross-platform-support)
 
 ---
 
 ## 1. Summary
 
-SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. Users press a system-wide hotkey to activate dictation, speak naturally, and transcribed text is automatically pasted wherever their cursor is positioned. The default backend runs NVIDIA Parakeet TDT v3 through FluidAudio on CoreML/ANE; ONNX Runtime remains an optional backend. No audio data leaves the machine.
+SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs NVIDIA Parakeet TDT v3 through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. Audio and transcript text never leave the Mac.
 
-The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) is the current implementation source, together with the [five-pass audit](../audit/2026-09-08-five-pass-review.md). It supersedes older illustrative snippets below. A blocking worker owns microphone shutdown, final callback drain and private checked WAV serialization; shared background inference runs TDT v3 plus optional acoustic vocabulary. Exact replacements modify ordinary output once. Experimental cleanup stays off by default and stores a separate deletion-only suggestion requiring explicit Copy in History; it never changes automatic delivery. Original ASR provenance remains separate.
+The application lives only in the macOS menu bar (no Dock icon, no main window). It has two dictation modes: **press-and-hold** (hold the hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop). A floating pill overlay with an audio waveform gives feedback during recording.
 
-Settings/history use atomic private writes and preserve unreadable or failed-save data. Overlay state is retained natively with recording generations and revisions; only explicit dismissal/new capture clears recovery errors. Fifty-row history pages avoids mounting all stored rows. Four Settings sections own draft/setup state through cancellation and save acknowledgements. Current cache loading preserves existing models on CoreML errors, and accepted exit cannot cross a new recording. See the linked spec for precise interfaces, compatibility and tests.
+After Stop, the recording goes through ASR, optional acoustic vocabulary, exact replacements and optional AI cleanup. Then SottoASR pastes or copies the text, and only after that saves it in History. A private WAV file on disk holds each recording until History saves it, so an interrupted dictation can be recovered.
 
-The application lives exclusively in the macOS menu bar (no Dock icon, no main window) and provides two dictation modes: **press-and-hold** (hold hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop and transcribe). A floating pill overlay with an audio waveform animation provides visual feedback during recording.
+This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
 
 ---
 
@@ -49,8 +49,7 @@ The application lives exclusively in the macOS menu bar (no Dock icon, no main w
 ### Design constraints
 
 Dictation products differ in local/cloud execution, vocabulary mechanisms, history,
-customization and cost. Earlier blanket comparisons in this document are obsolete.
-Sotto's requirements are local speech processing, explicit model setup, predictable
+customization and cost. Sotto's requirements are local speech processing, explicit model setup, predictable
 cursor delivery, recoverable history and a menu-bar interface. Current competitor
 vocabulary mechanisms and Apple's supported contextual APIs are documented with
 primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
@@ -62,7 +61,7 @@ primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 3. **Two dictation modes**: Press-and-hold for quick dictation, toggle for longer sessions
 4. **Invisible when idle**: Menu bar icon only, no Dock presence, no windows unless recording
 5. **Paste anywhere**: Transcribed text appears at the cursor position in any application
-6. **Transcription history**: All transcriptions are saved and accessible
+6. **Transcription history**: Transcriptions stay available until the user deletes them or sets a retention period
 7. **Polished UX**: Floating pill overlay with waveform animation during recording
 8. **Performant**: <50 MB memory when idle, <200 MB during transcription
 
@@ -84,69 +83,79 @@ primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 ```mermaid
 flowchart TB
     subgraph macOS["macOS System"]
-        HK["Global Hotkey Listener"]
-        MIC["Microphone Input"]
-        CB["System Clipboard"]
+        HK["Global Shortcuts"]
+        MIC["Microphone"]
+        CB["NSPasteboard"]
         AX["Accessibility API (CGEvent)"]
     end
 
-    subgraph Tauri["Tauri Core Process (Rust)"]
-        HM["Hotkey Manager"]
-        AR["Audio Recorder (cpal)"]
-        ASR["ASR Engine (parakeet-rs)"]
-        PM["Paste Manager"]
-        TH["Transcription History (Store)"]
-        TM["Tray Manager"]
-        SM["State Machine"]
+    subgraph Core["Tauri Core Process (Rust)"]
+        HM["hotkeys/manager.rs (shortcuts, overlay panel, TauriEvents)"]
+        PL["pipeline.rs (start, stop, cancel)"]
+        AR["audio/ (cpal capture, WAV writer)"]
+        ASR["asr/ (FluidAudio bridge, Swift)"]
+        PM["paste/ (clipboard, Cmd+V)"]
+        TH["History store (transcriptions.json)"]
+        TM["tray/ and updater/"]
     end
 
-    subgraph WebView["WebView Process (Svelte)"]
-        OV["Overlay Window (Pill + Waveform)"]
-        HV["History View"]
-        SV["Settings View"]
+    subgraph Sidecar["Python Sidecar Process"]
+        LLM["MiniCPM5 2B on MLX"]
+    end
+
+    subgraph WebView["WebView Windows (Svelte)"]
+        OV["Overlay"]
+        HV["History and recovery"]
+        SV["Settings"]
+        ON["Onboarding, About, Update"]
     end
 
     HK --> HM
-    HM --> SM
-    SM -->|start recording| AR
-    AR -->|audio samples| ASR
-    ASR -->|transcription| PM
-    PM -->|write text| CB
-    PM -->|simulate Cmd+V| AX
-    PM -->|save| TH
-    SM -->|show/hide| OV
-    AR -->|audio levels| OV
-    TH --> HV
-    TM --> HV
-    TM --> SV
+    HM --> PL
     MIC --> AR
+    PL --> AR
+    AR -->|WAV file| ASR
+    PL --> ASR
+    PL -->|text windows| LLM
+    PL --> PM
+    PM --> CB
+    PM --> AX
+    PL -->|after delivery| TH
+    HM -->|events| OV
+    TH --> HV
+    TM --> SV
 ```
 
 ### Key Design Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Desktop framework | Tauri v2.10 | Rust backend for audio/ASR performance, ~10 MB bundle vs Electron's ~150 MB. Source: [Tauri docs](https://v2.tauri.app/) |
-| Frontend framework | Svelte 5 | ~1.6 KB runtime (vs React's ~42 KB), compiled reactivity, best Tauri alignment. Source: [Svelte docs](https://svelte.dev/) |
-| ASR engine (macOS) | FluidAudio via fluidaudio-rs | CoreML/Apple Neural Engine, ~44x real-time on M4, Parakeet TDT v3 (25 languages). Automatic model download. Source: [fluidaudio-rs](https://github.com/FluidInference/fluidaudio-rs) |
-| ASR engine (cross-platform) | parakeet-rs v0.3.4 (optional) | ONNX Runtime CPU fallback via `asr-parakeet` feature flag. Source: [parakeet-rs](https://github.com/altunenes/parakeet-rs) |
-| Audio capture | cpal v0.15 | Cross-platform audio I/O in Rust. Pinned to 0.15.x for stability; 0.17.x available but 0.15 API is sufficient. Source: [cpal](https://github.com/RustAudioGroup/cpal) |
-| Audio resampling | rubato v0.16 | High-quality resampling to 16 kHz. Note: rubato v1.0 released Jan 2026 with new API; using 0.16 for proven stability with parakeet-rs ecosystem. Source: [rubato](https://github.com/HEnquist/rubato) |
-| Paste mechanism | Clipboard + CGEvent Cmd+V | Industry standard used by Superwhisper, Wispr Flow, Dictato. Uses `core-graphics` crate for CGEvent (note: `cocoa` crate is deprecated; direct `objc2` or `core-graphics` preferred). |
-| Storage | tauri-plugin-store | Lightweight JSON-based persistent storage for settings and history. |
-| Hotkeys | tauri-plugin-global-shortcut | Official Tauri plugin for system-wide keyboard shortcuts. |
-| App type | Menu bar only (LSUIElement) | Standard pattern for dictation apps (Superwhisper, Wispr Flow, MacWhisper all do this). |
+| Desktop framework | Tauri v2 (2.11) | Rust backend for audio/ASR performance, small bundle compared with Electron. Source: [Tauri docs](https://v2.tauri.app/) |
+| Frontend framework | Svelte 5 | Small runtime, compiled reactivity. Source: [Svelte docs](https://svelte.dev/) |
+| ASR engine (macOS) | FluidAudio 0.15.6 via the vendored bridge `src-tauri/vendor/fluidaudio-rs` | CoreML/Apple Neural Engine, Parakeet TDT v3 (25 languages). Models are pinned to fixed commits and verified by SHA-256. |
+| ASR engine (cross-platform) | parakeet-rs 0.3 (optional) | ONNX Runtime CPU fallback via the `asr-parakeet` feature flag |
+| Audio capture | cpal 0.16 | Audio input in Rust. Version 0.16 holds a stream weakly in its disconnect listener. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped. |
+| Recording storage | Private WAV file per recording | A crash or a failed transcription keeps the audio for recovery |
+| One stop path | `pipeline.rs` | Hotkeys, IPC and tests drive the same functions. Tauri effects go through the `PipelineEvents` trait. |
+| Delivery order | Paste or copy, then save History | A slow history write does not delay the text |
+| Paste mechanism | `NSPasteboard` + CGEvent `Cmd+V` | Works in all apps. The transcript is written as transient, concealed and local-only. The previous clipboard is restored in full. |
+| Storage | JSON files with atomic, owner-only writes (`persistence.rs`) | Settings and history survive a crash during a write |
+| Hotkeys | tauri-plugin-global-shortcut | System-wide shortcuts. Push-to-talk release is polled with `CGEventSourceKeyState`. |
+| Overlay | tauri-nspanel | A non-activating NSPanel does not take focus from the target app |
+| AI cleanup | Python sidecar with mlx-lm, stock `openbmb/MiniCPM5-2B-MLX` | Runs on the GPU through MLX. Rust validates every proposed edit. |
+| App type | Menu bar only (LSUIElement) | Standard pattern for dictation apps |
 
 ### Alternatives Considered and Rejected
 
 | Alternative | Rejected Because |
 |-------------|-----------------|
-| **FluidAudio / fluidaudio-rs** | ~~Initially rejected~~ → **Adopted as primary macOS backend.** CoreML/ANE provides ~44x RTF on M4, vastly superior to ONNX CPU. Automatic model download. Apple-only is acceptable since macOS is the primary target. parakeet-rs retained as cross-platform fallback via feature flag. |
-| **whisper-rs** | Good option but Parakeet TDT v3 has better accuracy (6.34% avg WER on Open ASR Leaderboard) and faster inference on CPU. whisper-rs is a fallback option if parakeet-rs proves problematic. |
-| **React + Vite** | Larger runtime (~42 KB vs ~1.6 KB), no advantage for this minimal UI. Svelte's compiled output is better aligned with Tauri's lightweight philosophy. |
+| **FluidAudio / fluidaudio-rs** | ~~Initially rejected~~ → **Adopted as primary macOS backend.** CoreML/ANE is much faster than ONNX on the CPU. Apple-only is acceptable because macOS is the primary target. parakeet-rs stays as a cross-platform fallback via a feature flag. |
+| **whisper-rs** | Parakeet TDT v3 has better accuracy (6.34% avg WER on Open ASR Leaderboard) and faster inference. |
+| **React + Vite** | Larger runtime, no advantage for this minimal UI. |
 | **Next.js** | Must use static export mode, losing all SSR benefits. Adds unnecessary complexity for a desktop app. |
 | **Electron** | 150-200 MB bundle, 300-500 MB memory. Antithetical to a lightweight, performant dictation tool. |
 | **AXUIElement paste** | Only works in a few apps (TextEdit, Xcode). Clipboard + Cmd+V works universally. |
+| **In-process cleanup with mlx-swift-lm** | Measured in a [spike](../research/2026-11-19-in-process-cleanup-spike.md). Its recommendation: not viable as a drop-in replacement today. |
 
 ---
 
@@ -156,29 +165,35 @@ flowchart TB
 
 | Component | Package | Version | Purpose |
 |-----------|---------|---------|---------|
-| Desktop framework | `tauri` | 2.10.x | Cross-platform desktop app with Rust backend |
+| Desktop framework | `tauri` | 2.11 | Desktop app with Rust backend |
 | Frontend | `svelte` | 5.x | Reactive UI with minimal runtime |
-| Build tool | `vite` | 8.x | Fast frontend bundling |
-| ASR | `parakeet-rs` | 0.3.4 | Parakeet TDT model inference via ONNX Runtime |
-| Audio capture | `cpal` | 0.15.x | Cross-platform audio input (0.17.x available; 0.15 pinned for stability) |
-| Resampling | `rubato` | 0.16.x | Resample to 16 kHz for Parakeet (1.0.x available; 0.16 pinned for ecosystem compat) |
-| Audio encoding | `hound` | 3.5.x | WAV file read/write |
+| Build tool | `vite` | 8.x | Multi-page frontend bundling |
+| ASR (default) | `fluidaudio-rs` (vendored) | FluidAudio 0.15.6 | Swift bridge to FluidAudio on CoreML |
+| ASR (optional) | `parakeet-rs` | 0.3 | Parakeet TDT inference via ONNX Runtime (`asr-parakeet`) |
+| Audio capture | `cpal` | 0.16 | Microphone input |
+| Resampling | `rubato` | 0.16 | Resample to 16 kHz, `asr-parakeet` only |
+| Audio encoding | `hound` | 3.5 | WAV file read/write |
 | Global shortcuts | `tauri-plugin-global-shortcut` | 2.x | System-wide hotkey registration |
-| Clipboard | `tauri-plugin-clipboard-manager` | 2.x | Read/write system clipboard |
-| Storage | `tauri-plugin-store` | 2.x | Persistent key-value storage |
-| Positioning | `tauri-plugin-positioner` | 2.x | Window positioning (tray-relative) |
-| macOS interop | `core-graphics` + `core-foundation` | 0.24.x / 0.10.x | CGEvent for paste simulation. Note: `cocoa`/`objc` crates are deprecated in favor of `objc2-*`; we use `core-graphics` directly for CGEvent API. |
-| Date/time | `chrono` | 0.4.x | Timestamp transcriptions |
-| IDs | `uuid` | 1.x | Unique transcription identifiers |
-| Async runtime | `tokio` | 1.x | Async task execution for ASR |
-| Error handling | `anyhow` | 1.x | Ergonomic error handling |
-| User dirs | `dirs` | 6.x | Platform-specific data directories |
+| Clipboard (History window) | `tauri-plugin-clipboard-manager` | 2.x | Copy from the History window |
+| Logging | `tauri-plugin-log` | 2.x | Log file and frontend log forwarding |
+| Updates | `tauri-plugin-updater` | 2.x | Signed app updates from GitHub Releases |
+| Login item | `tauri-plugin-autostart` | 2.x | Launch at login |
+| Overlay panel | `tauri-nspanel` | branch `v2.1` | Non-activating NSPanel |
+| macOS interop | `core-graphics` + `core-foundation` | 0.24 / 0.10 | CGEvent for paste simulation |
+| Clipboard (paste) | `arboard` | 3 | Plain clipboard writes |
+| Language detection | `whatlang` | 0.18.0 | Skips cleanup for reliable non-English detections |
+| Date/time | `chrono` | 0.4 | Timestamps |
+| IDs | `uuid` | 1 | Recording and transcription identifiers |
+| Async runtime | `tokio` | 1 | Async tasks and timeouts |
+| User dirs | `dirs` | 6 | Platform data directories |
+
+The cleanup sidecar runs `mlx` 0.32.2, `mlx-lm` 0.31.3, `transformers` 5.3.0 and `huggingface-hub` 1.7.2. `src-tauri/sidecar/requirements.lock` pins these and all of their dependencies with SHA-256 hashes.
 
 ### macOS System Requirements
 
-- macOS 12 Monterey or later (for WKWebView compatibility)
-- Apple Silicon recommended (M1+) for optimal ASR performance
-- ~670 MB disk for ASR model (Parakeet TDT 0.6B int8 ONNX: encoder ~652 MB + decoder ~18 MB)
+- macOS 14 Sonoma or later (`minimumSystemVersion` 14.0)
+- Apple Silicon (M1 or later)
+- About 483 MB of disk for the speech model, about 103 MB for the optional vocabulary model, and about 1.4 GB for the optional cleanup model
 - Microphone permission (TCC — Transparency, Consent, and Control, Apple's privacy permissions framework)
 - Accessibility permission (TCC) for paste-at-cursor
 
@@ -190,9 +205,11 @@ flowchart TB
 | WER | Word Error Rate — percentage of incorrectly transcribed words |
 | RTF | Real-Time Factor — ratio of processing time to audio duration. 20x RTF means 1 second of audio processes in 50ms |
 | LSUIElement | An Info.plist key that hides the app from the macOS Dock, making it a background/agent app |
-| NSPanel | A macOS window type designed for auxiliary/floating panels that don't steal focus |
+| NSPanel | A macOS window type designed for auxiliary/floating panels that do not take focus |
 | Template image | A macOS menu bar image that automatically adapts to light/dark appearance |
-| FIFO | First In, First Out — oldest items are removed first when a limit is reached |
+| Sidecar | The Python process that runs the cleanup model. Rust starts it and talks to it through stdin and stdout. |
+| Manifest | `model-manifest.json`, the SHA-256 and size of each speech and vocabulary model file |
+| Generation | A counter for each recording. A late key release or timer cannot stop a newer recording. |
 
 ---
 
@@ -200,378 +217,233 @@ flowchart TB
 
 ### Process Model
 
-Tauri uses a multi-process architecture:
-
 ```mermaid
 flowchart LR
-    subgraph Core["Core Process (Rust — Trusted)"]
-        A["Audio Capture (cpal)"]
-        B["ASR Engine (parakeet-rs)"]
-        C["Hotkey Manager"]
-        D["Paste Manager"]
-        E["State Machine"]
-        F["Tray Manager"]
-        G["History Store"]
+    subgraph Core["Core Process (Rust + Swift bridge)"]
+        A["Audio capture and WAV writer"]
+        B["ASR (FluidAudio)"]
+        C["Hotkeys and overlay panel"]
+        D["Paste"]
+        E["Pipeline and state"]
+        F["Tray and updater"]
+        G["History and recovery"]
     end
 
-    subgraph WV["WebView Process (Svelte — Sandboxed)"]
-        H["Overlay UI"]
-        I["History UI"]
-        J["Settings UI"]
+    subgraph WV["WebView Windows (Svelte)"]
+        H["Overlay"]
+        I["History"]
+        J["Settings"]
+        K["Onboarding, About, Update"]
+    end
+
+    subgraph PY["Python Processes"]
+        L["Inference sidecar (offline)"]
+        M["Download process"]
     end
 
     Core <-->|"IPC (invoke + events)"| WV
+    Core <-->|"JSON lines on stdin/stdout"| PY
 ```
 
-**Core Process (Rust)** handles all sensitive and performance-critical operations:
-- Audio capture and buffering
-- ASR model inference
-- System clipboard manipulation
+**Core process (Rust)** handles all sensitive and performance-critical operations:
+- Audio capture and the private WAV file
+- ASR model inference through the Swift bridge, which is linked into the process
+- Clipboard writes, the clipboard snapshot and the restore
 - CGEvent posting (simulated paste)
-- Global hotkey registration
-- Tray icon and menu management
-- Transcription history persistence
+- Global hotkey registration and the key listener of the shortcut recorder
+- Tray icon, menu and update checks
+- History, retention and recording recovery
 
-**WebView Process (Svelte)** handles UI rendering only:
-- Floating overlay with waveform animation
-- Transcription history list view
-- Settings/preferences panel
-- All UI state driven by Tauri events from Rust
+**WebView windows (Svelte)** handle UI only. Components call the typed wrappers in `src/lib/utils/tauri.ts`, which is the only module that calls `invoke`. All UI state comes from commands and from events that Rust emits.
+
+**Python processes** run the cleanup model. The inference sidecar starts with `HF_HUB_OFFLINE=1` and never uses the network. The model download runs in a separate process with the same script. Both start with `python -I`, a cleared environment, `PATH=/usr/bin:/bin` and a fixed `HF_HUB_CACHE`.
+
+### Startup
+
+1. Start the recovery session (`recordings/session.state`) and set the activation policy to Accessory.
+2. Check Accessibility without a prompt.
+3. Start the key capture thread for the shortcut recorder.
+4. Register the shortcuts one by one. If one fails, open Settings with the title "SottoASR — Review Keyboard Shortcuts".
+5. Create the hidden overlay panel.
+6. If the speech model is not available, open onboarding. Otherwise load ASR in the background.
+7. If AI cleanup is on, prepare and warm the sidecar in the background. An inconclusive runtime check is tried again after about 16, 30 and 60 seconds.
+8. Start the update checker and the retention timer (now, then every 6 hours).
+9. Sync the login item, but only if the settings file loaded.
+10. When the event loop is ready, create the tray icon and open History if recordings wait for recovery.
 
 ### State Machine
-
-The application has a clear state machine governing recording behavior:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
 
-    Idle --> Recording: hotkey_press (push-to-talk) OR hotkey_toggle_on
-    Recording --> Transcribing: hotkey_release (push-to-talk) OR hotkey_toggle_off
-    Transcribing --> Pasting: transcription_complete
-    Pasting --> Idle: paste_complete
-
-    Recording --> Idle: hotkey_cancel (Escape)
-    Transcribing --> Idle: transcription_error
-    Pasting --> Idle: paste_error
-
-    state Recording {
-        [*] --> Capturing
-        Capturing --> Capturing: audio_samples_received
-    }
-
-    state Transcribing {
-        [*] --> Processing
-        Processing --> Complete: asr_result
-    }
+    Idle --> Recording: push-to-talk press OR toggle
+    Recording --> Transcribing: release OR toggle OR auto-stop at 20 min
+    Recording --> Transcribing: cancel (no paste)
+    Transcribing --> CleaningUp: AI cleanup on and capture not interrupted
+    Transcribing --> Idle: delivered, saved, or failed
+    CleaningUp --> Idle: delivered, saved, or failed
 ```
 
-**States:**
+**States** (`AppStateEnum` in `models.rs`):
 
-| State | Description | Overlay | Tray Icon |
-|-------|-------------|---------|-----------|
-| `Idle` | No recording active | Hidden | Default icon |
-| `Recording` | Capturing audio from microphone | Visible (pill + waveform) | Recording icon (red dot) |
-| `Transcribing` | ASR model processing audio | Visible (processing spinner) | Processing icon |
-| `Pasting` | Writing to clipboard and simulating Cmd+V | Hidden | Brief flash |
+| State | Description | Overlay |
+|-------|-------------|---------|
+| `Idle` | No dictation active | Hidden, or an error card |
+| `Recording` | Capturing audio from the microphone | Pill with waveform, timer, Stop and Cancel |
+| `Transcribing` | ASR, vocabulary, replacements, paste and history save | "Transcribing..." |
+| `CleaningUp` | AI cleanup runs | "Cleaning up..." |
+| `Pasting` | Defined in the enum and the overlay. The pipeline does not set it. | "Pasting..." |
+
+A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` does not start a recording. The pipeline emits `hotkey-busy`, and the overlay shows "Still working. Try again in a moment." for 1.5 s. Recovery reprocessing holds the app in `Transcribing`, so a dictation cannot start during it.
+
+`set_state` and `get_state` recover a poisoned lock. The settings that hot paths read (`show_overlay`, `sound_cues`, `input_device`) have atomic mirrors in `AppState`. `update_settings` updates the mirrors after a successful save.
 
 ---
 
 ## 6. Detailed Design
 
-### 6.1 IPC Commands (Rust → Frontend)
+### 6.1 IPC Commands (Frontend → Rust)
 
-All Tauri commands exposed to the frontend:
+`lib.rs` registers these commands in `generate_handler!`:
 
-```rust
-// Recording control
-#[tauri::command]
-async fn start_recording(state: State<'_, AppState>) -> Result<(), String>;
+| Group | Commands |
+|---|---|
+| Recording | `start_recording`, `stop_recording`, `cancel_recording` |
+| History | `get_transcriptions`, `delete_transcription`, `clear_transcriptions`, `export_transcriptions_csv_file`, `reveal_csv_export` |
+| Recovery | `get_recoverable_recordings`, `recover_recording`, `reveal_recovery_recording`, `delete_recovery_recording`, `get_recovery_notice` |
+| Settings | `get_settings`, `update_settings`, `apply_shortcuts`, `reset_settings`, `get_settings_load_error`, `list_input_devices` |
+| Permissions | `request_accessibility_permission`, `request_microphone_permission`, `check_all_permissions`, `open_accessibility_settings`, `fix_accessibility_permission`, `open_input_monitoring_settings`, `open_microphone_settings`, `open_url` |
+| Key capture | `start_key_capture`, `stop_key_capture` |
+| Speech model | `get_asr_backend`, `get_model_status`, `init_asr`, `redownload_speech_model`, `download_model`, `complete_setup` |
+| Vocabulary | `get_vocabulary_status`, `prepare_vocabulary_model` |
+| AI cleanup | `get_llm_status`, `prepare_llm_model`, `repair_llm_runtime`, `delete_llm_model` |
+| Updates | `check_app_update`, `perform_app_update`, `get_update_status` |
+| Overlay and shell | `overlay_start_drag`, `dismiss_overlay_error`, `get_overlay_snapshot`, `restart_app`, `reveal_recording_audio`, `open_transcription_history` |
 
-#[tauri::command]
-async fn stop_recording(state: State<'_, AppState>) -> Result<(), String>;
-// Note: transcription result arrives asynchronously via `transcription-complete` event
+`stop_recording` and `cancel_recording` return after the recording is claimed and its WAV is finalized. The rest of the stop path runs in a spawned task and reports through events.
 
-#[tauri::command]
-async fn cancel_recording(state: State<'_, AppState>) -> Result<(), String>;
-
-// Transcription history
-#[tauri::command]
-async fn get_transcriptions(state: State<'_, AppState>) -> Result<Vec<Transcription>, String>;
-
-#[tauri::command]
-async fn get_last_transcription(state: State<'_, AppState>) -> Result<Option<Transcription>, String>;
-
-#[tauri::command]
-async fn delete_transcription(id: String, state: State<'_, AppState>) -> Result<(), String>;
-
-#[tauri::command]
-async fn clear_transcriptions(state: State<'_, AppState>) -> Result<(), String>;
-
-// Settings
-#[tauri::command]
-async fn get_settings(state: State<'_, AppState>) -> Result<Settings, String>;
-
-#[tauri::command]
-async fn update_settings(settings: Settings, state: State<'_, AppState>) -> Result<(), String>;
-
-// Permissions
-#[tauri::command]
-async fn check_microphone_permission() -> Result<bool, String>;
-
-#[tauri::command]
-async fn check_accessibility_permission() -> Result<bool, String>;
-
-#[tauri::command]
-async fn request_accessibility_permission() -> Result<(), String>;
-
-// ASR model management
-#[tauri::command]
-async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus, String>;
-
-#[tauri::command]
-async fn download_model(state: State<'_, AppState>) -> Result<(), String>;
-```
+`apply_shortcuts`, `fix_accessibility_permission` and `open_input_monitoring_settings` have no frontend caller. The contract test lists them as known exceptions.
 
 ### 6.2 Tauri Events (Rust → Frontend)
 
-Events emitted from Rust to update the frontend:
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `recording-started` | `{}` | Recording has begun |
-| `recording-stopped` | `{}` | Recording has stopped, transcription starting |
-| `recording-cancelled` | `{}` | Recording was cancelled (Escape pressed), no transcription will occur |
-| `audio-level` | `{ level: f32 }` | Current audio amplitude (0.0–1.0), emitted ~30 fps |
-| `transcription-complete` | `{ id, text, duration_ms }` | ASR finished, text available |
-| `transcription-error` | `{ error: string }` | ASR failed |
-| `paste-complete` | `{ id: string }` | Text was pasted at cursor successfully |
-| `paste-error` | `{ error: string }` | Paste failed (e.g., no accessibility permission) |
-| `model-download-started` | `{}` | Model download has begun |
-| `model-download-progress` | `{ progress: f32 }` | Model download progress (0.0–1.0) |
-| `model-download-complete` | `{}` | Model download finished successfully |
-| `model-download-error` | `{ error: string }` | Model download failed |
-| `state-changed` | `{ state: AppStateEnum }` | State machine transition |
+| Event | Emitted when |
+|-------|-------------|
+| `state-changed`, `overlay-state` | The state or the overlay snapshot changes |
+| `recording-started`, `recording-stopped`, `recording-cancelled` | A recording starts, stops or is cancelled |
+| `recording-time-warning` | One minute before the 20-minute limit |
+| `audio-level` | About 30 times a second during a recording |
+| `hotkey-busy` | A start request arrives while a dictation is still processed |
+| `recording-error`, `transcription-error`, `paste-error`, `history-save-error` | The pipeline reports a `Failure` of that kind |
+| `llm-cleanup-status` | The cleanup outcome of a dictation is known |
+| `paste-complete` | The text was pasted or copied |
+| `transcription-complete`, `history-error` | History saved the entry, or the save failed |
+| `history-changed` | Retention removed entries |
+| `recovery-recordings-changed` | The list of recordings that wait for recovery changed |
+| `asr-init-started`, `asr-init-complete`, `asr-init-error`, `setup-progress` | Speech model preparation and onboarding progress |
+| `model-download-progress` | Every 500 ms during a speech model download |
+| `llm-download-progress` | Every 2 s during the cleanup model download |
+| `llm-preparation-changed` | Cleanup preparation starts or ends |
+| `vocabulary-status` | The vocabulary model status changes |
+| `update-available`, `update-up-to-date`, `update-check-error`, `update-download-progress`, `update-installed` | App update checks and installs |
+| `key-captured`, `key-modifier` | The shortcut recorder receives keys from the native key listener |
 
 ### 6.3 Data Models
 
-```typescript
-// TypeScript (frontend)
-interface Transcription {
-  id: string;           // UUID v4
-  text: string;         // Transcribed text
-  duration_ms: number;  // Recording duration in milliseconds
-  created_at: string;   // ISO 8601 timestamp
-  word_count: number;   // Number of words
-}
+**`Settings`** (`models.rs`). `Settings::normalize` trims text fields and drops replacement rows that are empty on both sides. `Settings::validate` runs on every save.
 
-interface Settings {
-  push_to_talk_shortcut: string;  // e.g., "CommandOrControl+Shift+Space"
-  toggle_shortcut: string;        // e.g., "CommandOrControl+Shift+D"
-  cancel_shortcut: string;        // e.g., "Escape"
-  show_overlay: boolean;          // Show floating pill during recording
-  auto_paste: boolean;            // Automatically paste after transcription
-  restore_clipboard: boolean;     // Restore clipboard after paste
-  model_path: string;             // Path to ONNX model file
-  language: string;               // Language code or "auto"
-  max_history: number;            // Maximum transcriptions to keep
-  launch_at_login: boolean;       // Start app on macOS login
-}
+| Field | Default | Meaning |
+|---|---|---|
+| `push_to_talk_shortcut` | `CommandOrControl+Shift+Space` | Hold to record |
+| `toggle_shortcut` | `CommandOrControl+Shift+D` | Press to start and stop |
+| `cancel_shortcut` | `Escape` | Registered only while recording |
+| `open_settings_shortcut` | `CommandOrControl+Shift+Comma` | Opens Settings |
+| `*_shortcut_alt` | none | Alternates for push to talk, toggle and cancel |
+| `show_overlay` | `true` | Show the recording pill |
+| `auto_paste` | `true` | Paste, or only copy when off |
+| `restore_clipboard` | `true` | Restore the previous clipboard after a paste |
+| `restore_focus_before_paste` | `true` | Paste into the app that was in front at the start |
+| `launch_at_login` | `false` | Login item |
+| `llm_cleanup_enabled` | `false` | AI cleanup |
+| `llm_cleanup_mode` | `retype` | `retype`, or the experimental `replace` |
+| `dictionary` | empty | Exact replacements, up to 200 rows |
+| `vocabulary` | empty | Words for acoustic vocabulary, up to 100 |
+| `auto_check_updates` | `true` | Periodic update checks |
+| `input_device` | none | cpal device name. None follows the system default. |
+| `sound_cues` | `false` | System sounds for start, stop, cancel, busy and error |
+| `history_retention_days` | `0` | Delete history older than N days. 0 keeps it. |
+| `audio_retention_days` | `0` | Delete kept recordings older than N days. 0 keeps them. |
 
-interface ModelStatus {
-  downloaded: boolean;
-  loaded: boolean;
-  path: string | null;
-  name: string;
-  size_bytes: number | null;
-}
-```
+`validate` rejects empty required shortcuts, shortcuts that do not parse, duplicate shortcuts (alternates and Open Settings included), a push-to-talk key that the release poller cannot watch, retention values above 3,650 days, and a microphone name with control characters or more than 256 characters. It also validates the dictionary and the vocabulary.
 
-```rust
-// Rust (backend)
+The model no longer has `model_path`, `language` or `max_history`. `persist_settings` still writes them with the fixed values `""`, `"auto"` and `500`, because earlier builds require these keys to parse the file. Without them, a rollback registers no hotkeys.
 
-/// Global application state, managed by Tauri's State<AppState>.
-///
-/// Uses std::sync::Mutex for state accessed in sync contexts (cpal callback).
-/// Uses tokio::sync::Mutex for state accessed in async Tauri commands (avoids
-/// deadlock when holding a lock across .await points).
-/// Audio buffer uses a channel-based approach: cpal callback sends samples
-/// to a receiver held by the recording manager, avoiding shared Mutex contention.
-pub struct AppState {
-    pub current_state: std::sync::Mutex<AppStateEnum>,
-    pub settings: tokio::sync::Mutex<Settings>,
-    pub asr_engine: tokio::sync::Mutex<Option<parakeet_rs::ParakeetTDT>>,
-    pub last_transcription: tokio::sync::Mutex<Option<Transcription>>,
-    pub is_model_loaded: std::sync::atomic::AtomicBool,
-    // Audio samples are sent via crossbeam channel from cpal callback,
-    // not stored in a shared Mutex. See audio/capture.rs.
-}
+**`Transcription`** (`models.rs`):
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelStatus {
-    pub downloaded: bool,
-    pub loaded: bool,
-    pub path: Option<String>,
-    pub name: String,
-    pub size_bytes: Option<u64>,
-}
+| Field | Meaning |
+|---|---|
+| `id` | Recording ID (UUID). The WAV file is `sotto_<id>.wav`. |
+| `text` | Delivered text: ASR with vocabulary, replacements and accepted cleanup |
+| `raw_text` | Original ASR text, present when post-processing changed the text |
+| `duration_ms`, `word_count`, `created_at` | Recording facts |
+| `saved_at` | Time of the first history save. Retention measures age from here. |
+| `cancelled` | The user cancelled the recording |
+| `capture_error` | The capture was interrupted. The text covers only the captured part. |
+| `llm_cleanup_status` | Cleanup outcome (`Applied`, `Rejected`, `TimedOut`, `Unavailable` and more) |
+| `cleanup_suggestion`, `llm_applied` | Fields of earlier versions, still read |
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Transcription {
-    pub id: String,
-    pub text: String,
-    pub duration_ms: u64,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub word_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Settings {
-    pub push_to_talk_shortcut: String,
-    pub toggle_shortcut: String,
-    pub cancel_shortcut: String,
-    pub show_overlay: bool,
-    pub auto_paste: bool,
-    pub restore_clipboard: bool,
-    pub model_path: String,
-    pub language: String,
-    pub max_history: usize,
-    pub launch_at_login: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            push_to_talk_shortcut: "CommandOrControl+Shift+Space".into(),
-            toggle_shortcut: "CommandOrControl+Shift+D".into(),
-            cancel_shortcut: "Escape".into(),
-            show_overlay: true,
-            auto_paste: true,
-            restore_clipboard: true,
-            model_path: String::new(), // Auto-detected
-            language: "auto".into(),
-            max_history: 500,
-            launch_at_login: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AppStateEnum {
-    Idle,
-    Recording,
-    Transcribing,
-    Pasting,
-}
-```
+**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes` and `integrity_warning`. The warning is set when a speech model file that was already on disk differs from the manifest.
 
 ---
 
 ## 7. Hotkey System
 
-### Implementation
+### Registration
 
-Uses `tauri-plugin-global-shortcut` to register system-wide keyboard shortcuts. The plugin fires callbacks on both `Pressed` and `Released` states on macOS, which enables press-and-hold detection.
+`tauri-plugin-global-shortcut` registers the shortcuts. At launch, `setup_hotkeys` registers each shortcut from the in-memory settings on its own. A shortcut that is empty, does not parse, is a duplicate, or cannot be registered is skipped and reported. The other shortcuts stay registered. If the settings file cannot be read, the default shortcuts register.
+
+A settings save that changes shortcuts requires the Idle state. If the new shortcuts cannot be registered, the previous ones return.
 
 ### Press-and-Hold Mode
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant HK as Global Shortcut Plugin
-    participant SM as State Machine
-    participant AR as Audio Recorder
-    participant ASR as ASR Engine
-    participant PM as Paste Manager
+    participant HK as Shortcut plugin
+    participant M as hotkeys/manager.rs
+    participant P as pipeline.rs
 
-    U->>HK: Press hotkey (key down)
-    HK->>SM: shortcut_event(state: Pressed)
-    SM->>AR: start_recording()
-    SM->>SM: state = Recording
-    Note over AR: Capturing audio samples...
-
-    U->>HK: Release hotkey (key up)
-    HK->>SM: shortcut_event(state: Released)
-    SM->>AR: stop_recording()
-    SM->>SM: state = Transcribing
-    AR-->>ASR: audio_buffer (16kHz PCM)
-    ASR-->>PM: transcription text
-    SM->>SM: state = Pasting
-    PM->>PM: save_to_clipboard()
-    PM->>PM: simulate_cmd_v()
-    SM->>SM: state = Idle
+    U->>HK: Press hotkey
+    HK->>M: Pressed
+    M->>P: start (generation N)
+    Note over M: Poll the key every 33 ms with CGEventSourceKeyState
+    U->>HK: Release hotkey
+    M->>P: claim_and_finish (generation N)
+    M->>P: complete (spawned task)
+    P->>P: ASR, vocabulary, replacements, cleanup
+    P->>P: paste or copy, then save History
+    P->>P: Idle
 ```
+
+The push-to-talk handler polls the key state with `CGEventSourceKeyState` every 33 ms, starting 100 ms after the press. When the key is up, the recording stops. `Settings::validate` refuses a push-to-talk key that the poller cannot watch. At the 20-minute limit the recording stops even if the key is still held.
 
 ### Toggle Mode
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant HK as Global Shortcut Plugin
-    participant SM as State Machine
-    participant AR as Audio Recorder
-    participant ASR as ASR Engine
-    participant PM as Paste Manager
-
-    U->>HK: Press toggle key (1st time)
-    HK->>SM: shortcut_event(state: Pressed)
-    SM->>AR: start_recording()
-    SM->>SM: state = Recording
-    Note over AR: Capturing audio samples...
-
-    U->>HK: Press toggle key (2nd time)
-    HK->>SM: shortcut_event(state: Pressed)
-    SM->>AR: stop_recording()
-    SM->>SM: state = Transcribing
-    AR-->>ASR: audio_buffer (16kHz PCM)
-    ASR-->>PM: transcription text
-    SM->>SM: state = Pasting
-    PM->>PM: save_to_clipboard()
-    PM->>PM: simulate_cmd_v()
-    SM->>SM: state = Idle
-```
-
-### Hotkey Registration (Rust)
-
-```rust
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-
-fn setup_shortcuts(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let push_to_talk = Shortcut::new(
-        Some(Modifiers::SHIFT | Modifiers::SUPER),
-        Code::Space
-    );
-    let toggle = Shortcut::new(
-        Some(Modifiers::SHIFT | Modifiers::SUPER),
-        Code::KeyD
-    );
-
-    app.global_shortcut().on_shortcut(push_to_talk, move |_app, shortcut, event| {
-        match event.state {
-            ShortcutState::Pressed => {
-                // Start recording
-            }
-            ShortcutState::Released => {
-                // Stop recording, begin transcription
-            }
-        }
-    })?;
-
-    app.global_shortcut().on_shortcut(toggle, move |_app, shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            // Toggle recording on/off
-        }
-    })?;
-
-    Ok(())
-}
-```
+The toggle shortcut stops the recording when the state is Recording. Otherwise it starts one. The same `pipeline::start`, `claim_and_finish` and `complete` functions run as in press-and-hold mode.
 
 ### Cancel Mechanism
 
-Pressing `Escape` during recording cancels the current dictation session without transcribing or pasting. The audio buffer is discarded.
+The cancel shortcut (default `Escape`) is registered when a recording starts and unregistered when it stops or is cancelled. Thus `Escape` works normally in other apps.
 
-**Important**: The Escape shortcut is only registered while in the `Recording` state to avoid conflicting with Escape usage in other applications. It is unregistered when returning to `Idle`.
+Cancel pastes nothing. The pipeline still transcribes the recording and saves it in History as cancelled. A cancelled recording that is too short to transcribe leaves an empty cancelled entry.
+
+### Generations
+
+Each recording has a generation number. `claim_recording_end(generation)` ends only that recording. A late key release, an auto-stop timer or a device error from an older recording cannot stop a newer one. The completion step compares both the job ID and the generation before it delivers text.
+
+### Shortcut Recorder
+
+The shortcut recorder in Settings uses a native CGEventTap. The tap is enabled only while a shortcut is recorded. Capture starts only in the Idle state. While it runs, the global shortcuts are unregistered and a recording cannot start. The callback enables the tap again when macOS disables it for a timeout or for user input. If the native tap cannot start, the recorder uses the keyboard events of the Settings window.
 
 ---
 
@@ -581,182 +453,154 @@ Pressing `Escape` during recording cancels the current dictation session without
 
 ```mermaid
 flowchart LR
-    MIC["Microphone (System Default)"] --> CPAL["cpal Input Stream"]
-    CPAL -->|"f32 samples @ native rate"| BUF["Ring Buffer"]
-    BUF -->|"on stop"| RESAMPLE["rubato Resampler"]
-    RESAMPLE -->|"16 kHz mono f32"| ASR["parakeet-rs"]
+    MIC["Selected or default microphone"] --> CPAL["cpal input stream"]
+    CPAL -->|"mono f32 at the device rate"| Q["Bounded queue"]
+    Q --> W["Disk writer (audio/recovery.rs)"]
+    W -->|"checkpoint every 1 s"| WAV["recordings/sotto_ID.wav"]
+    WAV -->|"on stop"| ASR["ASR"]
 ```
 
-### Implementation Details
+### Device Selection
 
-1. **Input**: `cpal` opens the default input device with the device's native sample rate and channel count
-2. **Buffering**: Audio samples are appended to a pre-allocated `Vec<f32>` buffer (capacity for up to 5 minutes of 16 kHz mono audio)
-3. **Resampling**: On recording stop, `rubato` resamples from native rate to 16 kHz mono (Parakeet requirement)
-4. **Format**: 16 kHz, mono, 32-bit float PCM — the format parakeet-rs expects
+`start_recording_capture_with_errors` passes `state.input_device` to the cpal backend. The backend always opens a device from `input_devices()`: the named one, or the entry whose name equals the name of the default device. Names are compared after trimming. These devices get the disconnect listener of cpal. cpal 0.16 holds the stream weakly in that listener. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped. If more than one device has the name of the default device, the backend uses `default_input_device()`, so that it cannot open the wrong one. At stop, the backend pauses the stream before it drops it.
+
+A selected device that is absent is an error: `The microphone "<name>" is not connected. Connect it, or choose another microphone in Settings.` There is no silent fallback to another microphone. `list_input_devices` gives Settings the device names, without duplicates, and marks the default.
+
+### Checks at Start
+
+- If `microphone_authorization()` is `Denied` or `Restricted`, the start fails with an error that names the Microphone pane of System Settings. If it is `NotDetermined`, opening the device makes macOS show its prompt.
+- If no device is available, the error is "No microphone is available. Connect a microphone, then try again."
+- If the recordings folder is unusable, recording is disabled until the problem is resolved.
+
+### The WAV File
+
+The disk writer is the only code that touches the disk. Audio callbacks only put chunks in the queue. The queue holds up to 10 s of audio at the sample rate of the stream. If more audio waits, the recording stops with "Recording storage could not keep up" instead of dropping speech.
+
+| Point | Action |
+|---|---|
+| Start | Write the WAV header, `sync_all` the file and the folder |
+| Every 1 s | Update the header and `fsync` the data |
+| Stop | Append 750 ms of silence, finalize the header, `sync_all` |
+
+Files are mono 32-bit float at the device sample rate. The folder has mode 0700 and each file 0600, opened with `O_NOFOLLOW`. A symlinked folder is refused.
+
+### Stall Watchdog
+
+For a live device, the writer reports a capture error once when no chunk arrives for 5 s before the first chunk, or for 2 s after it. The watchdog uses a monotonic clock that does not advance while the Mac sleeps. Mock backends in tests have no watchdog. A capture error marks the dictation as interrupted: the WAV is kept and nothing is pasted.
+
+### Digital Silence
+
+The writer records whether any sample was not zero. If a recording has at least 4,000 samples and all of them are exactly zero, `finish_recording_capture` deletes the WAV and reports: "The microphone sent only silence. Turn on Microphone access for SottoASR in System Settings > Privacy & Security > Microphone, and check that the microphone is not muted." Recordings with fewer than 4,000 samples are too short to transcribe and are deleted. Errors from `finish_recording_capture` are microphone or storage errors, so the pipeline reports them as recording failures.
 
 ### Audio Level Metering
 
-During recording, RMS (Root Mean Square) amplitude is calculated every ~33ms (30 fps) from the latest audio samples and emitted as a `audio-level` event to the frontend for waveform visualization:
+The capture callback computes an input level and the overlay receives it about 30 times a second as `audio-level`. The overlay draws the waveform on a canvas with a ring buffer and rolling-window normalization.
 
-```rust
-fn calculate_rms(samples: &[f32]) -> f32 {
-    let sum: f32 = samples.iter().map(|s| s * s).sum();
-    (sum / samples.len() as f32).sqrt()
-}
-```
+### Sound Cues
 
-### Memory Budget
+When `sound_cues` is on, `audio/cue.rs` plays a system sound from `/System/Library/Sounds` through `NSSound`: Tink (start), Pop (stop), Bottle (cancel), Funk (busy) and Basso (error). It never blocks the caller.
 
-Audio is captured at the device's native sample rate (typically 48 kHz stereo on macOS) and downmixed to mono in the cpal callback. Resampling to 16 kHz happens after recording stops.
+### Recording Limit
 
-- **During recording** (mono at native rate, e.g., 48 kHz):
-  - 48 kHz × 4 bytes (f32) × 60 seconds = ~11.5 MB per minute
-  - Pre-allocated buffer for 5 minutes = ~57.5 MB
-- **After stop** (resampled to 16 kHz):
-  - 16 kHz × 4 bytes (f32) × 5 minutes = ~18.75 MB
-  - Resampling buffer overhead: ~10 MB
-- **Total audio pipeline peak**: ~70 MB during recording
+A recording stops automatically after 20 minutes. The overlay shows a countdown during the last minute.
 
 ---
 
 ## 9. ASR Engine Integration
 
-### parakeet-rs Setup
+### FluidAudio Bridge
 
-`parakeet-rs` wraps NVIDIA Parakeet models via ONNX Runtime. It supports multiple model variants:
+`src-tauri/vendor/fluidaudio-rs` is a small, ASR-only Swift bridge with a synchronous C interface. It uses FluidAudio 0.15.6, which SwiftPM fetches at a pinned commit. `build.rs` applies four checksum-guarded patches to the SDK. Two patches change vocabulary alignment and CTC tensor access. Two patches pin model downloads to fixed commits. [The bridge README](../../src-tauri/vendor/fluidaudio-rs/README.md) is the reference for the bridge.
 
-| Model | Type | Languages | Size (ONNX) | Recommended |
-|-------|------|-----------|-------------|-------------|
-| Parakeet TDT 0.6B v3 | Offline | 25 | ~600 MB | **Yes — primary** |
-| Parakeet CTC 110M | Offline | English | ~110 MB | Lightweight fallback |
-| Parakeet EOU 120M | Streaming | English | ~120 MB | Future (streaming mode) |
+| Model | Repository | Files |
+|---|---|---|
+| Speech (TDT v3, INT8) | `FluidInference/parakeet-tdt-0.6b-v3-coreml` | 21 files, 483 MB |
+| Vocabulary (CTC 110M) | `FluidInference/parakeet-ctc-110m-coreml` | 12 files, 103 MB |
 
-### Model Download & Storage
+The models are cached in `~/Library/Application Support/FluidAudio/Models/`.
 
-Models are stored in the platform data directory:
-- macOS: `~/Library/Application Support/com.sottoasr.app/models/`
+### Model Download and Verification
 
-On first launch, SottoASR checks for the model file. If not present, it prompts the user to download it and shows progress via the tray menu.
+`model-manifest.json` lists the SHA-256 and size of each file that the bridge loads. `asr/integrity.rs` checks the speech and the vocabulary model with the same policy before CoreML loads anything. A record in `.sotto-integrity.json` keeps the verdict of each file by size, modification time and inode. Thus a file is hashed again only after it changes. This includes a file with a known mismatch, so its warning stays without a new hash at each launch.
+
+- A file is fresh when the current preparation wrote it, that is, it was absent or different when the preparation started. The record saves the files that are present before the first download starts. The model folder is created first for this, and a preparation that cannot save the snapshot stops before it downloads. Thus a preparation that stops early (a quit, a lost network, a read error) is judged against its real start the next time. When the pinned commit changes, every file is judged again, but the rejections and the saved start stay.
+- A fresh file that fails the check stops the load and stays on disk. It was never in use, so the next preparation that can download deletes it and fetches it again.
+- A file that was already on disk and fails the check still loads, because blocking it gives no protection for a file that is already in use. `ModelStatus.integrity_warning` is set, and Settings offers **Re-download speech model**. Only this confirmed re-download replaces the file.
+- `redownload_speech_model` requires the Idle state at its start. It moves the failing files of the speech model, and of the vocabulary model if it was prepared, aside. Then it downloads them at the pinned commit, verifies them, and deletes the moved copies. If the download fails, it moves the copies back and removes `.partial` leftovers. Then it reloads the engine. Dictation continues with the loaded model while the files download. A dictation that starts while the vocabulary files are replaced runs without the vocabulary boost (`model::VOCABULARY_FILES`). The model dashboard shows the progress.
+- If the app quits during a re-download, the next preparation moves back every file whose place is empty.
+
+Download and verification run outside the engine lock. The lock covers only loading and compilation. During preparation, `init_asr` emits `model-download-progress` every 500 ms. The progress is the size of the cache folder against the manifest total.
 
 ### Transcription Flow
 
-```rust
-use parakeet_rs::ParakeetTDT;
+`pipeline::transcribe_with_deadline` runs every transcription, including recovery reprocessing:
 
-async fn transcribe(audio_samples: &[f32], sample_rate: u32) -> Result<String, anyhow::Error> {
-    // parakeet-rs expects 16kHz mono f32 audio
-    // Note: ParakeetTDT::from_pretrained takes (model_dir, options)
-    // CTC/TDT models have ~4-5 minute audio length limit
-    let mut parakeet = ParakeetTDT::from_pretrained("./models/parakeet-tdt", None)?;
-    let result = parakeet.transcribe_samples(audio_samples, sample_rate, 1, None)?;
-    Ok(result.text)
-}
-```
+1. If the model is loading, fail at once with "Speech model is still loading; your recording was kept." If loading finished with an error, fail with that error and "Your recording was kept."
+2. If an earlier call missed its deadline and still holds the engine, fail at once with a message to quit and reopen SottoASR.
+3. Otherwise call the engine with a deadline of 60 s plus half the recording length.
+4. If the deadline passes, set `asr_stuck` and fail. The blocking call cannot be stopped. It clears `asr_stuck` when it returns.
 
-**API Notes (parakeet-rs v0.3.4):**
-- Use `ParakeetTDT::from_pretrained(model_dir, options)` — not `Recognizer` (which does not exist)
-- `transcribe_samples` takes 4 args: `(&mut self, samples, sample_rate, channels, timestamp_mode)`
-- Methods require `&mut self` — use `let mut parakeet`
-- Model audio length limit: ~4-5 minutes per call (aligns with our 5-minute max recording)
+In every case the audio is kept and the state returns to Idle.
+
+### Vocabulary
+
+With vocabulary words saved, the bridge also runs the CTC 110M model and returns candidate scores and exact ranges beside the untouched TDT text. The Rust policy in `asr/vocabulary.rs` decides which substitutions are safe. For a recording of 30 s or less, the bridge decodes the audio once and gives the same samples to both models. Longer recordings keep the file path, because the SDK streams them from disk.
+
+Saving a changed, non-empty vocabulary prepares the vocabulary model. Dictation itself never downloads a model.
 
 ### Performance Expectations
 
-Based on parakeet-rs benchmarks and community reports:
-- **Apple Silicon CPU**: ~20-30x real-time factor (10 seconds of speech in ~300-500ms)
-- **GPU (CUDA/TensorRT)**: ~500x real-time factor on dedicated GPUs
-- **CPU-only on Mac**: Faster than Whisper with Metal for short utterances
-- **Accuracy**: 6.34% average WER on Open ASR Leaderboard (Parakeet TDT 0.6B v3)
-- **Latency target**: <1.5 seconds for typical dictation (5-30 seconds of speech)
+On an M4 with 32 GiB, CPU+ANE had a 62.70 ms warm median on short synthetic clips. [Model measurements](../../benchmarks/asr/README.md) give the method and the limits.
 
 ---
 
 ## 10. Paste-at-Cursor Mechanism
 
-### Strategy
+### Delivery Order
 
-Use the industry-standard approach: write text to the system clipboard, then simulate Cmd+V via CGEvent API. This is the same approach used by Superwhisper, Wispr Flow, and Dictato.
+`pipeline::deliver` runs after ASR:
 
-### Implementation (Rust, macOS-specific)
+1. Apply exact replacements, unless the capture was interrupted.
+2. Run AI cleanup, if it is on and the capture was not interrupted.
+3. Set `last_transcription`.
+4. Paste or copy the text, if the capture was not interrupted and the text is not empty.
+5. Save the entry in History.
+6. Delete the WAV, if the capture was not interrupted and the save succeeded.
 
-Clipboard operations use `tauri-plugin-clipboard-manager` via the Tauri app handle. CGEvent simulation uses the `core-graphics` crate (not the deprecated `cocoa` crate).
+If the paste succeeds but the history save fails, the overlay shows `history-save-error` with the path of the kept audio.
 
-```rust
-use core_graphics::event::{CGEvent, CGEventFlags};
-use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use core_graphics::event::CGEventTapLocation;
+### Target Selection
 
-pub fn paste_text(
-    app: &tauri::AppHandle,
-    text: &str,
-    restore_clipboard: bool,
-) -> Result<(), anyhow::Error> {
-    // 1. Save current clipboard via tauri-plugin-clipboard-manager (optional)
-    let previous = if restore_clipboard {
-        app.clipboard().read_text().ok()
-    } else {
-        None
-    };
+If `restore_focus_before_paste` is on, the target is the app that was in front at the start. If the user switched to another app during the recording, the target is that app. If `restore_focus_before_paste` is off, the paste goes to the app in front.
 
-    // 2. Write transcription to clipboard
-    app.clipboard().write_text(text)?;
+The pipeline decides at delivery which app is to receive the paste: the target app, or the app in front when there is no target. If that app is SottoASR itself, the pipeline copies the text instead and reports "SottoASR was the active app, so the text was copied instead of pasted."
 
-    // 3. Small delay to let clipboard propagate
-    std::thread::sleep(std::time::Duration::from_millis(50));
+If `auto_paste` is off, the pipeline only copies the text. If a paste fails, the pipeline copies the text as a fallback and the error card says "Text is on the clipboard".
 
-    // 4. Simulate Cmd+V via CGEvent
-    simulate_paste()?;
+### Paste Steps (`paste/macos.rs`)
 
-    // 5. Restore clipboard after delay (optional)
-    if restore_clipboard {
-        let app_handle = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            if let Some(prev) = previous {
-                let _ = app_handle.clipboard().write_text(&prev);
-            }
-        });
-    }
+1. Make sure that Accessibility is trusted (`AXIsProcessTrusted`).
+2. Write the transcript to the clipboard (see the next section).
+3. Wait 30 ms.
+4. If the target app is not in front, activate it with `activateWithOptions:` (option 2, without all windows) and wait for it. The fallback is `/usr/bin/osascript`. If the target is already in front, skip this step.
+5. Post `Cmd+V` through CGEvent. If the first attempt fails, try once more after 50 ms.
+6. Schedule the clipboard restore.
 
-    Ok(())
-}
+### Clipboard Write and Restore
 
-fn simulate_paste() -> Result<(), anyhow::Error> {
-    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-        .map_err(|_| anyhow::anyhow!("Failed to create CGEventSource"))?;
+If `restore_clipboard` is on, `paste/pasteboard.rs` works with `NSPasteboard` directly:
 
-    // Key code 0x09 = kVK_ANSI_V (verified via macOS virtual keycodes)
-    let key_down = CGEvent::new_keyboard_event(source.clone(), 0x09, true)
-        .map_err(|_| anyhow::anyhow!("Failed to create key down event"))?;
-    let key_up = CGEvent::new_keyboard_event(source, 0x09, false)
-        .map_err(|_| anyhow::anyhow!("Failed to create key up event"))?;
+- **Snapshot.** Read every pasteboard item as `(type, bytes)` pairs, one type at a time. If the running total passes 64 MB, abandon the snapshot. One large representation can still be read in full before the limit applies.
+- **Transient write.** Write the transcript with `prepareForNewContentsWithOptions:` and `NSPasteboardContentsCurrentHostOnly`, so it does not go to Universal Clipboard. Add the markers `org.nspasteboard.TransientType`, `org.nspasteboard.ConcealedType` and `org.nspasteboard.AutoGeneratedType`, so that clipboard managers skip it.
+- **Restore.** After 500 ms, write all items back with their original types, but only if the change count of the pasteboard is still the one after our write. If the user copied something in the meantime, the restore is skipped.
+- **No snapshot.** If the snapshot was abandoned, the transcript is written as a normal copy and stays on the clipboard.
 
-    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
-
-    key_down.post(CGEventTapLocation::HID);
-    key_up.post(CGEventTapLocation::HID);
-
-    Ok(())
-}
-```
-
-**Note on AXIsProcessTrusted()**: This function can return `true` before permissions are fully propagated. Consider implementing a functional test (attempt to post a test CGEvent) in addition to the API check.
+If `restore_clipboard` is off, or in copy-only mode, the transcript is a normal copy. A paste that starts while a restore is pending takes that restore over, so the clipboard that the user had before the first paste returns. A paste counts as in flight from its snapshot until its restore is scheduled. At exit, `paste::wait_for_pending_restore` waits up to 800 ms for pastes in flight and for scheduled restores. One lock serializes the pasteboard calls of the module, and the new contents are built before the pasteboard is cleared.
 
 ### Requirements
 
-- **Accessibility permission** must be granted in System Settings → Privacy & Security → Accessibility
-- On macOS 15 Sequoia, permissions may need to be re-granted after OS updates
-- `AXIsProcessTrusted()` is used to check permission status
-
-### Clipboard Restore
-
-When `restore_clipboard` is enabled (default: true):
-1. Read current clipboard contents before writing transcription
-2. Write transcription to clipboard
-3. Simulate Cmd+V
-4. After 500ms delay, restore original clipboard contents
-
-This prevents the user's clipboard from being permanently overwritten by each transcription.
+- **Accessibility permission** must be granted in System Settings → Privacy & Security → Accessibility.
+- `AXIsProcessTrusted()` can return true before the permission works. At launch, SottoASR also does a functional check with an `AXUIElement` query and logs the result.
 
 ---
 
@@ -764,113 +608,22 @@ This prevents the user's clipboard from being permanently overwritten by each tr
 
 ### Design
 
-A borderless, transparent, always-on-top floating pill that appears at the bottom-center of the screen during recording. It provides visual feedback that SottoASR is actively capturing audio.
+The overlay is a borderless, transparent, always-on-top pill. `precreate_overlay` creates it hidden at startup (300 × 110 points), so that the first recording does not take focus. `tauri-nspanel` converts it to an NSPanel with the `NonactivatingPanel` style mask and the floating level. A click on the pill or on its error card does not activate SottoASR. An error card does not take keyboard focus when it appears, so typing continues to go to the app of the user. The overlay window accepts the first click, so a click on a button works at once. A click on the card can give it keyboard focus. The user can drag the pill. SottoASR saves its position in `overlay_positions.json`.
 
-### Visual Specifications
+### States
 
-```
-┌────────────────────────────────────────┐
-│  🔴  ███ ██ ████ ██ ███ ██ ████  0:03 │
-└────────────────────────────────────────┘
+| Phase | Content |
+|---|---|
+| Recording | Waveform, timer, Stop button and Cancel button. A banner shows "Recording stops in M:SS" during the last minute. |
+| Transcribing | "Transcribing..." |
+| Cleaning up | "Cleaning up...". After 5 s it says that cleanup takes longer than usual. |
+| Cleanup result | A badge: "Cleaned", "Original kept", "Cleanup unavailable", "Cleanup failed", "Cleanup timed out" and more. It stays 800 ms for an applied result and 2,000 ms for a failure. |
+| Busy | "Still working. Try again in a moment." for 1.5 s |
+| Error | A card with a title ("Recording unavailable", "Transcription failed", "Paste failed", "History not saved"), the error, and **Show audio**, **History** or **Dismiss** |
 
-Width: 280px
-Height: 44px
-Corner radius: 22px (full pill)
-Background: rgba(0, 0, 0, 0.85) with backdrop blur
-Position: Bottom-center of primary display, 80px from bottom edge
-```
+The error card stays until the user dismisses it or starts a new recording. It shows even when `show_overlay` is off. `show_overlay` reads the atomic mirror in `AppState`, so a busy settings lock cannot hide the pill.
 
-Components:
-1. **Recording indicator**: Small red pulsing dot (left side)
-2. **Waveform bars**: 12-16 vertical bars animated by real-time audio levels (center)
-3. **Duration timer**: Elapsed recording time in M:SS format (right side)
-
-### Window Properties (Tauri)
-
-```json
-{
-  "label": "overlay",
-  "url": "/overlay",
-  "width": 280,
-  "height": 44,
-  "resizable": false,
-  "decorations": false,
-  "transparent": true,
-  "alwaysOnTop": true,
-  "skipTaskbar": true,
-  "focus": false,
-  "center": false,
-  "visible": false,
-  "x": null,
-  "y": null
-}
-```
-
-The overlay window is created at app startup but kept hidden. On recording start:
-1. Calculate position: center horizontally on primary display, 80px from bottom
-2. Set `visible: true`
-3. Begin streaming `audio-level` events from Rust
-
-On recording stop (entering `Transcribing` state):
-1. Switch overlay to "processing" mode (spinner instead of waveform, text "Transcribing...")
-
-On transcription complete or cancel:
-1. Set `visible: false`
-
-**Clarification**: The overlay stays visible during the `Transcribing` state to show the user their speech is being processed. It hides only when the state returns to `Idle` (after paste completes, transcription errors, or cancellation).
-
-### Waveform Animation (Svelte)
-
-The waveform consists of vertical bars whose heights are driven by audio level data from the Rust backend. Each bar has a slight delay offset to create a smooth wave effect:
-
-```svelte
-<script lang="ts">
-  import { listen } from '@tauri-apps/api/event';
-  import { onMount, onDestroy } from 'svelte';
-
-  // Svelte 5: use $state() rune for reactive state
-  let levels = $state<number[]>(new Array(14).fill(0.1));
-  let unlisten: (() => void) | null = null;
-
-  onMount(async () => {
-    unlisten = await listen<{ level: number }>('audio-level', (event) => {
-      // Shift left and append new level — triggers Svelte 5 reactivity
-      levels = [...levels.slice(1), event.payload.level];
-    });
-  });
-
-  onDestroy(() => unlisten?.());
-</script>
-
-<div class="waveform">
-  {#each levels as level, i}
-    <div
-      class="bar"
-      style="height: {Math.max(4, level * 28)}px; transition-delay: {i * 15}ms"
-    />
-  {/each}
-</div>
-```
-
-**Design note**: 14 bars at 4px minimum height produces a minimal flat-line animation during silence, indicating the app is still recording. During speech, bars animate to heights proportional to audio amplitude (up to 28px max).
-
-### Non-Focus-Stealing Behavior
-
-Critical: The overlay must never steal focus from the application where the user is typing.
-
-**Important**: Tauri's `focus: false` window config does NOT work on macOS (open issue [tauri#9065](https://github.com/tauri-apps/tauri/issues/9065)). Similarly, `skipTaskbar` has no effect on macOS. We must use native macOS APIs instead:
-
-**Approach: Direct NSWindow manipulation via `objc2` / raw objc FFI**. We access the underlying NSWindow from the Tauri WebviewWindow and configure it as a non-activating floating panel:
-
-1. Set window level to `NSFloatingWindowLevel` (above normal windows)
-2. Set `styleMask` to include `NSWindowStyleMaskNonactivatingPanel` — the key flag that prevents focus stealing
-3. Set `window.setIgnoresMouseEvents(true)` — clicks pass through to the app below
-4. Override `canBecomeKey -> false` and `canBecomeMain -> false`
-5. Set `window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]` for multi-Space support
-6. Set `app.set_activation_policy(tauri::ActivationPolicy::Accessory)` to prevent Dock icon (supplements `LSUIElement`)
-7. Set `window.sharingType = .none` to hide overlay from screen recordings
-
-**Rejected alternative**: `tauri-nspanel` plugin — adds a dependency for something achievable with ~30 lines of unsafe objc FFI. Keeping the dependency count minimal.
+The overlay pill keeps its own dark palette, because it floats over arbitrary content. The other windows follow the system appearance through `prefers-color-scheme`.
 
 ---
 
@@ -878,72 +631,29 @@ Critical: The overlay must never steal focus from the application where the user
 
 ### Tray Icon
 
-The tray icon is a small template image (for automatic dark/light mode adaptation) showing a microphone silhouette. It changes state to indicate:
+The tray icon is a template image. It is created at `RunEvent::Ready`, after the event loop is ready, to prevent duplicate icons ([tauri#9480](https://github.com/tauri-apps/tauri/issues/9480)). The menu opens on a left click.
 
-| State | Icon | Description |
-|-------|------|-------------|
-| Idle | Microphone outline | Default state |
-| Recording | Microphone with red dot | Currently recording |
-| Processing | Microphone with spinner dots | Transcribing audio |
-| No model | Microphone with warning | ASR model not downloaded |
+### Menu
 
-### Right-Click Context Menu
+| Item | Behavior |
+|---|---|
+| Copy Last Transcription | Copies the last transcript of this session |
+| View Transcription History | Opens the History window |
+| Settings... | Opens the Settings window |
+| Check for Updates... / Update Available — `<version>` / Restart to Update | Opens the update window or restarts into the installed update |
+| Copy Diagnostics | Copies the app version, the macOS version and the last 100 log lines, with the home folder shown as `~` |
+| About SottoASR | Opens the About window |
+| Quit SottoASR | Exits the app |
 
-```
-┌─────────────────────────────────┐
-│ SottoASR                 v0.1.0 │
-│─────────────────────────────────│
-│ Copy Last Transcription    ⌘C   │
-│ View Transcription History ⌘H   │
-│─────────────────────────────────│
-│ Settings...                ⌘,   │
-│─────────────────────────────────│
-│ ✓ Push-to-Talk (⇧⌘Space)       │
-│   Toggle Mode  (⇧⌘D)           │
-│─────────────────────────────────│
-│ About SottoASR                  │
-│ Quit SottoASR              ⌘Q   │
-└─────────────────────────────────┘
-```
+`setup_tray_menu` registers `on_menu_event` once. A refresh only rebuilds the menu, so each click runs its action once.
 
-### Menu Implementation (Rust)
+### Quit During a Dictation
 
-```rust
-use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
-    tray::{TrayIcon, TrayIconBuilder},
-};
+If the state is not Idle, `begin_exit` refuses the exit and a dialog "Finish dictation before quitting" offers **Keep SottoASR Open** and **Quit Anyway**. Quit Anyway sets `force_exit`. If a recording runs, it claims the end of the recording first and finalizes the WAV. If a stop already holds the recording, Quit Anyway waits up to 2 s for that stop to finish the file. The next launch offers the WAV for recovery.
 
-fn build_tray_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, tauri::Error> {
-    let copy_last = MenuItem::with_id(app, "copy_last", "Copy Last Transcription", true, Some("CmdOrCtrl+C"))?;
-    let view_history = MenuItem::with_id(app, "view_history", "View Transcription History", true, Some("CmdOrCtrl+H"))?;
-    let settings = MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
-    let about = MenuItem::with_id(app, "about", "About SottoASR", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit SottoASR", true, Some("CmdOrCtrl+Q"))?;
+### Updates
 
-    let menu = Menu::with_items(app, &[
-        &copy_last,
-        &view_history,
-        &PredefinedMenuItem::separator(app)?,
-        &settings,
-        &PredefinedMenuItem::separator(app)?,
-        &about,
-        &quit,
-    ])?;
-
-    Ok(menu)
-}
-```
-
-### Menu Actions
-
-| Action | Behavior |
-|--------|----------|
-| Copy Last Transcription | Writes the most recent transcription text to clipboard |
-| View Transcription History | Opens a window showing all past transcriptions |
-| Settings | Opens settings window |
-| About | Shows version info |
-| Quit | Unregisters hotkeys, stops any recording, exits app |
+The update checker runs 15 s after launch and then every 4 hours, if `auto_check_updates` is on and the settings file loaded. Each check has a 30 s timeout. The update window ignores check events unless it is checking itself, and it moves to the ready state on `update-installed`.
 
 ---
 
@@ -951,43 +661,30 @@ fn build_tray_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, tauri::Er
 
 ### Storage
 
-Transcription history is stored using `tauri-plugin-store` in a JSON file at:
-- macOS: `~/Library/Application Support/com.sottoasr.app/transcriptions.json`
+History is `~/Library/Application Support/com.sottoasr.app/transcriptions.json`. `persistence.rs` writes it atomically with mode 0600. Entries are newest first. The store keeps at most 5,000 entries. An entry that the limit removes also loses its WAV and receipt, unless it is an interrupted entry. The store sets `saved_at` at the first save.
 
-### Schema
+### Deletion and Retention
 
-```json
-{
-  "transcriptions": [
-    {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "text": "Hello, this is a test transcription.",
-      "duration_ms": 3200,
-      "created_at": "2026-03-20T15:30:00Z",
-      "word_count": 7
-    }
-  ]
-}
-```
+- `delete_transcription` and `clear_transcriptions` remove the entries and then their WAV files and receipts. The confirmation dialogs say that the kept audio is deleted. When a tombstone receipt is necessary, it is written before the audio is deleted. If the audio delete then fails, that tombstone is removed again, so the recording stays in the recovery list. While another SottoASR instance owns the recordings folder, a history delete removes the entries and leaves the audio.
+- `enforce_retention` removes history entries older than `history_retention_days`, measured from `saved_at` (or from `created_at` for entries of earlier versions). It removes the audio of an entry only when the entry was not interrupted. The audio of an interrupted entry follows `audio_retention_days`.
+- `enforce_retention` removes recordings older than `audio_retention_days`, by modification time. This includes recordings that wait for recovery.
+- Retention runs at startup, every 6 hours, and when a retention setting changes. It runs only in the Idle state and skips silently until the next pass otherwise. It counts a value above 3,650 days as 3,650 days.
+- Deletion and retention never touch the active recording, and act only when they get the recovery claim. Thus they cannot remove a file that a reprocess reads.
 
-### History Limits
+### Recording Recovery
 
-- Default maximum: 500 transcriptions
-- Configurable in settings
-- When limit is reached, oldest transcriptions are removed (FIFO)
-- Users can manually delete individual transcriptions or clear all
+`commands/recovery.rs` lists every `sotto_<id>.wav` in `recordings/` that has no completed history entry and no receipt. An interrupted entry does not count as completed. At launch, SottoASR opens History when recordings wait for recovery or when the previous session did not end cleanly.
 
-### History Window UI
+- **Reprocess** transcribes the WAV with `transcribe_with_deadline`, runs cleanup if it is on, and saves the result in History. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
+- **Show in Finder** reveals the WAV.
+- **Delete audio** deletes the WAV and its receipt.
+- Older recordings in the system temporary folder are copied into `recordings/`. The originals are not changed. If a legacy copy still exists when a recording is deleted, a tombstone receipt stops the next scan from importing it again.
 
-The history window is a separate Tauri window (not the overlay) that opens when requested from the tray menu:
+`recordings/session.state` holds `running` while the app runs and `clean` after a normal exit. A file lock stops a second instance from using the folder.
 
-- Window size: 480 × 640
-- Shows transcriptions in reverse chronological order (newest first)
-- Each entry shows: text preview, timestamp, duration, word count
-- Click to expand full text
-- Copy button per entry
-- Search/filter capability
-- Delete individual or all entries
+### History Window
+
+The History window (680 × 760) shows 50 entries per page, newest first, with a search over all history and filters for cleanup results. Each entry can show the original text and the changes. **Export CSV** writes all entries to `~/Downloads/SottoASR-transcriptions-<date>-<uuid>.csv` with mode 0600 and offers **Show in Finder**. Cells that start with `=`, `+`, `-` or `@` get a leading `'`. Relative times refresh every minute.
 
 ---
 
@@ -995,56 +692,19 @@ The history window is a separate Tauri window (not the overlay) that opens when 
 
 ### Required Permissions
 
-| Permission | Purpose | How to Request |
+| Permission | Purpose | How SottoASR asks |
 |------------|---------|----------------|
-| Microphone | Audio capture for transcription | macOS TCC prompt (automatic on first use) |
-| Accessibility | Simulate Cmd+V for paste-at-cursor | Must open System Settings manually |
-
-### Permission Check Flow
-
-```mermaid
-flowchart TD
-    Start["App Launch"] --> CheckMic{"Microphone\nPermission?"}
-    CheckMic -->|Granted| CheckAx{"Accessibility\nPermission?"}
-    CheckMic -->|Not Granted| RequestMic["Request via\nAVCaptureDevice"]
-    RequestMic --> CheckAx
-
-    CheckAx -->|Granted| Ready["Ready to Use"]
-    CheckAx -->|Not Granted| PromptAx["Show notification:\n'SottoASR needs Accessibility\npermission to paste text'"]
-    PromptAx --> OpenSettings["Button: Open System Settings"]
-    OpenSettings --> CheckAx
-```
+| Microphone | Audio capture | Onboarding **Grant Access**, or the macOS prompt at the first recording |
+| Accessibility | Simulated `Cmd+V` | `AXIsProcessTrustedWithOptions` with the prompt option, from onboarding or Settings → Advanced |
+| Input Monitoring | Native key listener of the shortcut recorder | Optional. Without it, the recorder uses the keyboard events of the Settings window. |
 
 ### Implementation
 
-```rust
-// Microphone permission check (macOS)
-fn check_microphone_permission() -> bool {
-    // Uses AVCaptureDevice.authorizationStatus(for: .audio)
-    // via objc bindings
-    true // Simplified — actual implementation uses objc
-}
-
-// Accessibility permission check (macOS)
-fn check_accessibility_permission() -> bool {
-    // Uses AXIsProcessTrusted() from ApplicationServices framework
-    unsafe {
-        extern "C" {
-            fn AXIsProcessTrusted() -> bool;
-        }
-        AXIsProcessTrusted()
-    }
-}
-
-// Open System Settings to Accessibility pane
-fn request_accessibility_permission() {
-    // open x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn()
-        .ok();
-}
-```
+- `microphone_authorization()` reads the AVFoundation authorization status through the Objective-C runtime and never shows a prompt.
+- `request_microphone_permission` returns at once if the status is known. If it is not determined, it opens the default input device to make macOS show the prompt.
+- `check_all_permissions` reports Microphone, Accessibility (trusted, and the functional check) and Input Monitoring. "Restart needed" means trusted but not functional.
+- `open_url` opens only `https` links whose host is exactly `huggingface.co`, `github.com` or `sottoasr.app`, without user information. It runs `/usr/bin/open`.
+- System tools are started by their full path: `/usr/bin/open`, `/usr/bin/osascript`, `/usr/bin/tccutil`, `/usr/bin/curl`, `/usr/bin/shasum` and `/usr/bin/tar`.
 
 ---
 
@@ -1054,224 +714,139 @@ fn request_accessibility_permission() {
 
 | Scenario | Handling |
 |----------|----------|
-| No microphone available | Show error notification via tray, disable recording |
-| Microphone disconnected during recording | Stop recording, save partial audio, attempt transcription |
-| Microphone permission denied | Show permission setup dialog with instructions |
-| Very short recording (<0.5s) | Discard — likely accidental press |
-| Very long recording (>5 min) | Stop automatically with notification |
-| Silent recording (no speech detected) | Transcribe anyway (Parakeet handles silence) |
+| Microphone permission denied or restricted | Start fails with an error that names the Microphone pane of System Settings |
+| No microphone available | Start fails: "No microphone is available. Connect a microphone, then try again." |
+| Selected microphone not connected | Start fails with the device name. No fallback to another microphone. |
+| Microphone disconnected or silent during recording | cpal error or watchdog. The dictation is interrupted, the WAV is kept, nothing is pasted. |
+| Bluetooth microphone slow to deliver its first buffer | The first-chunk limit is 5 s |
+| Input delivers only exact zeros | The WAV is deleted and the silence error names both causes |
+| Very short recording (fewer than 4,000 samples) | Deleted. A cancelled short recording leaves an empty cancelled entry. |
+| Recording reaches 20 minutes | Stops automatically. A countdown shows during the last minute. |
+| Capture queue full | Recording stops with "Recording storage could not keep up" |
 
 ### ASR Issues
 
 | Scenario | Handling |
 |----------|----------|
-| Model not downloaded | Show download prompt in tray menu |
-| Model file corrupted | Detect via checksum, prompt re-download |
-| Transcription returns empty | Show "No speech detected" notification |
-| ONNX Runtime initialization failure | Fall back to error state, log details, show user-friendly error |
-| Out of memory during inference | Catch panic, show error, suggest closing other apps |
+| Model still loading | Fails at once. The recording is kept. |
+| Transcription exceeds its deadline | Recording kept. Later dictations fail at once until the stuck call returns. |
+| Freshly downloaded model file fails the manifest | Error. The files are kept and nothing loads. |
+| Existing model file differs from the manifest | Loads with a warning. Settings offers a confirmed re-download. |
+| Setup fails in onboarding | Onboarding shows the error text and **Try Again** retries in place |
 
 ### Paste Issues
 
 | Scenario | Handling |
 |----------|----------|
-| Accessibility permission not granted | Show notification with link to System Settings |
-| Target application doesn't accept paste | Text remains in clipboard; show notification |
-| Clipboard restore fails | Log warning, do not crash |
-| Rapid successive pastes | Queue paste operations with 100ms delay between |
+| Accessibility permission not granted | Paste fails, the text is copied, and the error card says so |
+| The app that is to receive the paste is SottoASR | Text is copied instead of pasted |
+| Paste succeeds, history save fails | Text is delivered. The overlay shows the save error and the audio path. |
+| Clipboard holds more than 64 MB | Snapshot abandoned. The transcript stays on the clipboard. |
+| User copies during the 500 ms restore window | Change count differs. The restore is skipped. |
+| Quit right after a paste | The exit waits up to 800 ms for the restore |
 
-### Hotkey Issues
+### Hotkey and Settings Issues
 
 | Scenario | Handling |
 |----------|----------|
-| Hotkey conflict with another app | Show warning, suggest alternative shortcut |
-| Hotkey registration fails | Fall back to default, notify user |
-| Double-trigger on press-and-hold | Debounce with 50ms threshold |
-| Cross-mode conflict (push-to-talk pressed during toggle recording) | Ignore the second mode's hotkey while recording is active. Only the active mode's stop mechanism works. |
-| Escape pressed while holding push-to-talk key | Escape takes priority — cancel recording. Subsequent release of push-to-talk key is ignored (no-op). |
-| Settings hotkey change while recording | Queue the change; apply after current recording completes |
-| Model not loaded when hotkey pressed | Show "Loading model..." notification. If model loads within 3 seconds, start recording. Otherwise, show error. |
-| App crash during recording | Partial audio buffer is lost (not persisted to disk). No cleanup needed. |
+| A saved shortcut cannot be registered at launch | It is skipped. The others stay registered. Settings opens for review. |
+| Invalid settings on save | Save is refused with the reason. Nothing is written. |
+| Incomplete replacement row | Save is blocked with an inline message |
+| Settings file cannot be read | Default shortcuts register. Settings offers **Back up and reset**, which renames the file to `settings.json.unreadable-<UTC timestamp>` and writes defaults. |
+| Shortcut change while recording | Refused until the app is Idle |
+| Key capture requested while recording or transcribing | Refused. Shortcuts stay registered. |
+| Start request while a dictation is processed | `hotkey-busy`, busy cue, and the "Still working" notice |
+| Quit during a dictation | Dialog with **Quit Anyway**. The WAV is finalized and offered at the next launch. |
+| App crash during recording | The WAV up to the last checkpoint (about 1 s) is offered at the next launch |
+
+### Cleanup Issues
+
+| Scenario | Handling |
+|----------|----------|
+| Long dictation reaches the 60 s cleanup limit | No chunk is sent once less than 15 s (the response deadline of one request) is left of the 60 s. Thus cleanup ends within 60 s, and the budget never stops a healthy sidecar. Validated edits apply, the rest stays raw. |
+| Sidecar unavailable or a request times out | Dispatch stops. The rest stays raw. |
+| Runtime packages differ from the lock | Cleanup loads on the existing runtime, and the preparation returns. Then a separate background sync (at most one per launch, not shown as preparing) rebuilds the runtime from the lock with short pip network limits. The old runtime stays aside until the new one loads, and comes back if the new one does not load. If the sync fails, cleanup continues on the existing runtime. If cleanup does not load on the out-of-date runtime, the preparation rebuilds it at once with the normal pip settings. |
+| Quit during setup or a repair | The next preparation removes the unfinished build in `llm-venv.staging` and moves back a runtime that was left aside. A preparation that finds the runtime Ready removes leftover aside copies. |
+| Cleanup model download makes no progress for 120 s | The download stops with an error |
+| No native arm64 Python 3.11 to 3.14 installed | A pinned standalone Python is downloaded and verified. A partial download that a quit left behind is removed. |
 
 ---
 
 ## 16. File Structure
 
-### Project Layout
+[DEVELOPMENT.md](../../DEVELOPMENT.md) lists the project layout and every Rust module. The main parts:
 
 ```
-sotto/
-├── .claude/
-│   ├── CLAUDE.md                          # Project brief
-│   └── rules/
-│       ├── critical.md                    # Hard rules
-│       ├── dev-workflow.md                # Dev conventions
-│       ├── docs.md                        # Documentation conventions
-│       ├── project.md                     # Project-specific context
-│       └── spec-workflow.md               # Spec-driven development
-├── docs/
-│   ├── designs/
-│   │   └── architecture.md               # This document
-│   ├── specs/                             # Feature specifications
-│   └── research/                          # Research notes
-├── src/                                   # Svelte frontend
-│   ├── lib/
-│   │   ├── components/
-│   │   │   ├── overlay-pill.svelte        # Floating recording pill
-│   │   │   ├── waveform.svelte            # Audio waveform visualization
-│   │   │   ├── recording-timer.svelte     # Duration counter
-│   │   │   ├── history-list.svelte        # Transcription history list
-│   │   │   ├── history-item.svelte        # Single transcription entry
-│   │   │   └── settings-panel.svelte      # Settings UI
-│   │   ├── stores/
-│   │   │   ├── recording.ts               # Recording state store
-│   │   │   ├── transcriptions.ts          # Transcription history store
-│   │   │   └── settings.ts                # Settings store
-│   │   └── utils/
-│   │       ├── tauri.ts                   # Tauri IPC wrappers
-│   │       └── format.ts                  # Text formatting utilities
-│   ├── overlay.html                       # HTML entry for overlay window
-│   ├── overlay.ts                         # Svelte mount for overlay window
-│   ├── history.html                       # HTML entry for history window
-│   ├── history.ts                         # Svelte mount for history window
-│   ├── settings.html                      # HTML entry for settings window
-│   ├── settings.ts                        # Svelte mount for settings window
-│   ├── app.css                            # Global styles
-│   └── main.ts                            # Main entry (unused — each window has its own entry)
-├── src-tauri/                             # Rust backend
-│   ├── src/
-│   │   ├── lib.rs                         # Tauri app setup, plugin registration
-│   │   ├── main.rs                        # Entry point
-│   │   ├── commands/
-│   │   │   ├── mod.rs                     # Command module exports
-│   │   │   ├── recording.rs               # Recording start/stop/cancel commands
-│   │   │   ├── transcription.rs           # History CRUD commands
-│   │   │   ├── settings.rs                # Settings read/write commands
-│   │   │   └── permissions.rs             # Permission check commands
-│   │   ├── audio/
-│   │   │   ├── mod.rs                     # Audio module exports
-│   │   │   ├── capture.rs                 # cpal audio capture
-│   │   │   └── resample.rs                # rubato resampling to 16kHz
-│   │   ├── asr/
-│   │   │   ├── mod.rs                     # ASR module exports
-│   │   │   ├── engine.rs                  # parakeet-rs integration
-│   │   │   └── model.rs                   # Model download & management
-│   │   ├── paste/
-│   │   │   ├── mod.rs                     # Paste module exports
-│   │   │   └── macos.rs                   # CGEvent paste simulation (macOS)
-│   │   ├── hotkeys/
-│   │   │   ├── mod.rs                     # Hotkey module exports
-│   │   │   └── manager.rs                 # Hotkey registration & state machine
-│   │   ├── tray/
-│   │   │   ├── mod.rs                     # Tray module exports
-│   │   │   └── menu.rs                    # Tray icon & context menu
-│   │   ├── state.rs                       # Global app state (AppState)
-│   │   └── models.rs                      # Shared data structures
-│   ├── Cargo.toml                         # Rust dependencies
-│   ├── tauri.conf.json                    # Tauri configuration
-│   ├── capabilities/
-│   │   └── default.json                   # Permissions & capabilities
-│   ├── Entitlements.plist                 # macOS entitlements
-│   ├── Info.plist                         # macOS app metadata
-│   └── icons/                             # App icons
-├── package.json                           # Frontend dependencies
-├── vite.config.ts                         # Vite configuration
-├── svelte.config.js                       # Svelte configuration
-├── tsconfig.json                          # TypeScript configuration
-└── README.md                             # Project documentation
+sottoasr/
+├── *.html                          # Vite page entries: index, overlay, history, settings,
+│                                   # onboarding, about, update
+├── src/                            # Svelte frontend: entry scripts and src/lib/
+├── src-tauri/
+│   ├── src/                        # Rust backend
+│   │   ├── pipeline.rs             # The only dictation pipeline
+│   │   ├── hotkeys/manager.rs      # Shortcuts, overlay panel, TauriEvents adapter
+│   │   ├── audio/                  # Capture, WAV writer, cues, resampling
+│   │   ├── asr/                    # Engines, model preparation, integrity
+│   │   ├── paste/                  # Paste, pasteboard snapshot and restore
+│   │   ├── llm/                    # Cleanup sidecar, download, planner, validation
+│   │   ├── commands/               # IPC handlers
+│   │   ├── tray/, updater/         # Menu bar and updates
+│   │   └── state.rs, models.rs, persistence.rs, dictionary.rs, process.rs
+│   ├── sidecar/                    # llm_cleanup.py, requirements.in, requirements.lock
+│   ├── vendor/fluidaudio-rs/       # Swift bridge, patches, model-manifest.json
+│   ├── capabilities/               # default.json, history.json, settings-close.json
+│   └── .cargo/                     # config.toml (linker), audit.toml
+├── scripts/                        # ci-checks.sh, pre-release-check.sh, probes, tests
+└── docs/designs/architecture.md    # This document
 ```
-
-### File Changes Table
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src-tauri/src/lib.rs` | Modify | Add plugin registration, setup hotkeys, tray, state |
-| `src-tauri/src/state.rs` | Create | Global AppState with Mutex-protected state machine |
-| `src-tauri/src/models.rs` | Create | Transcription, Settings, AppStateEnum structs |
-| `src-tauri/src/commands/mod.rs` | Create | Re-export all command modules |
-| `src-tauri/src/commands/recording.rs` | Create | start/stop/cancel recording commands |
-| `src-tauri/src/commands/transcription.rs` | Create | History CRUD commands |
-| `src-tauri/src/commands/settings.rs` | Create | Settings read/write commands |
-| `src-tauri/src/commands/permissions.rs` | Create | Permission check/request commands |
-| `src-tauri/src/audio/mod.rs` | Create | Audio module exports |
-| `src-tauri/src/audio/capture.rs` | Create | cpal microphone capture with ring buffer |
-| `src-tauri/src/audio/resample.rs` | Create | rubato 16kHz resampling |
-| `src-tauri/src/asr/mod.rs` | Create | ASR module exports |
-| `src-tauri/src/asr/engine.rs` | Create | parakeet-rs transcription wrapper |
-| `src-tauri/src/asr/model.rs` | Create | Model download/status management |
-| `src-tauri/src/paste/mod.rs` | Create | Paste module exports |
-| `src-tauri/src/paste/macos.rs` | Create | CGEvent Cmd+V simulation |
-| `src-tauri/src/hotkeys/mod.rs` | Create | Hotkey module exports |
-| `src-tauri/src/hotkeys/manager.rs` | Create | Shortcut registration and state machine |
-| `src-tauri/src/tray/mod.rs` | Create | Tray module exports |
-| `src-tauri/src/tray/menu.rs` | Create | Tray icon and context menu builder |
-| `src/lib/components/overlay-pill.svelte` | Create | Floating pill overlay component |
-| `src/lib/components/waveform.svelte` | Create | Waveform bar visualization |
-| `src/lib/components/recording-timer.svelte` | Create | M:SS timer display |
-| `src/lib/components/history-list.svelte` | Create | Transcription history list |
-| `src/lib/components/history-item.svelte` | Create | Individual transcription card |
-| `src/lib/components/settings-panel.svelte` | Create | Settings form |
-| `src/lib/stores/recording.ts` | Create | Recording state Svelte store |
-| `src/lib/stores/transcriptions.ts` | Create | History data Svelte store |
-| `src/lib/stores/settings.ts` | Create | Settings Svelte store |
-| `src/lib/utils/tauri.ts` | Create | Typed wrappers for Tauri invoke/listen |
-| `src/lib/utils/format.ts` | Create | Duration/date formatting helpers |
-| `src/main.ts` | Modify | Entry point — mount correct Svelte component based on URL |
-| `src/overlay.html` | Create | HTML entry for overlay window |
-| `src/history.html` | Create | HTML entry for history window |
-| `src/settings.html` | Create | HTML entry for settings window |
-| `src/overlay.ts` | Create | Svelte mount for overlay window |
-| `src/history.ts` | Create | Svelte mount for history window |
-| `src/settings.ts` | Create | Svelte mount for settings window |
-| `src/app.css` | Modify | Global styles (dark theme, fonts) |
-| `src-tauri/tauri.conf.json` | Modify | Window configs, tray, security |
-| `src-tauri/Cargo.toml` | Modify | Add all Rust dependencies |
-| `src-tauri/capabilities/default.json` | Modify | All required permissions |
-| `vite.config.ts` | Modify | Multi-page app support for overlay/history routes |
 
 ---
 
 ## 17. Testing Strategy
 
-### Rust Unit Tests
+### Rust Tests (`cargo test`)
 
-| Module | Tests |
+| Area | Tests |
 |--------|-------|
-| `audio/capture.rs` | Audio buffer accumulation, channel downmixing |
-| `audio/resample.rs` | Resampling accuracy (44.1kHz→16kHz, 48kHz→16kHz) |
-| `asr/engine.rs` | Transcription with test audio file |
-| `paste/macos.rs` | Clipboard read/write (no CGEvent in CI) |
-| `hotkeys/manager.rs` | State machine transitions |
-| `state.rs` | State machine correctness, concurrent access |
-| `models.rs` | Serialization/deserialization round-trips |
+| Pipeline | The tests drive the production `pipeline.rs` through a collecting `PipelineEvents`. They cover a stale generation, paste before the history save, a history failure after a paste, the own-PID target, the ASR deadline (with a paused clock), busy starts, Quit Anyway and concurrent stop and cancel. |
+| Capture | A live backend that stops sending triggers one interrupted capture. A mock backend never does. All-zero capture is an error and removes the WAV. A checkpoint survives an abrupt process exit. |
+| ASR | A fresh mismatched file is an error and stays on disk. An existing mismatched file loads with a warning. The manifest and the revision patch agree. |
+| Paste | Snapshot and restore of two items with several types on a unique pasteboard. The restore is skipped after a foreign change. An oversized snapshot is abandoned. The transient write carries the three markers. |
+| Settings | Duplicate shortcuts and invalid replacement rows are refused. The written file still parses for a build that requires the legacy keys. Reset backs up the file and refuses unless Idle. `open_url` rejects other hosts. The tray handler is registered once. |
+| History | Delete and clear remove audio and receipts. Retention removes only expired entries, measures from the save, keeps interrupted audio and never touches the active recording. A deleted legacy recording is not imported again. |
+| Cleanup | The lock and the sidecar pins agree. Every lock entry has a hash, and the install requires hashes. A drifted runtime is stale. Repair replaces a runtime whose interpreter link is broken. A stalled download fails after the stall limit. Dispatch stops on a transport failure and on the budget. Repeated number words stay. |
 
-### Integration Tests
+### Other Tests
 
-| Test | Description |
-|------|-------------|
-| Audio→ASR pipeline | Record 5s test audio, resample, transcribe, verify output |
-| Settings persistence | Write settings, restart, verify settings loaded |
-| History CRUD | Add, list, delete, clear transcriptions |
-| Hotkey state machine | Simulate press/release sequences, verify state transitions |
+| Suite | Command | Covers |
+|---|---|---|
+| Frontend | `npm test` | Components and stores. `tauri.test.ts` checks every wrapper against `generate_handler!` and every plugin call against the capability files. |
+| Sidecar | `python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'` | Sidecar protocol and preparation, without a model or the network |
+| Scripts | `python3 -m unittest discover -s scripts -p 'test_*.py'` | Workflow pins and secret scopes, the release target check |
+| ONNX backend | `cargo test --no-default-features --features custom-protocol,asr-parakeet --lib audio::resample` | Resampler output length and tail at 48 kHz to 16 kHz |
+| Swift | `python3 scripts/check-swift-regressions.py` | Patched alignment and CTC tensor access |
+| Configuration | `bash scripts/ci-checks.sh` | Versions, capabilities, command registration, changelog, website badge |
+
+PR CI (`.github/workflows/ci.yml`) runs all of these, `cargo clippy --all-targets -- -D warnings`, `cargo audit` with the `zip` check, `npm audit --omit=dev`, and an unsigned bundle build. `scripts/pre-release-check.sh` runs the same steps locally.
 
 ### Manual Testing Checklist
 
 - [ ] Press-and-hold hotkey activates recording, release transcribes and pastes
 - [ ] Toggle hotkey starts recording on first press, stops on second press
-- [ ] Escape cancels recording without transcribing
+- [ ] Escape cancels recording without pasting, and History shows a cancelled entry
 - [ ] Overlay pill appears during recording with waveform animation
-- [ ] Overlay disappears when recording stops
-- [ ] Tray icon shows correct state (idle/recording/processing)
-- [ ] Right-click tray menu shows all items
-- [ ] "Copy Last Transcription" copies to clipboard
-- [ ] "View Transcription History" opens history window
-- [ ] History window shows all past transcriptions
-- [ ] Settings can be changed and persist across restart
-- [ ] Microphone permission prompt appears on first use
-- [ ] Accessibility permission check works
-- [ ] App does not appear in Dock (LSUIElement)
 - [ ] Overlay does not steal focus from target application
+- [ ] A selected microphone that is unplugged before start gives an error
+- [ ] Unplugging the microphone during recording interrupts the dictation and keeps the audio
+- [ ] "Copy Last Transcription" copies to clipboard
+- [ ] Clipboard contents (text and an image) return after a paste
+- [ ] History shows past transcriptions, and delete removes the kept audio
+- [ ] Settings can be changed and persist across restart
+- [ ] Microphone and Accessibility prompts appear in onboarding
+- [ ] App does not appear in Dock (LSUIElement)
 - [ ] Paste works in: Terminal, VS Code, Chrome, Safari, Slack, Notes
+
+A development build shares the data folder and the global shortcuts of an installed SottoASR. Quit the installed app before manual tests.
 
 ---
 
@@ -1279,24 +854,30 @@ sotto/
 
 ### Privacy
 
-- **No audio/text network transmission**: SottoASR never sends audio recordings or transcription text over the network. The only network access is for ASR model download on first launch (from HuggingFace Hub).
-- **Local-only ASR**: All transcription happens on-device via ONNX Runtime — no cloud API calls
-- **No telemetry**: No analytics, crash reporting, or usage tracking
-- **Clipboard handling**: Original clipboard is restored after paste (configurable)
-- **History storage**: Unencrypted JSON on local disk. Future: offer encryption option
+- **No audio or text over the network.** SottoASR never sends recordings or transcript text over the network. Speech recognition runs in the app process. The cleanup sidecar runs with the Hugging Face offline mode on.
+- **Network requests.** The app connects to GitHub for update checks and downloads, and for the standalone Python when no Python 3.11 to 3.14 is installed. It connects to Hugging Face for the speech, vocabulary and cleanup models, and to PyPI for the cleanup runtime. [SECURITY.md](../../SECURITY.md) lists each request and when it happens.
+- **Pinned downloads.** The speech and vocabulary models are pinned to fixed commits and verified against `model-manifest.json`. The cleanup model is pinned to one revision and each file is verified by SHA-256. The runtime installs only wheels whose SHA-256 matches `requirements.lock`. The standalone Python is pinned by URL and SHA-256, and extracted only after the hash matches. App updates are verified against the signing key in the app.
+- **No telemetry.** No analytics, crash reporting or usage tracking.
+- **Clipboard.** The transient transcript is excluded from clipboard history and from Universal Clipboard. Restored items keep their original types, including sensitivity markers.
+- **Data on disk.** Settings, history, recordings and CSV exports are written with owner-only permissions. The recordings folder is 0700. History and recordings are not encrypted. Retention deletes data only after the user selects a period or confirms a delete dialog that names the audio.
 
-### Permissions
+### Webview Restrictions
 
-- Request only the minimum permissions needed (microphone, accessibility)
-- Clearly explain why each permission is needed before requesting
-- Gracefully degrade when permissions are denied (disable paste-at-cursor, show clipboard-only mode)
+- The content security policy allows connections only to the app itself (`connect-src 'self' ipc: tauri: asset: https://asset.localhost`).
+- `capabilities/default.json` grants only `core:default`, `core:window:allow-close` and `log:default` to all windows. `history.json` adds clipboard text writes for the History window. `settings-close.json` adds `allow-destroy` for the Settings window.
+- Application commands can be called from every window. All windows load first-party content under the same policy.
 
-### Code Safety
+### Process Safety
 
-- All audio buffers are zeroed after use
-- No unsafe Rust code except for FFI boundaries (CGEvent, AXIsProcessTrusted)
-- All unsafe blocks are isolated in dedicated modules with clear safety documentation
-- Input validation on all IPC commands
+- The cleanup runtime runs `python -I` with a cleared environment. Python is found only in fixed install locations (Homebrew, `/usr/local`, MacPorts, python.org, `~/.local/bin`) or in the provisioned folder, never on `PATH`. The probe accepts only a native arm64 Python 3.11 to 3.14.
+- Child processes (sidecar, downloads, `curl`) are owned by the app, so a quit stops them.
+- Unsafe code is used for FFI with macOS APIs (CGEvent, NSPasteboard, AVFoundation, Accessibility) and libc.
+
+### Supply Chain
+
+- Both workflows pin each action to a full commit SHA. Secrets are declared only in the steps that sign the app.
+- `cargo audit` runs in CI. `src-tauri/.cargo/audit.toml` ignores six `zip` advisories, because `zip` is built only for Windows. CI fails if `cargo tree -i zip --target aarch64-apple-darwin` prints a dependency. The fixed `zip` needs Tauri 2.12, so Tauri stays on 2.11 for now.
+- `npm audit --omit=dev` blocks both workflows.
 
 ---
 
@@ -1305,20 +886,34 @@ sotto/
 | Metric | Target | Measurement |
 |--------|--------|-------------|
 | Memory (idle) | <50 MB | Activity Monitor RSS |
-| Memory (recording) | <150 MB | Activity Monitor RSS (includes ~70 MB audio buffer at native rate) |
-| Memory (transcribing) | <300 MB | Activity Monitor RSS (model loaded ~670 MB on disk, but ONNX Runtime uses memory-mapped I/O) |
+| Memory (recording) | <150 MB | Activity Monitor RSS |
+| Memory (transcribing) | <300 MB | Activity Monitor RSS, without the cleanup sidecar |
 | CPU (idle) | <0.1% | Activity Monitor |
 | Startup time | <1 second | Time from launch to tray icon visible |
 | Recording latency | <50 ms | Time from hotkey press to audio capture start |
-| Transcription latency | <1.5s for 10s audio | Time from recording stop to text pasted |
+| Transcription latency | <1.5s for 10s audio | Time from recording stop to text pasted, without cleanup |
 | Bundle size | <15 MB (without model) | Built .app size |
-| Model size | ~670 MB | Parakeet TDT 0.6B int8 ONNX (encoder ~652 MB + decoder ~18 MB) |
+| Speech model size | 483 MB | Parakeet TDT v3 INT8 CoreML bundles (`model-manifest.json`) |
+
+The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front.
+
+---
+
+## 20. Cross-Platform Support
+
+The `asr-parakeet` feature replaces FluidAudio with parakeet-rs on ONNX Runtime. It downloads the ONNX model (`istupakov/parakeet-tdt-0.6b-v3-onnx`) from a pinned Hugging Face commit and checks the size and SHA-256 of each file. `transcribe_file` reads the WAV, resamples it to 16 kHz with rubato and reports the real duration. PR CI type-checks this feature and runs its resampler tests. The release build does not include it.
+
+```bash
+cargo tauri build --no-default-features --features custom-protocol,asr-parakeet
+```
+
+The rest of the app (capture, paste, the overlay, the tray and the cleanup sidecar) uses macOS APIs. A port to another platform needs new implementations of these parts.
 
 ---
 
 ## Review Notes
 
-*(To be filled during review passes)*
+These notes record the review passes of the original design (version 1, March 2026). Later versions changed many of the designs that they discuss.
 
 ### Review Pass 1 — Assumption Validation
 **Completed 2026-03-20.** Found 2 invalid, 5 partially validated, 7 validated assumptions. Key fixes applied:
@@ -1359,21 +954,19 @@ sotto/
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Project scaffold | ✅ Complete | Tauri v2 + Svelte 5 + TypeScript |
-| Claude Code steering | ✅ Complete | 5 rule files in .claude/rules/ |
-| Design document | ✅ Complete | This document (v2.0, updated post-implementation) |
-| Rust backend | ✅ Complete | 24 source files across 8 modules |
-| Svelte frontend | ✅ Complete | 7 components, 3 stores, 2 utility modules |
-| ASR — FluidAudio (macOS) | ✅ Complete | CoreML/ANE, ~44x RTF on M4, auto model download |
-| ASR — parakeet-rs (cross-platform) | ✅ Complete | ONNX Runtime CPU, feature-flagged |
-| Audio capture pipeline | ✅ Complete | cpal → mono downmix → WAV → FluidAudio |
-| Paste at cursor | ✅ Complete | CGEvent Cmd+V via core-graphics |
-| System tray + menu | ✅ Complete | Copy Last, View History, Settings, Quit |
-| Floating overlay | ✅ Complete | Canvas waveform, dynamic range normalization |
-| Onboarding flow | ✅ Complete | Permissions + model download |
-| Transcription history | ✅ Complete | In-memory store with UI |
-| Settings panel | ✅ Complete | UI present, persistence pending |
-| Production build | ✅ Complete | 14 MB .app, .dmg installer |
+| Rust backend | ✅ Complete | One pipeline in `pipeline.rs`, Tauri adapter in `hotkeys/manager.rs` |
+| Svelte frontend | ✅ Complete | Seven windows, components call the wrappers in `tauri.ts` |
+| ASR — FluidAudio (macOS) | ✅ Complete | CoreML/ANE, pinned and verified models |
+| ASR — parakeet-rs (cross-platform) | ✅ Complete | ONNX Runtime CPU, feature-flagged, pinned and verified model |
+| Audio capture pipeline | ✅ Complete | Microphone selection, private WAV checkpoints, stall watchdog |
+| Paste at cursor | ✅ Complete | CGEvent `Cmd+V`, full clipboard snapshot and restore |
+| AI cleanup | ✅ Complete | Python sidecar, hash-locked runtime, pinned MiniCPM5 2B |
+| System tray + menu | ✅ Complete | Copy Last, History, Settings, Updates, Diagnostics, About, Quit |
+| Floating overlay | ✅ Complete | Canvas waveform, busy notice, error card, non-activating panel |
+| Onboarding flow | ✅ Complete | Permissions, model download with progress, error and retry |
+| Transcription history | ✅ Complete | JSON store, retention, recovery, CSV export |
+| Settings | ✅ Complete | Four tabs, validation on save, Back up and reset |
+| Production build | ✅ Complete | Signed and notarized `.app` and `.dmg` |
 
 ### Deviations from Original Design
 
@@ -1382,8 +975,11 @@ sotto/
 | ASR engine | parakeet-rs only | FluidAudio (default) + parakeet-rs (feature flag) | FluidAudio uses CoreML/ANE for vastly better performance on macOS |
 | Waveform rendering | CSS DOM bars | Canvas 2D with ring buffer | DOM bars caused layout reflow; Canvas is 60fps smooth |
 | Dynamic range | Fixed amplification | Rolling-window normalization with sqrt curve | Fixed gain caused clipping or invisible bars |
-| Overlay positioning | Tauri `focus: false` | `ActivationPolicy::Accessory` + manual positioning | Tauri's focus config broken on macOS |
+| Overlay | Direct NSWindow FFI | `tauri-nspanel` non-activating panel | Not recorded |
 | Window management | All windows created at startup | On-demand creation with `ActivationPolicy` switching | Accessory policy hides windows; must switch to Regular temporarily |
 | Routing | SvelteKit routes | Vite multi-page with root HTML entries | Vanilla Svelte + Vite simpler than SvelteKit for desktop app |
 | Svelte stores | `.ts` files | `.svelte.ts` files | `$state()` runes only compiled in `.svelte` and `.svelte.ts` files |
 | macOS interop | `cocoa` + `objc` crates | `core-graphics` + `core-foundation` | `cocoa`/`objc` are deprecated |
+| Storage | `tauri-plugin-store` | JSON files with atomic writes (`persistence.rs`) | Crash-safe writes and owner-only permissions |
+| Audio buffer | In-memory buffer | Private WAV file with checkpoints | Recovery after a crash or a failed transcription |
+| Clipboard restore | Text only | Every item and type, through `NSPasteboard` | Images and files were lost after a paste |

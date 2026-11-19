@@ -1,15 +1,19 @@
 use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+use std::time::Duration;
 
-/// Save the current clipboard contents, write new text, paste via Cmd+V,
-/// and optionally restore the original clipboard after a delay.
-/// If `target_pid` is non-zero and differs from the current frontmost app,
-/// re-activates the target app before pasting to avoid focus race conditions.
+use super::pasteboard::{AutoreleasePool, Pasteboard};
+use super::restore::RESTORES;
+
+/// Write `text` to the clipboard and paste it via Cmd+V; the transcript stays
+/// on the clipboard. If `target_pid` is non-zero and is not the frontmost app,
+/// activates it first so the keystroke reaches it.
 pub fn paste_text(text: &str, target_pid: i32) -> Result<(), String> {
     paste_text_inner(text, false, target_pid)
 }
 
-/// Same as paste_text but restores the original clipboard contents afterwards.
+/// Same as paste_text, but the transcript is written marked and local-only, and
+/// the previous clipboard contents are put back after the paste.
 pub fn paste_text_and_restore(text: &str, target_pid: i32) -> Result<(), String> {
     paste_text_inner(text, true, target_pid)
 }
@@ -29,33 +33,32 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
         );
     }
 
-    // Save current clipboard contents for restore
-    let saved_clipboard = if restore {
-        let mut clipboard = arboard::Clipboard::new()
-            .map_err(|e| format!("Failed to open clipboard: {}", e))?;
-        clipboard.get_text().ok()
+    // Drains the AppKit objects this paste worker autoreleases.
+    let _pool = AutoreleasePool::push();
+
+    // A restoring paste saves the clipboard, then writes the transcript marked
+    // and local-only. Without a saved copy there is nothing to put back, so the
+    // transcript is written as a normal copy. Returning early below drops the
+    // ticket: the restore is abandoned and the transcript stays for recovery.
+    let restore_ticket = if restore {
+        let general = Pasteboard::general().ok_or("Failed to open clipboard")?;
+        let ticket = RESTORES.begin(&general, text)?;
+        if ticket.is_none() {
+            log::info!("Clipboard contents could not be saved; the transcription stays on the clipboard");
+            copy_to_clipboard(text)?;
+        }
+        ticket
     } else {
+        copy_to_clipboard(text)?;
         None
     };
 
-    // Write text to clipboard via arboard (uses NSPasteboard directly)
-    {
-        let mut clipboard = arboard::Clipboard::new()
-            .map_err(|e| format!("Failed to open clipboard: {}", e))?;
-        clipboard.set_text(text)
-            .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-    }
-
-    // Remember ownership immediately after our write. Capturing this after
-    // activation/paste would mistake a user's intervening Copy for our value.
-    let change_count_after_write = get_pasteboard_change_count();
-
     // Brief pause for clipboard to settle (NSPasteboard change count propagation)
-    std::thread::sleep(std::time::Duration::from_millis(30));
+    std::thread::sleep(Duration::from_millis(30));
 
     // HID events follow focus. Activation failure must preserve the transcript
     // for recovery instead of sending Cmd+V to an unrelated application.
-    if target_pid > 0 {
+    if target_pid > 0 && get_frontmost_pid() != target_pid {
         log::info!("Re-activating target app PID {} before paste", target_pid);
         activate_pid(target_pid)?;
     }
@@ -64,32 +67,15 @@ fn paste_text_inner(text: &str, restore: bool, target_pid: i32) -> Result<(), St
     let paste_result = simulate_cmd_v();
     if paste_result.is_err() {
         log::warn!("First Cmd+V attempt failed, retrying...");
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(50));
         simulate_cmd_v()?;
     }
 
     // Small delay after posting to ensure event is delivered
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(50));
 
-    // Restore clipboard contents after the paste has been consumed
-    if let Some(original) = saved_clipboard {
-        std::thread::spawn(move || {
-            // Wait long enough for the target app to consume the paste
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            // Only restore if nobody else has changed the clipboard
-            let current_count = get_pasteboard_change_count();
-            if change_count_after_write >= 0 && current_count == change_count_after_write {
-                if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                    let _ = clipboard.set_text(&original);
-                    log::info!("Clipboard restored to previous contents");
-                }
-            } else {
-                log::info!(
-                    "Clipboard changed by user, skipping restore (count {} \u{2192} {})",
-                    change_count_after_write, current_count
-                );
-            }
-        });
+    if let Some(ticket) = restore_ticket {
+        ticket.schedule();
     }
 
     log::info!("CGEvent Cmd+V posted");
@@ -232,13 +218,14 @@ fn activate_pid_objc(pid: i32) -> bool {
             return false;
         }
 
-        // activateWithOptions: NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps = 3
+        // activateWithOptions: NSApplicationActivateIgnoringOtherApps = 2. Without
+        // NSApplicationActivateAllWindows, only the app's key window comes forward.
         type MsgSendActivate = unsafe extern "C" fn(
             *const std::ffi::c_void, *const std::ffi::c_void, u64,
         ) -> bool;
         let send_activate: MsgSendActivate = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
         let sel_activate = sel_registerName(c"activateWithOptions:".as_ptr());
-        let activated = send_activate(running_app, sel_activate, 3);
+        let activated = send_activate(running_app, sel_activate, 2);
 
         log::info!("activateWithOptions: returned {} for PID {}", activated, pid);
         activated
@@ -252,7 +239,7 @@ fn activate_pid_applescript(pid: i32) -> Result<(), String> {
         pid
     );
     let output = crate::process::bounded_command(
-        std::process::Command::new("osascript").args(["-e", &script]),
+        std::process::Command::new("/usr/bin/osascript").args(["-e", &script]),
         std::time::Duration::from_secs(2),
     ).map_err(|error| format!("Could not activate the original app: {error}"))?;
     if !output.status.success() {
@@ -281,38 +268,6 @@ fn simulate_cmd_v() -> Result<(), String> {
     key_up.post(CGEventTapLocation::HID);
 
     Ok(())
-}
-
-/// Get the NSPasteboard change count for the general pasteboard.
-/// Returns -1 if the pasteboard cannot be accessed.
-fn get_pasteboard_change_count() -> i64 {
-    unsafe {
-        extern "C" {
-            fn objc_getClass(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
-            fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
-            fn objc_msgSend();
-        }
-
-        type MsgSendObj = unsafe extern "C" fn(
-            *const std::ffi::c_void, *const std::ffi::c_void,
-        ) -> *const std::ffi::c_void;
-        type MsgSendI64 = unsafe extern "C" fn(
-            *const std::ffi::c_void, *const std::ffi::c_void,
-        ) -> i64;
-
-        let send_obj: MsgSendObj = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
-        let send_i64: MsgSendI64 = std::mem::transmute(objc_msgSend as *const std::ffi::c_void);
-
-        let cls = objc_getClass(c"NSPasteboard".as_ptr());
-        if cls.is_null() { return -1; }
-
-        let sel_general = sel_registerName(c"generalPasteboard".as_ptr());
-        let pasteboard = send_obj(cls, sel_general);
-        if pasteboard.is_null() { return -1; }
-
-        let sel_count = sel_registerName(c"changeCount".as_ptr());
-        send_i64(pasteboard, sel_count)
-    }
 }
 
 /// Get the PID of the frontmost (active) application.
@@ -353,6 +308,7 @@ pub fn get_frontmost_pid() -> i32 {
 
 /// Write text to the system clipboard (for copy operations, not paste).
 pub fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    let _exclusive = super::pasteboard::exclusive();
     let mut clipboard = arboard::Clipboard::new()
         .map_err(|e| format!("Failed to open clipboard: {}", e))?;
     clipboard.set_text(text)

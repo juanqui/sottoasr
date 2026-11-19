@@ -8,24 +8,46 @@ import Foundation
 private final class VocabularyModels {
     let models: CtcModels
     let tokenizer: CtcTokenizer
+    let directory: URL
 
-    init(models: CtcModels, tokenizer: CtcTokenizer) {
+    init(models: CtcModels, tokenizer: CtcTokenizer, directory: URL) {
         self.models = models
         self.tokenizer = tokenizer
+        self.directory = directory
     }
 
-    static func prepare(allowDownload: Bool) throws -> VocabularyModels {
+    /// Repairs unreadable tokenizer metadata and, when `fetchModels` is set,
+    /// fetches missing files at the pinned revision. Present model files are
+    /// never replaced, and nothing loads here: Rust verifies the files first.
+    static func download(to directory: URL, fetchModels: Bool) throws {
+        try requireSdkFolder(directory)
         try waitForAsync {
-            let directory = CtcModels.defaultCacheDirectory()
-            let tokenizer = try await VocabularyCache.tokenizer(at: directory, allowDownload: allowDownload)
-            if allowDownload && !CtcModels.modelsExist(at: directory) {
+            _ = try await VocabularyCache.tokenizer(at: directory, allowDownload: true)
+            if fetchModels {
                 // Download without ModelHub.loadModels' destructive cache-purge
                 // fallback. An invalid model surfaces an error and stays on disk.
                 try await ModelHub.download(.parakeetCtc110m, to: directory.deletingLastPathComponent(),
                     config: DownloadConfig(timeout: 120, minStallBytes: 256 * 1024, stallWindow: 30))
             }
+        }
+    }
+
+    /// Loads verified local files. Never downloads.
+    static func prepare(at directory: URL) throws -> VocabularyModels {
+        try requireSdkFolder(directory)
+        return try waitForAsync {
+            let tokenizer = try await VocabularyCache.tokenizer(at: directory, allowDownload: false)
             let models = try await CtcModels.loadDirect(from: directory)
-            return VocabularyModels(models: models, tokenizer: tokenizer)
+            return VocabularyModels(models: models, tokenizer: tokenizer, directory: directory)
+        }
+    }
+
+    /// ModelHub writes into the parent folder under the repository's folder
+    /// name, so any other leaf would verify one folder and download to another.
+    private static func requireSdkFolder(_ directory: URL) throws {
+        guard directory.lastPathComponent == Repo.parakeetCtc110m.folderName else {
+            throw NSError(domain: "SottoASR", code: 5, userInfo: [NSLocalizedDescriptionKey:
+                "The vocabulary model folder must be named \(Repo.parakeetCtc110m.folderName)."])
         }
     }
 }
@@ -38,9 +60,9 @@ private final class AsrBridge {
 
     func unloadVocabulary() { vocabulary = nil }
 
-    func initialize() throws {
+    func initialize(at directory: URL) throws {
         try waitForAsync {
-            let models = try await AsrCache.load()
+            let models = try await AsrCache.load(at: directory)
             let manager = AsrManager()
             try await manager.loadModels(models)
             self.manager = manager
@@ -58,10 +80,28 @@ private final class AsrBridge {
             let duration = Double(file.length) / file.processingFormat.sampleRate
             // Never carry predictor state from a previous independent recording.
             var state = try TdtDecoderState()
-            let result = try await manager.transcribe(url, decoderState: &state)
+            let vocabularyModels = terms.isEmpty ? nil : self.vocabulary
+            // At or below its streaming threshold, AsrManager.transcribe(url)
+            // decodes the whole file with this same stateless converter and
+            // passes the samples on, so one decode here feeds both consumers
+            // identical input. Longer files stream from disk through another
+            // converter; they keep the file path and decode again for the spotter.
+            let config = ASRConfig.default
+            let estimatedSamples = Int((Double(file.length)
+                * (Double(config.sampleRate) / file.processingFormat.sampleRate)).rounded(.up))
+            let decoded: [Float]?
+            let result: ASRResult
+            if vocabularyModels != nil,
+               !(config.streamingEnabled && estimatedSamples > config.streamingThreshold) {
+                let samples = try AudioConverter().resampleAudioFile(url)
+                decoded = samples
+                result = try await manager.transcribe(samples, decoderState: &state)
+            } else {
+                decoded = nil
+                result = try await manager.transcribe(url, decoderState: &state)
+            }
             var candidates = "[]"
-            if !terms.isEmpty, let vocabularyModels = self.vocabulary,
-               let timings = result.tokenTimings, !timings.isEmpty {
+            if let vocabularyModels, let timings = result.tokenTimings, !timings.isEmpty {
                 // Auxiliary failures preserve the complete original ASR result.
                 // Only candidate evidence crosses FFI; Rust owns the acceptance policy.
                 do {
@@ -78,8 +118,8 @@ private final class AsrBridge {
                         let spotter = CtcKeywordSpotter(models: models, blankId: models.vocabulary.count)
                         let rescorer = try await VocabularyRescorer.create(spotter: spotter,
                             vocabulary: vocabulary, config: .init(spotterRescueEnabled: false),
-                            ctcModelDirectory: CtcModels.defaultCacheDirectory())
-                        let samples = try AudioConverter().resampleAudioFile(url)
+                            ctcModelDirectory: vocabularyModels.directory)
+                        let samples = try decoded ?? AudioConverter().resampleAudioFile(url)
                         let spotted = try await spotter.spotKeywordsWithLogProbs(
                             audioSamples: samples, customVocabulary: vocabulary)
                         let evaluation = rescorer.ctcTokenEvaluateCandidates(transcript: result.text,
@@ -132,13 +172,34 @@ public func destroyBridge(_ handle: UnsafeMutableRawPointer) {
     Unmanaged<AsrBridge>.fromOpaque(handle).release()
 }
 
-@_cdecl("sotto_asr_initialize")
-public func initializeBridge(
-    _ handle: UnsafeMutableRawPointer,
+private func directoryURL(_ path: UnsafePointer<CChar>) -> URL {
+    URL(fileURLWithPath: String(cString: path), isDirectory: true)
+}
+
+@_cdecl("sotto_asr_download")
+public func downloadSpeechModel(
+    _ directory: UnsafePointer<CChar>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32 {
     do {
-        try Unmanaged<AsrBridge>.fromOpaque(handle).takeUnretainedValue().initialize()
+        let url = directoryURL(directory)
+        try waitForAsync { try await AsrCache.download(to: url) }
+        return 0
+    } catch let failure {
+        error.pointee = strdup(failure.localizedDescription)
+        return -1
+    }
+}
+
+@_cdecl("sotto_asr_initialize")
+public func initializeBridge(
+    _ handle: UnsafeMutableRawPointer,
+    _ directory: UnsafePointer<CChar>,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    do {
+        try Unmanaged<AsrBridge>.fromOpaque(handle).takeUnretainedValue()
+            .initialize(at: directoryURL(directory))
         return 0
     } catch let failure {
         error.pointee = strdup(failure.localizedDescription)
@@ -178,11 +239,26 @@ public func transcribeFile(
     }
 }
 
+@_cdecl("sotto_vocabulary_download")
+public func downloadVocabulary(
+    _ directory: UnsafePointer<CChar>,
+    _ fetchModels: Bool,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    do {
+        try VocabularyModels.download(to: directoryURL(directory), fetchModels: fetchModels)
+        return 0
+    } catch let failure {
+        error.pointee = strdup(failure.localizedDescription)
+        return -1
+    }
+}
+
 @_cdecl("sotto_vocabulary_prepare")
-public func prepareVocabulary(_ allowDownload: Bool,
+public func prepareVocabulary(_ directory: UnsafePointer<CChar>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> UnsafeMutableRawPointer? {
     do {
-        return Unmanaged.passRetained(try VocabularyModels.prepare(allowDownload: allowDownload)).toOpaque()
+        return Unmanaged.passRetained(try VocabularyModels.prepare(at: directoryURL(directory))).toOpaque()
     } catch let failure {
         error.pointee = strdup(failure.localizedDescription)
         return nil

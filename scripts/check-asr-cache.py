@@ -23,11 +23,20 @@ builds = [path for profile in ('debug', 'release')
 if not builds:
     parser.error('Run cargo build from src-tauri before this probe')
 build = max(builds, key=lambda path: (path / 'release/libFluidAudioBridge.a').stat().st_mtime)
+# SwiftPM's native build system writes modules to release/Modules (release is
+# a symlink to arm64-apple-macosx/release). The Swift Build system (Swift 6.4
+# here) points release at out/Products/Release and writes them there directly.
+# Only what release resolves to is current: a stale arm64-apple-macosx tree can
+# sit beside it.
+modules = [path for path in (build / 'release/Modules', build / 'release')
+           if (path / 'FluidAudio.swiftmodule').exists()]
+if not modules:
+    parser.error(f'No FluidAudio module in {build / "release"}; rebuild with cargo build')
 with tempfile.TemporaryDirectory(prefix='sotto-asr-cache-probe-') as scratch:
     root = Path(scratch)
     executable = root / 'asr-cache-probe'
     command = ['swiftc', '-O', '-parse-as-library']
-    for include in [build / 'release/Modules',
+    for include in [*modules,
                     build / 'checkouts/FluidAudio/Sources/FastClusterWrapper/include',
                     build / 'checkouts/FluidAudio/Sources/MachTaskSelfWrapper/include',
                     build / 'artifacts/fluidaudio/NemoTextProcessing/NemoTextProcessing.xcframework/macos-arm64_x86_64/Headers']:

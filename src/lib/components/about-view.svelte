@@ -205,7 +205,7 @@
     font-weight: 500;
     padding: 2px 7px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--code-bg);
     color: var(--text-dim);
     white-space: nowrap;
   }

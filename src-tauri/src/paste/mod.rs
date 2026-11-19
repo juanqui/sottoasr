@@ -8,6 +8,10 @@ pub use backend::StubPasteBackend;
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod pasteboard;
+#[cfg(target_os = "macos")]
+mod restore;
 
 #[cfg(target_os = "macos")]
 pub use macos::{
@@ -16,6 +20,11 @@ pub use macos::{
     test_accessibility_functional,
     warmup_cgevent_pipeline,
 };
+#[cfg(target_os = "macos")]
+pub use restore::wait_for_pending_restore;
+
+#[cfg(not(target_os = "macos"))]
+pub fn wait_for_pending_restore(_timeout: std::time::Duration) {}
 
 #[cfg(not(target_os = "macos"))]
 pub fn copy_to_clipboard(_text: &str) -> Result<(), String> {

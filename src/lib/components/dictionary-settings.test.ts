@@ -44,4 +44,17 @@ describe('dictionary editor', () => {
     expect(onchange).toHaveBeenLastCalledWith([]);
     expect(entries).toHaveLength(1);
   });
+
+  it('marks a row with one empty field and names what is missing', () => {
+    target = document.createElement('div');
+    document.body.append(target);
+    component = mount(DictionarySettings, { target, props: { entries: [{ heard: 'Quen', replacement: ' ' }, { heard: '', replacement: '' }], onchange: vi.fn() } });
+    flushSync();
+
+    const replacement = target.querySelector<HTMLInputElement>('input[aria-label="Replacement 1"]')!;
+    expect(replacement.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(replacement.getAttribute('aria-describedby')!)?.textContent).toContain('Add the text to write instead');
+    expect(target.querySelector('input[aria-label="Heard alias 1"]')!.getAttribute('aria-invalid')).toBe('false');
+    expect(target.querySelectorAll('.row-error')).toHaveLength(1);
+  });
 });

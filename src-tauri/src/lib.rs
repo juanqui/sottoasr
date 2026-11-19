@@ -1,5 +1,3 @@
-#![deny(warnings)]
-
 mod models;
 mod persistence;
 mod dictionary;
@@ -38,9 +36,6 @@ pub fn run() {
             .build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_nspanel::init())
         .manage(AppState::new())
@@ -52,22 +47,23 @@ pub fn run() {
             commands::recording::cancel_recording,
             // Transcription history
             commands::transcription::get_transcriptions,
-            commands::transcription::get_last_transcription,
             commands::transcription::delete_transcription,
             commands::transcription::clear_transcriptions,
-            commands::transcription::export_transcriptions_csv,
             commands::transcription::export_transcriptions_csv_file,
+            commands::transcription::reveal_csv_export,
             commands::recovery::get_recoverable_recordings,
             commands::recovery::recover_recording,
             commands::recovery::reveal_recovery_recording,
+            commands::recovery::delete_recovery_recording,
             commands::recovery::get_recovery_notice,
             // Settings
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::apply_shortcuts,
+            commands::settings::reset_settings,
+            commands::settings::get_settings_load_error,
+            commands::audio::list_input_devices,
             // Permissions
-            commands::permissions::check_microphone_permission,
-            commands::permissions::check_accessibility_permission,
             commands::permissions::request_accessibility_permission,
             commands::permissions::request_microphone_permission,
             commands::permissions::check_all_permissions,
@@ -82,8 +78,8 @@ pub fn run() {
             // Setup / onboarding
             commands::setup::get_asr_backend,
             commands::setup::get_model_status,
-            commands::setup::needs_onboarding,
             commands::setup::init_asr,
+            commands::setup::redownload_speech_model,
             commands::vocabulary::get_vocabulary_status,
             commands::vocabulary::prepare_vocabulary_model,
             commands::setup::download_model,
@@ -92,13 +88,7 @@ pub fn run() {
             commands::llm::get_llm_status,
             commands::llm::prepare_llm_model,
             commands::llm::repair_llm_runtime,
-            commands::llm::check_llm_update,
-            commands::llm::download_llm_model,
-            commands::llm::update_llm_model,
-            commands::llm::cancel_llm_download,
             commands::llm::delete_llm_model,
-            commands::llm::load_llm_model,
-            commands::llm::unload_llm_model,
             // App updater
             updater::check_app_update,
             updater::perform_app_update,
@@ -219,14 +209,15 @@ pub fn run() {
                     // Cold start loads the ASR models concurrently, which can
                     // stall the runtime probe past its budget. That verdict is
                     // transient, so retry it here rather than leaving cleanup
-                    // disabled until the next app launch.
-                    const RETRY_DELAYS: [std::time::Duration; 3] = [
-                        std::time::Duration::from_secs(5),
-                        std::time::Duration::from_secs(15),
-                        std::time::Duration::from_secs(45),
+                    // disabled until the next app launch. An inconclusive
+                    // verdict is cached, so the first retry waits it out.
+                    let retry_delays = [
+                        llm::engine::VENV_UNKNOWN_RETRY_INTERVAL + std::time::Duration::from_secs(1),
+                        std::time::Duration::from_secs(30),
+                        std::time::Duration::from_secs(60),
                     ];
                     log::info!("Preparing and warming enabled cleanup in background...");
-                    for attempt in 0..=RETRY_DELAYS.len() {
+                    for attempt in 0..=retry_delays.len() {
                         let state: tauri::State<'_, AppState> = llm_handle.state();
                         // Reuse Settings preparation so upgrades with an enabled
                         // old model also prepare the new pin, and concurrent
@@ -241,15 +232,15 @@ pub fn run() {
                         let verdict = tokio::task::spawn_blocking(llm::engine::venv_verdict)
                             .await
                             .unwrap_or_else(|_| {
-                                llm::engine::VenkVerdict::Unknown("verdict task panicked".into())
+                                llm::engine::VenvVerdict::Unknown("verdict task panicked".into())
                             });
                         // Only an inconclusive probe is worth retrying: a broken
                         // runtime needs an explicit repair, and a ready one
                         // failed for some other reason that a delay cannot fix.
-                        if !matches!(verdict, llm::engine::VenkVerdict::Unknown(_)) {
+                        if !matches!(verdict, llm::engine::VenvVerdict::Unknown(_)) {
                             return;
                         }
-                        let Some(delay) = RETRY_DELAYS.get(attempt) else {
+                        let Some(delay) = retry_delays.get(attempt) else {
                             return;
                         };
                         log::info!(
@@ -264,9 +255,20 @@ pub fn run() {
             // Start the auto-update checker (15s delay, then every 4 hours)
             updater::start_update_checker(&handle);
 
+            // Apply the user's retention choices now and every six hours.
+            // The first tick fires immediately.
+            let retention_handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
+                loop {
+                    interval.tick().await;
+                    commands::recovery::enforce_retention(&retention_handle).await;
+                }
+            });
+
             // Only successfully loaded preferences may change the OS login item.
             // Temporary defaults after a read/parse failure are not saved intent.
-            if handle.state::<AppState>().settings_load_error.is_none() {
+            if handle.state::<AppState>().settings_load_error().is_none() {
                 use tauri_plugin_autostart::ManagerExt;
                 let launch_at_login = handle.state::<AppState>().settings.blocking_lock().launch_at_login;
                 let manager = handle.autolaunch();
@@ -288,7 +290,7 @@ pub fn run() {
             if window.label() == "settings"
                 && matches!(event, tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed)
             {
-                commands::keycapture::reset_key_capture();
+                commands::keycapture::reset_key_capture(window.app_handle());
             }
             if let tauri::WindowEvent::Destroyed = event {
                 log::info!("Window '{}' closed", window.label());
@@ -320,6 +322,9 @@ pub fn run() {
                     }
                 }
                 tauri::RunEvent::Exit => {
+                    // A paste restores the user's clipboard on a short timer;
+                    // quitting inside that window must not lose it.
+                    paste::wait_for_pending_restore(std::time::Duration::from_millis(800));
                     process::shutdown();
                     app.state::<commands::recovery::RecoverySession>().clean_exit();
                 }

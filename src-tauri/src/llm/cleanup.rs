@@ -9,7 +9,7 @@
 //! rationale and docs/specs/2026-09-13-batched-stop-path-correction.md for
 //! the batch wire contract.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::llm::correction;
@@ -39,6 +39,15 @@ const PREWARM_SENTINEL: &str = "Please um keep this readiness check local.";
 /// pathological case where a prewarm collides with a slow cleanup anyway.
 pub const PREWARM_HANDOFF_WAIT: Duration = Duration::from_secs(10);
 
+/// Count one recording-start prewarm as in flight (R-16). Call it
+/// synchronously before spawning the task that runs `prewarm_sidecar`, which
+/// releases the count on every exit path, so a stop that races the spawn
+/// still finds the handoff gate. A count rather than a flag: one prewarm
+/// finishing never clears another that is still running.
+pub fn begin_prewarm(state: &AppState) {
+    state.llm_prewarming.fetch_add(1, Ordering::SeqCst);
+}
+
 /// Speculative cleanup-sidecar prewarm, fired when recording starts.
 ///
 /// Weights sitting idle in macOS swap make the first cleanup of a session
@@ -53,18 +62,21 @@ pub const PREWARM_HANDOFF_WAIT: Duration = Duration::from_secs(10);
 ///   handle (`engine.is_alive()` fast path). Down/starting → return silently;
 ///   `ensure_running` stays exclusively on the stop path.
 /// * NEVER queues behind real work: `try_lock` on `llm_operation`; busy →
-///   return. The `llm_prewarming` flag (set by the caller BEFORE spawning)
-///   tells a colliding stop-path cleanup to wait for this handoff instead of
-///   skipping correction.
+///   return. The `llm_prewarming` count (taken by `begin_prewarm` BEFORE
+///   spawning) tells a colliding stop-path cleanup to wait for this handoff
+///   instead of skipping correction.
 /// * Fixed text only — nothing user-derived ever reaches the wire here.
 pub async fn prewarm_sidecar(state: &AppState) {
-    // Clears `llm_prewarming` on every exit path — including early returns
-    // and cancellation of this task — so the handoff gate can never strand
-    // future cleanups behind a phantom prewarm.
-    struct PrewarmGuard<'a>(&'a std::sync::atomic::AtomicBool);
+    // Releases this prewarm's `llm_prewarming` count on every exit path —
+    // including early returns and cancellation of this task — so the handoff
+    // gate can never strand future cleanups behind a phantom prewarm. Never
+    // below zero: a prewarm that was not counted has nothing to release.
+    struct PrewarmGuard<'a>(&'a AtomicU32);
     impl Drop for PrewarmGuard<'_> {
         fn drop(&mut self) {
-            self.0.store(false, Ordering::SeqCst);
+            let _ = self
+                .0
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| count.checked_sub(1));
         }
     }
     let _prewarm_guard = PrewarmGuard(&state.llm_prewarming);
@@ -160,9 +172,10 @@ pub async fn prewarm_sidecar(state: &AppState) {
 ///   next call respawns.
 /// - Per-request timeouts and orphan recovery live inside
 ///   `sidecar_cleanup_batch`; there is deliberately NO whole-transcript size
-///   refusal and NO whole-cleanup outer timeout: window texts are bounded
-///   and chunks are count-16, so one slow or broken request can only cost
-///   its own chunk.
+///   refusal. Window texts are bounded and chunks are count-16, so one slow
+///   or broken request costs its own chunk; the planner stops dispatching
+///   after a transport-level failure or once less of its 60 s budget is left
+///   than the engine's batch deadline, and the regions not sent stay raw.
 ///
 /// Preconditions: caller has already checked `settings.llm_cleanup_enabled`.
 /// This function does NOT check the enabled flag — callers that need to skip
@@ -208,11 +221,14 @@ async fn run_cleanup_attempt(
 
 /// Run ONE bounded batched sidecar request: the full spawn/reuse, startup,
 /// timeout, zombie, and handle-restore discipline inside a single outer
-/// deadline that COVERS `ensure_running` (two load attempts + backoff can
-/// otherwise hang unbounded), the request, and handle restoration — the same
-/// bound the pre-incremental whole-text path enforced. On expiry the
-/// orphaned subprocess is SIGKILLed. There is deliberately NO whole-transcript
-/// timeout: the planner dispatches ≤16-window chunks, each bounded like this.
+/// deadline, `limit`, that COVERS `ensure_running` (two load attempts +
+/// backoff can otherwise hang unbounded), the request, and handle
+/// restoration. The planner passes `LLM_CLEANUP_TIMEOUT`, shortened to what
+/// is left of its dispatch budget but never below the engine's own batch
+/// deadline, so a healthy sidecar answers first and keeps its handle. On
+/// expiry the orphaned subprocess is SIGKILLed. There is deliberately NO
+/// whole-transcript timeout here: the planner dispatches ≤16-window chunks,
+/// each bounded like this, and owns the total dispatch budget.
 /// The caller must hold `llm_operation` for the entire call. Returns one
 /// typed item per input text, or the wholesale failure status; the caller
 /// owns authority derivation and text preservation.
@@ -220,8 +236,9 @@ pub(crate) async fn sidecar_cleanup_batch(
     state: &AppState,
     texts: Vec<String>,
     mode: CleanupMode,
+    limit: Duration,
 ) -> Result<Vec<BatchItem>, LlmCleanupStatus> {
-    match tokio::time::timeout(LLM_CLEANUP_TIMEOUT, sidecar_batch_request(state, texts, mode)).await {
+    match tokio::time::timeout(limit, sidecar_batch_request(state, texts, mode)).await {
         Ok(result) => result,
         Err(_) => {
             // Old semantics preserved: the whole attempt (startup included)
@@ -230,11 +247,11 @@ pub(crate) async fn sidecar_cleanup_batch(
             // sweep catches by cached PID, exactly as before.
             log::warn!(
                 "LLM cleanup attempt exceeded {} ms (startup included), killing subprocess",
-                LLM_CLEANUP_TIMEOUT.as_millis()
+                limit.as_millis()
             );
             kill_orphan(state);
             Err(LlmCleanupStatus::TimedOut {
-                elapsed_ms: LLM_CLEANUP_TIMEOUT.as_millis() as u64,
+                elapsed_ms: limit.as_millis() as u64,
             })
         }
     }
@@ -251,24 +268,21 @@ async fn sidecar_batch_request(
         Err(e) => return Err(LlmCleanupStatus::Unavailable { reason: e }),
     };
 
-    // Run the batch under an outer timeout. `spawn_blocking` gives the move
+    // Run the batch on the blocking pool. `spawn_blocking` gives the move
     // closure ownership of the handle, then returns it plus the result. The
     // chunk's owned copy is materialized ONCE here — the genuine IPC
     // boundary (spec §4.3 ownership taste), never a per-window re-clone.
-    // Move the chunk once into the blocking pool; the request
-    // builder borrows it from here on (no second copy).
+    // The deadline is the caller's: `sidecar_cleanup_batch` bounds this whole
+    // attempt and kills the orphan if the blocking task outlives it.
     let count = texts.len();
     let started = Instant::now();
-    let cleanup_result = tokio::time::timeout(
-        LLM_CLEANUP_TIMEOUT,
-        tokio::task::spawn_blocking(move || {
-            let r = llm.cleanup_batch(&texts, mode);
-            (llm, r)
-        }),
-    )
+    let cleanup_result = tokio::task::spawn_blocking(move || {
+        let r = llm.cleanup_batch(&texts, mode);
+        (llm, r)
+    })
     .await;
     match cleanup_result {
-        Ok(Ok((llm_back, Ok(items)))) => {
+        Ok((llm_back, Ok(items))) => {
             // Completed batch — put the handle back; the caller derives
             // authority per item. A valid response with per-item typed
             // failures RETAINS the handle (spec §4.1).
@@ -279,7 +293,7 @@ async fn sidecar_batch_request(
             log::info!("LLM cleanup batch of {count} responded in {elapsed_ms}ms");
             Ok(items)
         }
-        Ok(Ok((llm_back, Err(e)))) => {
+        Ok((llm_back, Err(e))) => {
             // The request errored as a whole. Classify the endpoint.
             if is_responded_timeout(&e) {
                 // The sidecar enforced its own generation deadline and reported
@@ -314,7 +328,7 @@ async fn sidecar_batch_request(
                 Err(LlmCleanupStatus::Failed { reason: e })
             }
         }
-        Ok(Err(panic)) => {
+        Err(panic) => {
             // The blocking task itself panicked. The handle is lost inside
             // the panicked task. Kill any orphaned subprocess and bail.
             log::error!("LLM cleanup task panicked: {}", panic);
@@ -322,18 +336,6 @@ async fn sidecar_batch_request(
             Err(LlmCleanupStatus::Failed {
                 reason: format!("panic: {}", panic),
             })
-        }
-        Err(_timeout) => {
-            // Outer timeout fired. The blocking task is still running and
-            // still owns the handle. Kill the subprocess by PID so it stops
-            // consuming Metal memory immediately.
-            let elapsed_ms = started.elapsed().as_millis() as u64;
-            log::warn!(
-                "LLM cleanup timed out after {} ms, killing subprocess",
-                elapsed_ms
-            );
-            kill_orphan(state);
-            Err(LlmCleanupStatus::TimedOut { elapsed_ms })
         }
     }
 }
@@ -597,8 +599,11 @@ mod tests {
         )
     }
 
+    // Without the feature, or off Apple silicon, `prewarm_sidecar` returns
+    // before it dispatches anything.
+    #[cfg(all(feature = "llm-cleanup", target_os = "macos", target_arch = "aarch64"))]
     #[tokio::test]
-    async fn prewarm_dispatches_sentinel_through_resident_handle_and_clears_flag() {
+    async fn prewarm_dispatches_sentinel_through_resident_handle_and_releases_its_count() {
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = calls.clone();
         let backend = crate::test_support::MockLlmBackend::run(move |text| {
@@ -608,25 +613,25 @@ mod tests {
             Ok(text.to_string())
         });
         let state = prewarm_state(Some(backend));
-        // Mirrors handle_start_recording: flag set BEFORE the task runs.
-        state.llm_prewarming.store(true, Ordering::SeqCst);
+        // Mirrors handle_start_recording: counted BEFORE the task runs.
+        begin_prewarm(&state);
         prewarm_sidecar(&state).await;
         assert_eq!(calls.load(Ordering::SeqCst), 1, "sentinel must reach the sidecar");
         assert!(state.llm_engine.lock().await.is_some(), "handle restored");
-        assert!(!state.llm_prewarming.load(Ordering::SeqCst), "guard cleared");
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0, "count released");
     }
 
     #[tokio::test]
-    async fn prewarm_never_spawns_and_always_clears_the_flag() {
+    async fn prewarm_never_spawns_and_always_releases_its_count() {
         // No resident sidecar: prewarm returns without touching llm_engine.
         // (A stray ensure_running here would try to spawn a real Python
         // process on the test machine — the empty guard field proves it
         // did not.)
         let state = prewarm_state(None);
-        state.llm_prewarming.store(true, Ordering::SeqCst);
+        begin_prewarm(&state);
         prewarm_sidecar(&state).await;
         assert!(state.llm_engine.lock().await.is_none());
-        assert!(!state.llm_prewarming.load(Ordering::SeqCst));
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0);
 
         // Cleanup disabled in settings: no dispatch either (no engine was
         // ever installed; the enabled gate returns before acquisition).
@@ -637,10 +642,10 @@ mod tests {
             Box::new(MockPasteBackend::new()),
             Settings::default(),
         );
-        disabled.llm_prewarming.store(true, Ordering::SeqCst);
+        begin_prewarm(&disabled);
         prewarm_sidecar(&disabled).await;
         assert!(disabled.llm_engine.lock().await.is_some(), "untouched");
-        assert!(!disabled.llm_prewarming.load(Ordering::SeqCst));
+        assert_eq!(disabled.llm_prewarming.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
@@ -653,11 +658,27 @@ mod tests {
         });
         let state = prewarm_state(Some(backend));
         let real_work = state.llm_operation.try_lock().unwrap();
-        state.llm_prewarming.store(true, Ordering::SeqCst);
+        begin_prewarm(&state);
         // try_lock contention: prewarm must answer now, not wait.
         prewarm_sidecar(&state).await;
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert!(!state.llm_prewarming.load(Ordering::SeqCst), "guard cleared on busy path");
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0, "count released on busy path");
         drop(real_work);
+    }
+
+    /// R-16: overlapping prewarms each hold their own count, so the first to
+    /// finish cannot clear the gate for one still in flight, and a release
+    /// with nothing counted never wraps below zero.
+    #[tokio::test]
+    async fn overlapping_prewarms_release_only_their_own_count() {
+        let state = prewarm_state(None);
+        begin_prewarm(&state);
+        begin_prewarm(&state);
+        prewarm_sidecar(&state).await;
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 1, "second prewarm still counted");
+        prewarm_sidecar(&state).await;
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0);
+        prewarm_sidecar(&state).await;
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0, "never below zero");
     }
 }

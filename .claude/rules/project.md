@@ -2,31 +2,33 @@
 
 ## Overview
 
-SottoASR is a local, privacy-first speech-to-text application for macOS. The user presses a global hotkey, speaks, and transcribed text is pasted at their cursor position. All processing happens on-device — no audio or text is ever sent to a cloud service.
+SottoASR is a local, privacy-first speech-to-text application for macOS. The user presses a global hotkey and speaks. SottoASR then pastes the transcribed text at the cursor. All speech recognition and transcript cleanup runs on the Mac. No audio or text is ever sent to a cloud service.
 
 ## Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| App framework | Tauri v2 | Native app shell, system tray, IPC |
-| Backend | Rust | Audio capture, ASR processing, clipboard, hotkeys |
-| Frontend | Svelte 5 + TypeScript | Recording overlay UI, settings, onboarding |
-| ASR engine (default) | FluidAudio via fluidaudio-rs | CoreML/ANE speech-to-text (macOS) |
-| ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via `asr-parakeet` feature |
-| Audio capture | cpal 0.15 | Cross-platform audio input |
+| App framework | Tauri v2 (2.11) | Native app shell, system tray, IPC |
+| Backend | Rust | Audio capture, the dictation pipeline, clipboard and paste, hotkeys, history |
+| Frontend | Svelte 5 + TypeScript | Recording overlay, history, settings, onboarding, about and update windows |
+| ASR engine (default) | FluidAudio via the vendored bridge `src-tauri/vendor/fluidaudio-rs` (Swift) | Parakeet TDT v3 on CoreML and the Apple Neural Engine (macOS) |
+| ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via the `asr-parakeet` feature |
+| Transcript cleanup (optional) | Python sidecar `src-tauri/sidecar/llm_cleanup.py` with MLX and mlx-lm | Runs the stock `openbmb/MiniCPM5-2B-MLX` model, pinned by revision |
+| Audio capture | cpal 0.16 | Microphone input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
 
 ## Architecture
 
 - **Menu bar / tray app only.** No Dock icon. No main window by default. The app lives in the macOS menu bar.
-- **Floating overlay window** appears during recording to show visual feedback (waveform, status). Implemented as an NSPanel-style always-on-top window.
-- **Audio pipeline:** Microphone → cpal → audio buffer → parakeet-rs → transcribed text → clipboard → simulated Cmd+V paste.
-- **All audio and ASR processing happens in Rust.** The frontend is only for UI — it never touches audio data or model inference.
+- **Floating overlay window** appears during recording to show visual feedback (waveform, status). It is a non-activating NSPanel, so it does not take focus from the app that receives the text.
+- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet TDT v3) → optional acoustic vocabulary → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
+- **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for ASR and starts the Python sidecar for cleanup.
 
 ## Package Managers
 
 - **Frontend (npm):** `package.json` in project root
 - **Backend (cargo):** `Cargo.toml` in `src-tauri/`
+- **Cleanup runtime (pip):** `src-tauri/sidecar/requirements.lock`, a hash-locked file generated from `requirements.in`. The app installs it into its own virtual environment. The regeneration command is at the top of `requirements.in`.
 
 ## Commands
 
@@ -37,36 +39,50 @@ cargo tauri dev
 # Production build
 cargo tauri build
 
-# Rust only
-cargo build                    # Build Rust backend
-cargo clippy -- -D warnings    # Lint Rust code
-cargo test                     # Run Rust tests
+# Rust only (run from src-tauri/)
+cargo build                                    # Build Rust backend
+cargo clippy --all-targets -- -D warnings      # Lint Rust code
+cargo test                                     # Run Rust tests
+cargo check --no-default-features --features custom-protocol,asr-parakeet   # Check the ONNX backend
 
 # Frontend only
 npm run dev                    # Svelte dev server
 npm run build                  # Frontend production build
 npm run check                  # TypeScript/Svelte type checking
+npm test                       # Vitest tests
+
+# Python tests and configuration checks (run from the project root)
+python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
+python3 -m unittest discover -s scripts -p 'test_*.py'
+bash scripts/ci-checks.sh
 ```
 
 ## Key Directories
 
 ```
-sotto/
+sottoasr/
+├── *.html                # Vite page entries, one per window
 ├── src/                  # Svelte 5 frontend
-│   ├── lib/              # Shared components and utilities
-│   └── routes/           # SvelteKit routes (if applicable)
+│   ├── *.ts              # Window entry scripts
+│   └── lib/              # Components, rune stores (.svelte.ts) and utilities
 ├── src-tauri/            # Tauri + Rust backend
 │   ├── src/              # Rust source code
-│   ├── sidecar/          # Python LLM sidecar (mlx-lm)
+│   ├── sidecar/          # Python cleanup sidecar (mlx-lm) and its lock file
+│   ├── vendor/fluidaudio-rs/   # Swift ASR bridge, SDK patches, model manifest
+│   ├── capabilities/     # Tauri permissions per window
 │   ├── Cargo.toml        # Rust dependencies
 │   └── tauri.conf.json   # Tauri configuration
-├── benchmarks/llm/       # LLM cleanup benchmarks (dataset, runner, prompts)
+├── scripts/              # CI checks, release checks, Swift and model probes
+├── benchmarks/           # ASR, cleanup (llm) and UI benchmarks
+├── training/             # Earlier fine-tuning work (historical, not used by the app)
+├── website/              # sottoasr.app static site
 ├── docs/                 # Documentation
 │   ├── specs/            # Feature specs (date-prefixed, immutable)
 │   ├── research/         # Research notes (date-prefixed)
 │   ├── journals/         # Experiment logs (date-prefixed)
 │   ├── audit/            # Code/architecture audits (date-prefixed)
-│   └── designs/          # Living design docs
+│   ├── designs/          # Living design docs
+│   └── templates/        # HuggingFace model card templates
 └── .claude/              # Claude Code rules and configuration
 ```
 
@@ -80,25 +96,29 @@ sotto/
 - **Local-only processing is a hard constraint.** Never add features that send audio, transcriptions, or usage data to external services.
 - **Experiment logs go in `docs/journals/`**, not alongside code. Benchmark code lives in `benchmarks/`; the narrative of what was tried, measured, and learned lives in `docs/journals/YYYY-MM-DD-slug.md`.
 
-## HuggingFace Artifacts
+## HuggingFace Artifacts (historical)
+
+The shipped app does not use the artifacts in this section. Its cleanup model is the stock `openbmb/MiniCPM5-2B-MLX`, pinned by revision in `src-tauri/src/llm/engine.rs` (`SOTTO_MODEL`, `MODEL_REVISION`) and in `src-tauri/sidecar/llm_cleanup.py`. The fine-tuned LFM2.5 models and their dataset come from earlier work. `training/` keeps the scripts and data of that work as history. The facts, the protocol and the checklist below apply only if you upload to these repositories again.
 
 | Artifact | Repo | Visibility |
 |----------|------|------------|
 | **Training dataset** | [`juanquivilla/sotto-transcript-cleanup`](https://huggingface.co/datasets/juanquivilla/sotto-transcript-cleanup) | Public |
 | **Fine-tuned model (bf16)** | [`juanquivilla/sotto-cleanup-lfm25-350m`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m) | Public |
-| **MLX 5-bit (recommended)** | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) | Public |
+| **MLX 5-bit** | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) | Public |
 | **MLX 4-bit** | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit) | Public |
 
 - **HF token** is stored in `.env` (gitignored) as `HF_TOKEN`. The remote training machine at `juanqui@192.168.1.128` has a **read-only** cached token; use the write token from `.env` for uploads.
 - **Naming convention:** `juanquivilla/sotto-{purpose}-{base_model}-{size}` for models; `juanquivilla/sotto-{purpose}` for datasets
 - **Base model:** `LiquidAI/LFM2.5-350M-Base` — full fine-tuned (no LoRA), all 354M params trainable
-- **Current best:** v22+GRPO — ROUGE-L 0.954 (val set), 66% Exact Match, 91% Filler-Free. Pipeline: cleaned data (text fixes + 6K new) → SFT LR 3e-5, β2=0.95 → GRPO LoRA r=32, LR 3e-6
-- **MLX quantized models** for on-device deployment:
-  - 5-bit affine, group_size=64 — **recommended** (~237MB, minimal quality loss)
+- **Best result of that work:** v22+GRPO — ROUGE-L 0.954 (val set), 66% Exact Match, 91% Filler-Free. Pipeline: cleaned data (text fixes + 6K new) → SFT LR 3e-5, β2=0.95 → GRPO LoRA r=32, LR 3e-6
+- **MLX quantized models** of that work:
+  - 5-bit affine, group_size=64 (~237MB, minimal quality loss)
   - 4-bit affine, group_size=64 — smaller (~195MB, slightly lower quality)
 - **Quantization recipe:** `mlx_lm.convert --hf-path <model> --mlx-path <out> -q --q-bits 5 --q-group-size 64 --trust-remote-code`
 
 ### HuggingFace Upload Protocol (CRITICAL)
+
+This protocol is historical. The shipped app does not use these models. It still applies to every new upload to the repositories in the table above.
 
 **Every model upload MUST include a detailed model card (README.md).** Use the templates in `docs/templates/` as the starting point:
 - `docs/templates/hf-model-card-bf16.md` — Full precision model card template

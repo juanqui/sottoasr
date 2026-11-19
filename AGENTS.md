@@ -11,7 +11,7 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 | Frontend | Svelte 5 + TypeScript | Recording overlay UI, settings, onboarding |
 | ASR engine (default) | FluidAudio via fluidaudio-rs | CoreML/ANE speech-to-text (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via `asr-parakeet` feature |
-| Audio capture | cpal 0.15 | Cross-platform audio input |
+| Audio capture | cpal 0.16 | Cross-platform audio input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
 
 ## Quick Commands
@@ -56,7 +56,7 @@ npm run check
 ## Key Directories
 
 ```
-sotto/
+sottoasr/
 ├── src/                  # Svelte 5 frontend
 │   └── lib/              # Shared components and utilities
 ├── src-tauri/            # Tauri + Rust backend
@@ -254,13 +254,13 @@ Every document starts with:
 
 ## Release Process
 
-Tag-driven workflow. Pushing a `v*` tag to `main` triggers GitHub Actions to produce a signed `.dmg` and create a **draft** GitHub Release.
+A push to `main` and a push of a `v*` tag both run `.github/workflows/build-release.yml`. Each run produces a signed `.dmg` and creates or updates a **draft** GitHub Release for `v<version>`.
 
 ### Steps
 
-1. **Version Bump** — Update version in all five files: `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`. All must match. The About screen reads version via `getVersion()` from `@tauri-apps/api/app` — never hardcode.
+1. **Version Bump** — Update version in all five files (six values, because `package-lock.json` holds it twice): `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`. All must match. The About screen reads version via `getVersion()` from `@tauri-apps/api/app` — never hardcode.
 
-2. **Update CHANGELOG.md** — New section at top: `## [X.Y.Z] — YYYY-MM-DD` with Added/Changed/Fixed/Infrastructure subsections.
+2. **Update CHANGELOG.md** — During development, entries go under `## [Unreleased]` at the top. At release, rename it to `## [X.Y.Z] — YYYY-MM-DD` with Added/Changed/Fixed/Infrastructure subsections.
 
 3. **Update Website Version** — `website/index.html`: `<span class="version-badge">vX.Y.Z</span>`.
 
@@ -286,11 +286,13 @@ Tag-driven workflow. Pushing a `v*` tag to `main` triggers GitHub Actions to pro
 
 ## HuggingFace Artifacts
 
+Historical: the shipped app does not use these artifacts. Its cleanup model is the stock `openbmb/MiniCPM5-2B-MLX`, pinned by revision in `src-tauri/src/llm/engine.rs` (`SOTTO_MODEL`, `MODEL_REVISION`) and `src-tauri/sidecar/llm_cleanup.py`. `training/` keeps the earlier fine-tuning work that produced the models below.
+
 | Artifact | Repo | Visibility |
 |----------|------|------------|
 | Training dataset | [`juanquivilla/sotto-transcript-cleanup`](https://huggingface.co/datasets/juanquivilla/sotto-transcript-cleanup) | Public |
 | Fine-tuned model (bf16) | [`juanquivilla/sotto-cleanup-lfm25-350m`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m) | Public |
-| MLX 5-bit (recommended) | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) | Public |
+| MLX 5-bit | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) | Public |
 | MLX 4-bit | [`juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit`](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-4bit) | Public |
 
 - **HF token** in `.env` as `HF_TOKEN`. Remote machine at `juanqui@192.168.1.128` has read-only cached token.

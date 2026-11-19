@@ -7,13 +7,13 @@ const { listeners, onClose, closeWindow } = vi.hoisted(() => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onCloseRequested:onClose, close:closeWindow }) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (name:string, callback:(event:unknown)=>void) => { listeners.set(name,callback); return () => listeners.delete(name); }) }));
-vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn() }));
+vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getSettingsLoadError:vi.fn(), resetSettings:vi.fn(), listInputDevices:vi.fn(), checkAllPermissions:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn() }));
 import SettingsPanel from './settings-panel.svelte';
 import { listen } from '@tauri-apps/api/event';
 import { settingsStore, createDefaultSettings } from '../stores/settings.svelte';
-import { getSettings, updateSettings, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus } from '../utils/tauri';
+import { getSettings, updateSettings, getSettingsLoadError, resetSettings, listInputDevices, checkAllPermissions, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus } from '../utils/tauri';
 import type { LlmStatus } from '../utils/tauri';
-const status:LlmStatus = { available:true, unavailable_reason:null, downloaded:false, downloading:false, loaded:false, preparing:false, setup_error:null, update_available:false, model_name:'Test cleanup', model_path:null, model_url:'https://example.com/model', download_size_mb:227, last_cleanup_status:{kind:'idle'} };
+const status:LlmStatus = { available:true, unavailable_reason:null, downloaded:false, downloading:false, loaded:false, preparing:false, setup_error:null, model_name:'Test cleanup', model_path:null, model_url:'https://example.com/model', download_size_mb:227, last_cleanup_status:{kind:'idle'} };
 let component:ReturnType<typeof mount>|undefined;
 let target:HTMLDivElement;
 beforeEach(() => {
@@ -21,6 +21,9 @@ beforeEach(() => {
   vi.mocked(listen).mockImplementation(async (name, callback) => { listeners.set(name, callback as (event:unknown)=>void); return () => { listeners.delete(name); }; });
   vi.mocked(getModelStatus).mockResolvedValue({loaded:true,downloaded:true,path:null,name:'Parakeet',size_bytes:null});
   vi.mocked(getSettings).mockResolvedValue(createDefaultSettings());
+  vi.mocked(getSettingsLoadError).mockResolvedValue(null);
+  vi.mocked(listInputDevices).mockResolvedValue([{ name:'MacBook Pro Microphone', is_default:true }]);
+  vi.mocked(checkAllPermissions).mockResolvedValue({ microphone:'authorized', accessibility_api:true, accessibility_functional:true, needs_restart:false });
   vi.mocked(updateSettings).mockImplementation(async (settings) => ({ settings, warnings:[] }));
   vi.mocked(getLlmStatus).mockResolvedValue({...status});
   vi.mocked(getVocabularyStatus).mockResolvedValue({supported:true, downloaded:false, loaded:false, preparing:false, download_size_mb:300, error:null});
@@ -34,7 +37,9 @@ async function render() {
   target = document.createElement('div'); document.body.append(target); component = mount(SettingsPanel, {target}); flushSync();
   await vi.waitFor(() => expect(settingsStore.loading).toBe(false)); flushSync();
 }
-const button = (label:string) => Array.from(target.querySelectorAll('button')).find((item) => item.textContent?.trim() === label)!;
+// Buttons inside a closed dialog are not visible to the user, so they are never the target.
+const button = (label:string) => Array.from(target.querySelectorAll('button')).find((item) => item.textContent?.trim() === label && !item.closest('dialog:not([open])'))!;
+const closeDialog = () => Array.from(target.querySelectorAll('dialog')).find((item) => item.textContent?.includes('Save your changes?'))!;
 const input = (label:string) => target.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 function type(element:HTMLInputElement, value:string) { element.value = value; element.dispatchEvent(new Event('input',{bubbles:true})); flushSync(); }
 function cleanupToggle() { return Array.from(target.querySelectorAll('label')).find((label) => label.textContent?.includes('AI transcript cleanup'))!.querySelector<HTMLInputElement>('input')!; }
@@ -108,7 +113,7 @@ it('allows the native X close immediately when the Settings draft is unchanged',
   const event = { preventDefault: vi.fn() };
   onClose.mock.calls[0][0](event); flushSync();
   expect(event.preventDefault).not.toHaveBeenCalled();
-  expect(target.querySelector('dialog')?.open).toBe(false);
+  expect(closeDialog().open).toBe(false);
 });
 
 it.each(['Discard', 'Save and close'])('protects edits on X and then permits %s to close', async (action) => {
@@ -117,7 +122,7 @@ it.each(['Discard', 'Save and close'])('protects edits on X and then permits %s 
   const event = { preventDefault: vi.fn() };
   request(event); flushSync();
   expect(event.preventDefault).toHaveBeenCalledOnce();
-  expect(target.querySelector('dialog')?.open).toBe(true);
+  expect(closeDialog().open).toBe(true);
   button('Keep editing').click(); flushSync();
   expect(closeWindow).not.toHaveBeenCalled();
   expect(settingsStore.dirty).toBe(true);
@@ -147,4 +152,81 @@ it('retains the setup Save reminder after a failed enable preference save', asyn
   button('Save').click(); await vi.waitFor(() => expect(settingsStore.error).toContain('Disk full')); flushSync();
   expect(target.textContent).toContain('Ready. Save to enable AI cleanup.');
   expect(settingsStore.saved?.llm_cleanup_enabled).toBe(false);
+});
+
+it('blocks Save while a replacement row is incomplete and says why', async () => {
+  await render(); button('Vocabulary').click(); flushSync();
+  button('Add replacement').click(); flushSync(); type(input('Heard alias 1'), 'Quen');
+  expect(button('Save').disabled).toBe(true);
+  expect(target.querySelector('.footer-feedback')?.textContent).toContain('incomplete replacement');
+  expect(target.querySelector('.row-error')?.textContent).toContain('Add the text to write instead');
+  type(input('Replacement 1'), 'Qwen');
+  expect(button('Save').disabled).toBe(false);
+  button('Save').click();
+  await vi.waitFor(() => expect(updateSettings).toHaveBeenCalledOnce());
+  expect(vi.mocked(updateSettings).mock.calls[0][0].dictionary).toEqual([{ heard:'Quen', replacement:'Qwen' }]);
+});
+
+it('offers Back up and reset when the settings file is unreadable', async () => {
+  vi.mocked(getSettings).mockRejectedValueOnce('Your saved settings could not be loaded.');
+  vi.mocked(getSettingsLoadError).mockResolvedValueOnce('expected value at line 1 column 1');
+  vi.mocked(resetSettings).mockResolvedValueOnce(createDefaultSettings());
+  await render();
+  expect(target.textContent).toContain('could not be loaded');
+  button('Back up and reset').click(); flushSync();
+  const dialog = Array.from(target.querySelectorAll('dialog')).find((item) => item.open)!;
+  Array.from(dialog.querySelectorAll('button')).find((item) => item.textContent?.trim() === 'Back up and reset')!.click();
+  await vi.waitFor(() => expect(target.querySelector('.footer-feedback')?.textContent).toContain('kept as a backup'));
+  expect(settingsStore.loaded).toBe(true);
+  expect(resetSettings).toHaveBeenCalledOnce();
+});
+
+it('shows the written defaults with the reason when reset fails after writing them', async () => {
+  vi.mocked(getSettings).mockRejectedValueOnce('Your saved settings could not be loaded.');
+  vi.mocked(getSettingsLoadError).mockResolvedValueOnce('expected value at line 1 column 1');
+  vi.mocked(resetSettings).mockRejectedValueOnce('Settings were reset, but keyboard shortcuts could not be turned on. Choose other shortcuts and save.');
+  await render();
+  button('Back up and reset').click(); flushSync();
+  Array.from(Array.from(target.querySelectorAll('dialog')).find((item) => item.open)!.querySelectorAll('button')).find((item) => item.textContent?.trim() === 'Back up and reset')!.click();
+  await vi.waitFor(() => expect(target.querySelector('.footer-feedback')?.textContent).toContain('Settings were reset, but keyboard shortcuts'));
+  expect(target.textContent).toContain('Keyboard shortcuts');
+  expect(button('Back up and reset')).toBeUndefined();
+  expect(getSettings).toHaveBeenCalledTimes(2);
+});
+
+it('keeps a saved microphone that is not connected and marks it unavailable', async () => {
+  vi.mocked(getSettings).mockResolvedValue({ ...createDefaultSettings(), input_device:'USB Microphone' });
+  await render(); button('Dictation').click();
+  await vi.waitFor(() => expect(target.textContent).toContain('not connected')); flushSync();
+  const select = target.querySelector<HTMLSelectElement>('select')!;
+  expect(Array.from(select.options).map((option) => option.textContent)).toEqual(['System default (MacBook Pro Microphone)', 'MacBook Pro Microphone', 'USB Microphone (not connected)']);
+  expect(select.value).toBe('USB Microphone');
+  expect(settingsStore.dirty).toBe(false);
+  select.value = ''; select.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  expect(settingsStore.current.input_device).toBeNull();
+});
+
+it('warns before a retention choice deletes older transcripts and recordings', async () => {
+  await render(); button('Advanced').click(); flushSync();
+  expect(target.textContent).toContain('including recordings waiting for recovery');
+  const [history, audio] = Array.from(target.querySelectorAll<HTMLSelectElement>('select'));
+  expect(Array.from(history.options).map((option) => option.textContent)).toEqual(['Keep until I delete', '1 day', '7 days', '30 days', '90 days', '365 days']);
+  history.value = '7'; history.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  audio.value = '30'; audio.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  expect(settingsStore.current.history_retention_days).toBe(7);
+  expect(settingsStore.current.audio_retention_days).toBe(30);
+  expect(target.textContent).toContain('Saving deletes transcripts older than 7 days and the audio kept with them.');
+  expect(target.textContent).toContain('Saving deletes recordings older than 30 days, including recordings waiting for recovery.');
+});
+
+it('shows the saved retention again after two picks and Cancel', async () => {
+  await render(); button('Advanced').click(); flushSync();
+  const history = target.querySelector<HTMLSelectElement>('select')!;
+  history.value = '7'; history.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  history.value = '30'; history.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  expect(settingsStore.current.history_retention_days).toBe(30);
+  button('Cancel').click(); flushSync();
+  expect(settingsStore.current.history_retention_days).toBe(0);
+  expect(history.value).toBe('0');
+  expect(history.selectedOptions[0].textContent).toBe('Keep until I delete');
 });

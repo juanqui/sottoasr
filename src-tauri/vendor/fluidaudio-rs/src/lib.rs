@@ -1,14 +1,19 @@
 //! Minimal, exclusively owned bridge to FluidAudio's batch Parakeet API.
-//! See ../README.md for the pinned SDK and upstream provenance.
+//! See ../README.md for the pinned SDK, model revisions and upstream provenance.
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::path::Path;
 use std::ptr::NonNull;
 
+/// SHA-256 manifest of every file the bridge loads from the pinned model
+/// revisions. Regenerate it with `scripts/check-model-manifest.py --write`.
+pub const MODEL_MANIFEST: &str = include_str!("../model-manifest.json");
+
 extern "C" {
     fn sotto_asr_create() -> *mut c_void;
     fn sotto_asr_destroy(handle: *mut c_void);
-    fn sotto_asr_initialize(handle: *mut c_void, error: *mut *mut c_char) -> i32;
+    fn sotto_asr_download(directory: *const c_char, error: *mut *mut c_char) -> i32;
+    fn sotto_asr_initialize(handle: *mut c_void, directory: *const c_char, error: *mut *mut c_char) -> i32;
     fn sotto_asr_transcribe(
         handle: *mut c_void,
         path: *const c_char,
@@ -19,11 +24,46 @@ extern "C" {
         processing_time: *mut f64,
         error: *mut *mut c_char,
     ) -> i32;
-    fn sotto_vocabulary_prepare(allow_download: bool, error: *mut *mut c_char) -> *mut c_void;
+    fn sotto_vocabulary_download(directory: *const c_char, fetch_models: bool, error: *mut *mut c_char) -> i32;
+    fn sotto_vocabulary_prepare(directory: *const c_char, error: *mut *mut c_char) -> *mut c_void;
     fn sotto_vocabulary_destroy(handle: *mut c_void);
     fn sotto_asr_attach_vocabulary(handle: *mut c_void, vocabulary: *mut c_void);
     fn sotto_asr_unload_vocabulary(handle: *mut c_void);
+    fn sotto_sha256_file(path: *const c_char, digest: *mut *mut c_char, error: *mut *mut c_char) -> i32;
     fn sotto_asr_free_string(value: *mut c_char);
+}
+
+/// Fetches missing speech model files into `directory` at the pinned revision.
+/// Present files are never replaced and nothing is loaded.
+pub fn download_speech_model(directory: &Path) -> Result<(), String> {
+    let directory = c_path(directory)?;
+    let mut error = std::ptr::null_mut();
+    // SAFETY: the path lives through this synchronous call; output is writable.
+    let status = unsafe { sotto_asr_download(directory.as_ptr(), &mut error) };
+    check_status(status, error)
+}
+
+/// Repairs an unreadable vocabulary tokenizer and, when `fetch_models` is set,
+/// fetches missing vocabulary model files into `directory` at the pinned
+/// revision. Nothing is loaded.
+pub fn download_vocabulary_model(directory: &Path, fetch_models: bool) -> Result<(), String> {
+    let directory = c_path(directory)?;
+    let mut error = std::ptr::null_mut();
+    // SAFETY: the path lives through this synchronous call; output is writable.
+    let status = unsafe { sotto_vocabulary_download(directory.as_ptr(), fetch_models, &mut error) };
+    check_status(status, error)
+}
+
+/// Lowercase hexadecimal SHA-256 of the file's contents, read in chunks.
+pub fn sha256_file(path: &Path) -> Result<String, String> {
+    let path = c_path(path)?;
+    let mut digest = std::ptr::null_mut();
+    let mut error = std::ptr::null_mut();
+    // SAFETY: the path lives through this synchronous call; outputs are writable.
+    let status = unsafe { sotto_sha256_file(path.as_ptr(), &mut digest, &mut error) };
+    let digest = take_string(digest);
+    check_status(status, error)?;
+    Ok(digest)
 }
 
 pub struct FluidAudio {
@@ -45,10 +85,13 @@ pub struct VocabularyModel {
 unsafe impl Send for VocabularyModel {}
 
 impl VocabularyModel {
-    pub fn load(allow_download: bool) -> Result<Self, String> {
+    /// Loads verified files from `directory`. Never downloads.
+    pub fn load(directory: &Path) -> Result<Self, String> {
+        let directory = c_path(directory)?;
         let mut error = std::ptr::null_mut();
-        // SAFETY: a new independent retained handle; output storage is valid.
-        let handle = NonNull::new(unsafe { sotto_vocabulary_prepare(allow_download, &mut error) });
+        // SAFETY: a new independent retained handle; the path lives through
+        // this synchronous call and output storage is valid.
+        let handle = NonNull::new(unsafe { sotto_vocabulary_prepare(directory.as_ptr(), &mut error) });
         check_status(if handle.is_some() { 0 } else { -1 }, error)?;
         Ok(Self { handle: handle.ok_or("Vocabulary model unavailable")? })
     }
@@ -81,13 +124,23 @@ impl FluidAudio {
         })
     }
 
-    pub fn init_asr(&mut self) -> Result<(), String> {
+    /// Loads verified speech model files from `directory`. Never downloads.
+    pub fn init_asr(&mut self, directory: &Path) -> Result<(), String> {
         if self.ready {
             return Ok(());
         }
+        self.reload_asr(directory)
+    }
+
+    /// Loads the files in `directory` again, replacing a loaded model. On
+    /// failure the bridge reports not ready until a load succeeds.
+    pub fn reload_asr(&mut self, directory: &Path) -> Result<(), String> {
+        let directory = c_path(directory)?;
+        self.ready = false;
         let mut error = std::ptr::null_mut();
-        // SAFETY: valid exclusively owned handle and writable output pointer.
-        let status = unsafe { sotto_asr_initialize(self.handle.as_ptr(), &mut error) };
+        // SAFETY: valid exclusively owned handle, a path that lives through
+        // this synchronous call, and a writable output pointer.
+        let status = unsafe { sotto_asr_initialize(self.handle.as_ptr(), directory.as_ptr(), &mut error) };
         check_status(status, error)?;
         self.ready = true;
         Ok(())
@@ -163,6 +216,11 @@ impl FluidAudio {
             },
         })
     }
+}
+
+fn c_path(path: &Path) -> Result<CString, String> {
+    CString::new(path.to_string_lossy().as_bytes())
+        .map_err(|_| format!("Invalid path: {}", path.display()))
 }
 
 fn check_status(status: i32, error: *mut c_char) -> Result<(), String> {

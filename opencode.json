@@ -1,11 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    ".claude/rules/core.md",
+    ".claude/CLAUDE.md",
     ".claude/rules/critical.md",
-    ".claude/rules/dev.md",
+    ".claude/rules/project.md",
+    ".claude/rules/dev-workflow.md",
     ".claude/rules/docs.md",
     ".claude/rules/spec-workflow.md",
-    ".claude/rules/unity.md"
+    ".claude/rules/release.md"
   ]
 }

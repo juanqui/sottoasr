@@ -1,379 +1,181 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import libSource from '../../../src-tauri/src/lib.rs?raw';
 
-// Mock @tauri-apps/api/core before importing the module under test
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => undefined) }));
 
 import { invoke } from '@tauri-apps/api/core';
+import * as api from './tauri';
 
-import {
-  // Recording
-  startRecording,
-  stopRecording,
-  cancelRecording,
-  // Transcription
-  getTranscriptions,
-  getLastTranscription,
-  deleteTranscription,
-  clearTranscriptions,
-  exportTranscriptionsCsv,
-  // Settings
-  getSettings,
-  updateSettings,
-  // Permissions
-  checkMicrophonePermission,
-  checkAccessibilityPermission,
-  requestAccessibilityPermission,
-  requestMicrophonePermission,
-  checkAllPermissions,
-  openAccessibilitySettings,
-  openMicrophoneSettings,
-  // Setup / onboarding
-  getAsrBackend,
-  getModelStatus,
-  needsOnboarding,
-  initAsr,
-  downloadModel,
-  completeSetup,
-  // LLM
-  getLlmStatus,
-  checkLlmUpdate,
-  downloadLlmModel,
-  updateLlmModel,
-  cancelLlmDownload,
-  deleteLlmModel,
-  loadLlmModel,
-  unloadLlmModel,
-  // Updater
-  checkAppUpdate,
-  performAppUpdate,
-  getUpdateStatus,
-} from './tauri';
+// Registered in lib.rs but not called from the frontend; they stay as they are.
+const REGISTERED_WITHOUT_FRONTEND_CALLER = ['apply_shortcuts', 'fix_accessibility_permission', 'open_input_monitoring_settings'];
 
-import type { Settings } from './tauri';
+// The permissions that allow each plugin function the frontend may import.
+// Which windows need them is worked out from the code (see `filesByWindow`).
+const PLUGIN_PERMISSIONS: Record<string, string[]> = {
+  '@tauri-apps/plugin-clipboard-manager:writeText': ['clipboard-manager:allow-write-text'],
+  '@tauri-apps/plugin-log:error': ['log:default', 'log:allow-log'],
+  '@tauri-apps/plugin-log:warn': ['log:default', 'log:allow-log'],
+};
 
-const mockInvoke = vi.mocked(invoke);
+const WRAPPER_FILE = '/src/lib/utils/tauri.ts';
+const sources = import.meta.glob<string>(['/src/**/*.ts', '/src/**/*.svelte', '!/src/**/*.test.ts'], { query: '?raw', import: 'default', eager: true });
 
-beforeEach(() => {
-  mockInvoke.mockReset();
-});
+interface Capability { identifier: string; windows?: string[]; permissions: Array<string | { identifier: string }> }
+const capabilities = Object.values(import.meta.glob<string>('/src-tauri/capabilities/*.json', { query: '?raw', import: 'default', eager: true }))
+  .map((text) => JSON.parse(text) as Capability);
 
-// ---------------------------------------------------------------------------
-// Recording commands
-// ---------------------------------------------------------------------------
-describe('Recording commands', () => {
-  it('startRecording invokes start_recording', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await startRecording();
-    expect(mockInvoke).toHaveBeenCalledWith('start_recording');
+/** Command names in lib.rs's `generate_handler![...]`, read at run time so other changes to the list are seen. */
+function registeredCommands(source: string): string[] {
+  const marker = 'generate_handler![';
+  const start = source.indexOf(marker);
+  if (start === -1) throw new Error('lib.rs has no generate_handler! list');
+  if (source.indexOf(marker, start + 1) !== -1) throw new Error('lib.rs has more than one generate_handler! list');
+  let depth = 1;
+  let body = '';
+  for (let index = start + marker.length; index < source.length; index++) {
+    if (source.startsWith('//', index) || source.startsWith('/*', index)) {
+      const end = source.indexOf(source[index + 1] === '/' ? '\n' : '*/', index);
+      if (end === -1) break;
+      index = source[index + 1] === '/' ? end : end + 1;
+      continue;
+    }
+    const char = source[index];
+    if (char === '[') depth++;
+    if (char === ']' && --depth === 0) {
+      return body.replace(/#\[[^\]]*\]/g, '').split(',').map((entry) => entry.trim()).filter(Boolean)
+        .map((path) => path.split('::').at(-1)!);
+    }
+    body += char;
+  }
+  throw new Error('generate_handler! list is not closed');
+}
+
+/** Command name each exported wrapper invokes, found by calling it against the mocked `invoke`. */
+async function wrapperCommands(): Promise<Map<string, string>> {
+  const commands = new Map<string, string>();
+  for (const [name, value] of Object.entries(api)) {
+    if (typeof value !== 'function') continue;
+    vi.mocked(invoke).mockClear();
+    await (value as unknown as () => Promise<unknown>)();
+    const calls = vi.mocked(invoke).mock.calls;
+    if (calls.length !== 1) throw new Error(`${name} must invoke exactly one command, invoked ${calls.length}`);
+    commands.set(String(calls[0][0]), name);
+  }
+  return commands;
+}
+
+/** Plugin functions one source file imports, as `module:name`. */
+function pluginImports(source: string): string[] {
+  const found: string[] = [];
+  for (const [, clause, module] of source.matchAll(/import\s+([^;'"]*?)\s+from\s*['"](@tauri-apps\/plugin-[\w-]+)['"]/g)) {
+    if (clause.startsWith('type ')) continue;
+    const names = /^\{([^}]*)\}$/.exec(clause.trim());
+    if (!names) { found.push(`${module}:(use named imports)`); continue; }
+    for (const specifier of names[1].split(',').map((part) => part.trim()).filter(Boolean)) {
+      if (!specifier.startsWith('type ')) found.push(`${module}:${specifier.split(/\s+as\s+/)[0]}`);
+    }
+  }
+  return found;
+}
+
+/** The source file a relative import names; undefined for styles and assets. */
+function resolveImport(importer: string, specifier: string): string | undefined {
+  const parts = importer.split('/').slice(0, -1);
+  for (const part of specifier.split('/')) {
+    if (part === '..') parts.pop();
+    else if (part !== '.') parts.push(part);
+  }
+  const path = parts.join('/');
+  return [path, `${path}.ts`].find((candidate) => candidate in sources);
+}
+
+/**
+ * The source files each window loads: its entry script `src/<window>.ts` and
+ * everything reachable from it through relative imports. Type-only imports
+ * are skipped because they load nothing.
+ */
+function filesByWindow(): Map<string, Set<string>> {
+  const windows = new Map<string, Set<string>>();
+  for (const entry of Object.keys(sources).filter((path) => /^\/src\/[^/]+\.ts$/.test(path))) {
+    const reached = new Set<string>();
+    const pending = [entry];
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (reached.has(file)) continue;
+      reached.add(file);
+      for (const [, clause, specifier] of sources[file].matchAll(/(?:import|export)\s+(?:([^;'"]*?)\s+from\s*)?['"](\.{1,2}\/[^'"]+)['"]/g)) {
+        if (clause?.startsWith('type ')) continue;
+        const target = resolveImport(file, specifier);
+        if (target) pending.push(target);
+      }
+    }
+    windows.set(entry.slice('/src/'.length, -'.ts'.length), reached);
+  }
+  return windows;
+}
+
+describe('IPC contract with lib.rs and the capability files', () => {
+  let registered: string[];
+  let wrappers: Map<string, string>;
+  beforeAll(async () => {
+    registered = registeredCommands(libSource);
+    wrappers = await wrapperCommands();
   });
 
-  it('stopRecording invokes stop_recording', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await stopRecording();
-    expect(mockInvoke).toHaveBeenCalledWith('stop_recording');
+  it('parses a plausible generate_handler! list', () => {
+    expect(registered.length).toBeGreaterThan(20);
+    for (const name of registered) expect(name).toMatch(/^[a-z_][a-z0-9_]*$/);
+    expect(new Set(registered).size).toBe(registered.length);
   });
 
-  it('cancelRecording invokes cancel_recording', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await cancelRecording();
-    expect(mockInvoke).toHaveBeenCalledWith('cancel_recording');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Transcription commands
-// ---------------------------------------------------------------------------
-describe('Transcription commands', () => {
-  it('getTranscriptions invokes get_transcriptions', async () => {
-    mockInvoke.mockResolvedValueOnce([]);
-    const result = await getTranscriptions();
-    expect(mockInvoke).toHaveBeenCalledWith('get_transcriptions');
-    expect(result).toEqual([]);
+  it('registers every command a wrapper invokes', () => {
+    const missing = [...wrappers].filter(([command]) => !registered.includes(command)).map(([command, wrapper]) => `${wrapper} -> ${command}`);
+    expect(missing).toEqual([]);
   });
 
-  it('getLastTranscription invokes get_last_transcription', async () => {
-    mockInvoke.mockResolvedValueOnce(null);
-    const result = await getLastTranscription();
-    expect(mockInvoke).toHaveBeenCalledWith('get_last_transcription');
-    expect(result).toBeNull();
+  it('gives every registered command a wrapper unless it is a known Rust-only command', () => {
+    const unwrapped = registered.filter((command) => !wrappers.has(command) && !REGISTERED_WITHOUT_FRONTEND_CALLER.includes(command));
+    expect(unwrapped).toEqual([]);
   });
 
-  it('deleteTranscription invokes delete_transcription with id', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await deleteTranscription('abc-123');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_transcription', { id: 'abc-123' });
+  it('keeps invoke inside tauri.ts', () => {
+    const importsInvoke = /import\s*\{[^}]*\binvoke\b[^}]*\}\s*from\s*['"]@tauri-apps\/api\/core['"]|import\s*\*\s*as\s+\w+\s+from\s*['"]@tauri-apps\/api\/core['"]/;
+    expect(Object.keys(sources)).toContain(WRAPPER_FILE);
+    const offenders = Object.entries(sources).filter(([path, source]) => path !== WRAPPER_FILE && importsInvoke.test(source)).map(([path]) => path);
+    expect(offenders).toEqual([]);
   });
 
-  it('clearTranscriptions invokes clear_transcriptions', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await clearTranscriptions();
-    expect(mockInvoke).toHaveBeenCalledWith('clear_transcriptions');
+  it('has one entry script for every window the default capability lists', () => {
+    const listed = capabilities.find((capability) => capability.identifier === 'default')?.windows ?? [];
+    expect([...filesByWindow().keys()].sort()).toEqual([...listed].sort());
   });
 
-  it('exportTranscriptionsCsv invokes export_transcriptions_csv', async () => {
-    mockInvoke.mockResolvedValueOnce('csv-data');
-    const result = await exportTranscriptionsCsv();
-    expect(mockInvoke).toHaveBeenCalledWith('export_transcriptions_csv');
-    expect(result).toBe('csv-data');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Settings commands
-// ---------------------------------------------------------------------------
-describe('Settings commands', () => {
-  const mockSettings: Settings = {
-    push_to_talk_shortcut: 'CommandOrControl+Shift+Space',
-    push_to_talk_shortcut_alt: null,
-    toggle_shortcut: 'CommandOrControl+Shift+D',
-    toggle_shortcut_alt: null,
-    cancel_shortcut: 'Escape',
-    open_settings_shortcut: 'CommandOrControl+Shift+Comma',
-    cancel_shortcut_alt: null,
-    show_overlay: true,
-    auto_paste: true,
-    restore_clipboard: true,
-    restore_focus_before_paste: true,
-    model_path: '',
-    language: 'auto',
-    max_history: 500,
-    launch_at_login: false,
-    llm_cleanup_enabled: false,
-    llm_cleanup_mode: 'retype',
-    dictionary: [],
-    vocabulary: [],
-    auto_check_updates: true,
-  };
-
-  it('getSettings invokes get_settings', async () => {
-    mockInvoke.mockResolvedValueOnce(mockSettings);
-    const result = await getSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_settings');
-    expect(result).toEqual(mockSettings);
+  it('forwards console errors to the log in every window', () => {
+    for (const [label, files] of filesByWindow()) {
+      expect([...files].some((file) => pluginImports(sources[file]).includes('@tauri-apps/plugin-log:error')), label).toBe(true);
+    }
   });
 
-  it('updateSettings invokes update_settings with newSettings', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await updateSettings(mockSettings);
-    expect(mockInvoke).toHaveBeenCalledWith('update_settings', { newSettings: mockSettings });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Permission commands
-// ---------------------------------------------------------------------------
-describe('Permission commands', () => {
-  it('checkMicrophonePermission invokes check_microphone_permission', async () => {
-    mockInvoke.mockResolvedValueOnce(true);
-    const result = await checkMicrophonePermission();
-    expect(mockInvoke).toHaveBeenCalledWith('check_microphone_permission');
-    expect(result).toBe(true);
-  });
-
-  it('checkAccessibilityPermission invokes check_accessibility_permission', async () => {
-    mockInvoke.mockResolvedValueOnce(false);
-    const result = await checkAccessibilityPermission();
-    expect(mockInvoke).toHaveBeenCalledWith('check_accessibility_permission');
-    expect(result).toBe(false);
-  });
-
-  it('requestAccessibilityPermission invokes request_accessibility_permission', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await requestAccessibilityPermission();
-    expect(mockInvoke).toHaveBeenCalledWith('request_accessibility_permission');
-  });
-
-  it('requestMicrophonePermission invokes request_microphone_permission', async () => {
-    mockInvoke.mockResolvedValueOnce(true);
-    const result = await requestMicrophonePermission();
-    expect(mockInvoke).toHaveBeenCalledWith('request_microphone_permission');
-    expect(result).toBe(true);
-  });
-
-  it('checkAllPermissions invokes check_all_permissions', async () => {
-    const status = {
-      microphone: 'authorized',
-      accessibility_api: true,
-      accessibility_functional: true,
-      needs_restart: false,
-    };
-    mockInvoke.mockResolvedValueOnce(status);
-    const result = await checkAllPermissions();
-    expect(mockInvoke).toHaveBeenCalledWith('check_all_permissions');
-    expect(result).toEqual(status);
-  });
-
-  it('openAccessibilitySettings invokes open_accessibility_settings', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await openAccessibilitySettings();
-    expect(mockInvoke).toHaveBeenCalledWith('open_accessibility_settings');
-  });
-
-  it('openMicrophoneSettings invokes open_microphone_settings', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await openMicrophoneSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('open_microphone_settings');
+  it('grants each plugin call to every window whose code makes it', () => {
+    const unknown = new Set<string>();
+    const reachedCalls = new Set<string>();
+    const denied: string[] = [];
+    for (const [label, files] of filesByWindow()) {
+      for (const file of files) {
+        for (const call of pluginImports(sources[file])) {
+          const permissions = PLUGIN_PERMISSIONS[call];
+          if (!permissions) { unknown.add(`${call} in ${file}`); continue; }
+          reachedCalls.add(call);
+          const granted = capabilities.some((capability) =>
+            (capability.windows ?? []).some((listed) => listed === label || listed === '*')
+            && capability.permissions.some((permission) => permissions.includes(typeof permission === 'string' ? permission : permission.identifier)));
+          if (!granted) denied.push(`${call} in the ${label} window (${file})`);
+        }
+      }
+    }
+    expect([...unknown]).toEqual([]);
+    // A call no window reaches means the table is stale or the import walk missed a file.
+    expect(Object.keys(PLUGIN_PERMISSIONS).filter((call) => !reachedCalls.has(call))).toEqual([]);
+    expect(denied).toEqual([]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Setup / onboarding commands
-// ---------------------------------------------------------------------------
-describe('Setup / onboarding commands', () => {
-  it('getAsrBackend invokes get_asr_backend', async () => {
-    const info = { backend: 'fluidaudio', model_available: true };
-    mockInvoke.mockResolvedValueOnce(info);
-    const result = await getAsrBackend();
-    expect(mockInvoke).toHaveBeenCalledWith('get_asr_backend');
-    expect(result).toEqual(info);
-  });
-
-  it('getModelStatus invokes get_model_status', async () => {
-    const status = { downloaded: true, loaded: true, path: '/models/whisper', name: 'whisper', size_bytes: 500_000_000 };
-    mockInvoke.mockResolvedValueOnce(status);
-    const result = await getModelStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('get_model_status');
-    expect(result).toEqual(status);
-  });
-
-  it('needsOnboarding invokes needs_onboarding', async () => {
-    mockInvoke.mockResolvedValueOnce(false);
-    const result = await needsOnboarding();
-    expect(mockInvoke).toHaveBeenCalledWith('needs_onboarding');
-    expect(result).toBe(false);
-  });
-
-  it('initAsr invokes init_asr', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await initAsr();
-    expect(mockInvoke).toHaveBeenCalledWith('init_asr');
-  });
-
-  it('downloadModel invokes download_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await downloadModel();
-    expect(mockInvoke).toHaveBeenCalledWith('download_model');
-  });
-
-  it('completeSetup invokes complete_setup', async () => {
-    const result = {
-      backend: 'fluidaudio',
-      microphone_permission: true,
-      accessibility_permission: true,
-      asr_ready: true,
-      model_available: true,
-    };
-    mockInvoke.mockResolvedValueOnce(result);
-    const setupResult = await completeSetup();
-    expect(mockInvoke).toHaveBeenCalledWith('complete_setup');
-    expect(setupResult).toEqual(result);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// LLM commands
-// ---------------------------------------------------------------------------
-describe('LLM commands', () => {
-  it('getLlmStatus invokes get_llm_status', async () => {
-    const status = {
-      available: true,
-      unavailable_reason: null,
-      downloaded: true,
-      downloading: false,
-      loaded: false,
-      model_name: 'sotto-cleanup',
-      model_path: '/models/llm',
-      update_available: false,
-    };
-    mockInvoke.mockResolvedValueOnce(status);
-    const result = await getLlmStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('get_llm_status');
-    expect(result).toEqual(status);
-  });
-
-  it('checkLlmUpdate invokes check_llm_update', async () => {
-    mockInvoke.mockResolvedValueOnce(true);
-    const result = await checkLlmUpdate();
-    expect(mockInvoke).toHaveBeenCalledWith('check_llm_update');
-    expect(result).toBe(true);
-  });
-
-  it('downloadLlmModel invokes download_llm_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await downloadLlmModel();
-    expect(mockInvoke).toHaveBeenCalledWith('download_llm_model');
-  });
-
-  it('updateLlmModel invokes update_llm_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await updateLlmModel();
-    expect(mockInvoke).toHaveBeenCalledWith('update_llm_model');
-  });
-
-  it('cancelLlmDownload invokes cancel_llm_download', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await cancelLlmDownload();
-    expect(mockInvoke).toHaveBeenCalledWith('cancel_llm_download');
-  });
-
-  it('deleteLlmModel invokes delete_llm_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await deleteLlmModel();
-    expect(mockInvoke).toHaveBeenCalledWith('delete_llm_model');
-  });
-
-  it('loadLlmModel invokes load_llm_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await loadLlmModel();
-    expect(mockInvoke).toHaveBeenCalledWith('load_llm_model');
-  });
-
-  it('unloadLlmModel invokes unload_llm_model', async () => {
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await unloadLlmModel();
-    expect(mockInvoke).toHaveBeenCalledWith('unload_llm_model');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Updater commands
-// ---------------------------------------------------------------------------
-describe('Updater commands', () => {
-  it('checkAppUpdate invokes check_app_update', async () => {
-    mockInvoke.mockResolvedValueOnce('99.99.99');
-    const result = await checkAppUpdate();
-    expect(mockInvoke).toHaveBeenCalledWith('check_app_update');
-    expect(result).toBe('99.99.99');
-  });
-
-  it('checkAppUpdate returns null when no update available', async () => {
-    mockInvoke.mockResolvedValueOnce(null);
-    const result = await checkAppUpdate();
-    expect(mockInvoke).toHaveBeenCalledWith('check_app_update');
-    expect(result).toBeNull();
-  });
-
-  it('performAppUpdate invokes perform_app_update', async () => {
-    mockInvoke.mockResolvedValueOnce('Updated to 99.99.99');
-    const result = await performAppUpdate();
-    expect(mockInvoke).toHaveBeenCalledWith('perform_app_update');
-    expect(result).toBe('Updated to 99.99.99');
-  });
-
-  it('getUpdateStatus invokes get_update_status', async () => {
-    const status = {
-      update_available: false,
-      version: null,
-      release_notes: null,
-      downloading: false,
-      restart_pending: false,
-    };
-    mockInvoke.mockResolvedValueOnce(status);
-    const result = await getUpdateStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('get_update_status');
-    expect(result).toEqual(status);
-  });
-});
-

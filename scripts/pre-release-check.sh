@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Pre-Release Smoke Tests for SottoASR
-# Runs automated checks (version consistency, build, lint, tests) and optional
+# Runs the automated checks PR CI runs (.github/workflows/ci.yml), checks that
+# every version file matches the release version, then offers optional
 # interactive checks (permissions, recording, paste) before tagging a release.
+# It uses the installed node_modules; run `npm ci` first for a clean install.
 #
 # Usage:
-#   ./scripts/pre-release-check.sh                        # Full run
-#   ./scripts/pre-release-check.sh --auto-only             # Skip interactive
-#   ./scripts/pre-release-check.sh --version 0.7.0         # Override version
-#   ./scripts/pre-release-check.sh --auto-only --version 0.7.0
+#   ./scripts/pre-release-check.sh                          # Full run
+#   ./scripts/pre-release-check.sh --auto-only              # Skip interactive
+#   ./scripts/pre-release-check.sh --version X.Y.Z          # Override version
+#   ./scripts/pre-release-check.sh --auto-only --version X.Y.Z
 set -uo pipefail
 
 # ── Constants ──────────────────────────────────
@@ -61,6 +63,46 @@ ask_user() {
   esac
 }
 
+# run_step "label" log-name command [args...]: run one check and keep its output
+# in /tmp/sotto-smoke-<log-name>.txt.
+run_step() {
+  local label="$1" log="/tmp/sotto-smoke-$2.txt" start elapsed exit_code=0
+  shift 2
+  printf " ...  %s (running)\r" "$label"
+  start=$(date +%s)
+  "$@" > "$log" 2>&1 || exit_code=$?
+  elapsed=$(( $(date +%s) - start ))
+  printf "\033[K"
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$label (${elapsed}s)"
+  else
+    fail "$label failed (${elapsed}s) — see $log"
+    tail -20 "$log" | sed 's/^/      /'
+  fi
+}
+
+# Run a command in src-tauri/, like the CI steps with working-directory: src-tauri.
+in_tauri() {
+  (cd src-tauri && "$@")
+}
+
+# Same as the CI audit step: the zip ignores in src-tauri/.cargo/audit.toml hold
+# only while zip is not built for macOS.
+audit_rust() {
+  local zip_dependents
+  if ! grep -qx 'name = "zip"' Cargo.lock; then
+    echo "zip is no longer in Cargo.lock. Delete its ignores from src-tauri/.cargo/audit.toml and the zip checks in .github/workflows and scripts/pre-release-check.sh."
+  else
+    zip_dependents=$(cargo tree --locked -i zip --target aarch64-apple-darwin) || return 1
+    if [ -n "$zip_dependents" ]; then
+      printf '%s\n' "$zip_dependents"
+      echo "zip is now built for aarch64-apple-darwin, so the zip ignores in src-tauri/.cargo/audit.toml no longer hold. Update zip and remove them."
+      return 1
+    fi
+  fi
+  cargo audit
+}
+
 # ── Parse arguments ────────────────────────────
 AUTO_ONLY=false
 TARGET_VERSION=""
@@ -90,15 +132,25 @@ cd "$PROJECT_ROOT"
 
 # ── Prerequisite checks ───────────────────────
 MISSING_TOOLS=""
-for tool in python3 cargo npm; do
+for tool in python3 cargo npm node jq; do
   if ! command -v "$tool" &>/dev/null; then
     MISSING_TOOLS="$MISSING_TOOLS $tool"
   fi
 done
+# Cargo subcommands for the audit and packaging checks
+if command -v cargo &>/dev/null; then
+  for subcommand in audit tauri; do
+    if ! cargo "$subcommand" --version &>/dev/null; then
+      MISSING_TOOLS="$MISSING_TOOLS cargo-$subcommand"
+    fi
+  done
+fi
 
 if [ -n "$MISSING_TOOLS" ]; then
   echo "Error: required tools not found on PATH:$MISSING_TOOLS"
   echo "Install them before running pre-release checks."
+  case "$MISSING_TOOLS" in *cargo-audit*) echo "  cargo install cargo-audit --version 0.22.2 --locked" ;; esac
+  case "$MISSING_TOOLS" in *cargo-tauri*) echo "  cargo install tauri-cli --version '^2' --locked" ;; esac
   exit 2
 fi
 
@@ -124,7 +176,7 @@ fi
 
 printf "\n${BOLD}── Automated Checks ────────────────────────${RESET}\n\n"
 
-# ── Check 1: Version consistency ───────────────
+# ── Version consistency with the release version ──
 V_PKG=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
 V_LOCK_ROOT=$(python3 -c "import json; print(json.load(open('package-lock.json'))['version'])")
 V_LOCK_INNER=$(python3 -c "import json; print(json.load(open('package-lock.json'))['packages']['']['version'])")
@@ -168,164 +220,28 @@ else
   done
 fi
 
-# ── Check 2: Capability completeness ──────────
-VITE_WINDOWS=$(python3 -c "
-import re
-content = open('vite.config.ts').read()
-m = re.search(r'input:\s*\{([^}]+)\}', content)
-if m:
-    for key in re.findall(r'(\w+)\s*:', m.group(1)):
-        print(key)
-" | sort)
+# ── PR CI commands, in the order ci.yml runs them ──
+PARAKEET_FEATURES="custom-protocol,asr-parakeet"
+UNSIGNED_BUNDLE_CONFIG='{"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}'
 
-CAP_WINDOWS=$(python3 -c "
-import json
-caps = json.load(open('src-tauri/capabilities/default.json'))
-for w in caps['windows']:
-    print(w)
-")
-
-MISSING_CAPS=""
-for w in $VITE_WINDOWS; do
-  if ! echo "$CAP_WINDOWS" | grep -qx "$w"; then
-    MISSING_CAPS="$MISSING_CAPS $w"
-  fi
-done
-
-WINDOW_COUNT=$(echo "$VITE_WINDOWS" | wc -l | tr -d ' ')
-if [ -z "$MISSING_CAPS" ]; then
-  pass "Capability completeness: all $WINDOW_COUNT windows listed"
-else
-  fail "Windows missing from capabilities/default.json:$MISSING_CAPS"
-  printf "      Current capabilities windows: %s\n" "$(echo "$CAP_WINDOWS" | tr '\n' ' ')"
-fi
-
-# ── Check 3: CHANGELOG entry ──────────────────
-if grep -q "## \[$VERSION\]" CHANGELOG.md; then
-  pass "CHANGELOG has entry for $VERSION"
-else
-  fail "CHANGELOG.md missing entry for [$VERSION]"
-  printf "      Found versions: "
-  grep -oE '## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -5 | sed 's/## \[//;s/\]//' | tr '\n' ' '
-  printf "\n"
-fi
-
-# ── Check 4: Website version badge ────────────
-if [ ! -f "website/index.html" ]; then
-  warn "Website version badge: website/index.html not found (skipped)"
-else
-  BADGE_VERSION=$(grep -oE 'version-badge">v[0-9]+\.[0-9]+\.[0-9]+' website/index.html | \
-    sed 's/version-badge">v//' || true)
-
-  if [ "$BADGE_VERSION" = "$VERSION" ]; then
-    pass "Website version badge matches (v$VERSION)"
-  else
-    fail "Website version badge mismatch: found v$BADGE_VERSION, expected v$VERSION"
-  fi
-fi
-
-# ── Check 5: Build ────────────────────────────
-printf " ...  cargo build (running)\r"
-BUILD_START=$(date +%s)
-exit_code=0
-(cd src-tauri && cargo build) > /tmp/sotto-smoke-build.txt 2>&1 || exit_code=$?
-BUILD_END=$(date +%s)
-BUILD_ELAPSED=$((BUILD_END - BUILD_START))
-
-if [ "$exit_code" -eq 0 ]; then
-  pass "cargo build succeeded (${BUILD_ELAPSED}s)"
-else
-  fail "cargo build failed (${BUILD_ELAPSED}s) — see /tmp/sotto-smoke-build.txt"
-  tail -20 /tmp/sotto-smoke-build.txt | sed 's/^/      /'
-fi
-
-# ── Check 6: Clippy ───────────────────────────
-printf " ...  cargo clippy (running)\r"
-CLIPPY_START=$(date +%s)
-exit_code=0
-(cd src-tauri && cargo clippy --all-targets -- -D warnings) > /tmp/sotto-smoke-clippy.txt 2>&1 || exit_code=$?
-CLIPPY_END=$(date +%s)
-CLIPPY_ELAPSED=$((CLIPPY_END - CLIPPY_START))
-
-if [ "$exit_code" -eq 0 ]; then
-  pass "cargo clippy clean (${CLIPPY_ELAPSED}s)"
-else
-  fail "cargo clippy found warnings/errors (${CLIPPY_ELAPSED}s) — see /tmp/sotto-smoke-clippy.txt"
-  tail -20 /tmp/sotto-smoke-clippy.txt | sed 's/^/      /'
-fi
-
-# ── Check 7: Frontend type check ─────────────
-printf " ...  npm run check (running)\r"
-exit_code=0
-npm run check > /tmp/sotto-smoke-check.txt 2>&1 || exit_code=$?
-
-if [ "$exit_code" -eq 0 ]; then
-  pass "npm run check passed"
-else
-  fail "npm run check failed — see /tmp/sotto-smoke-check.txt"
-  tail -20 /tmp/sotto-smoke-check.txt | sed 's/^/      /'
-fi
-
-# ── Check 8: Rust tests ──────────────────────
-printf " ...  cargo test (running)\r"
-TEST_START=$(date +%s)
-exit_code=0
-(cd src-tauri && cargo test --no-default-features --features custom-protocol,llm-cleanup) > /tmp/sotto-smoke-test.txt 2>&1 || exit_code=$?
-TEST_END=$(date +%s)
-TEST_ELAPSED=$((TEST_END - TEST_START))
-
-if [ "$exit_code" -eq 0 ]; then
-  TEST_COUNT=$(grep -oE '[0-9]+ test(s)? passed' /tmp/sotto-smoke-test.txt | head -1 || true)
-  if [ -z "$TEST_COUNT" ]; then
-    # Try the "test result: ok. X passed" format
-    TEST_COUNT=$(grep -oE 'test result: ok\. [0-9]+ passed' /tmp/sotto-smoke-test.txt | grep -oE '[0-9]+ passed' | head -1 || true)
-  fi
-  if [ -n "$TEST_COUNT" ]; then
-    pass "cargo test passed ($TEST_COUNT, ${TEST_ELAPSED}s)"
-  else
-    pass "cargo test passed (${TEST_ELAPSED}s)"
-  fi
-else
-  fail "cargo test failed (${TEST_ELAPSED}s) — see /tmp/sotto-smoke-test.txt"
-  tail -20 /tmp/sotto-smoke-test.txt | sed 's/^/      /'
-fi
-
-# ── Check 9: No hardcoded versions ───────────
-ESCAPED_VER=$(echo "$VERSION" | sed 's/\./\\./g')
-HARDCODED=$(grep -rn "v${ESCAPED_VER}" src/ \
-  --include='*.svelte' --include='*.ts' 2>/dev/null \
-  | grep -v '//.*v[0-9]' | grep -v 'http' || true)
-
-if [ -z "$HARDCODED" ]; then
-  pass "No hardcoded versions in frontend"
-else
-  fail "Hardcoded version 'v$VERSION' found in frontend source:"
-  echo "$HARDCODED" | while IFS= read -r line; do
-    printf "      %s\n" "$line"
-  done
-fi
-
-# ── Check 10: Sidecar script ─────────────────
-SIDECAR="src-tauri/sidecar/llm_cleanup.py"
-if [ ! -f "$SIDECAR" ]; then
-  fail "Sidecar script not found: $SIDECAR"
-else
-  exit_code=0
-  python3 -c "
-import py_compile, sys
-try:
-    py_compile.compile('$SIDECAR', doraise=True)
-except py_compile.PyCompileError as e:
-    print(str(e))
-    sys.exit(1)
-" 2>&1 || exit_code=$?
-
-  if [ "$exit_code" -eq 0 ]; then
-    pass "Sidecar script is valid Python"
-  else
-    fail "Sidecar script has syntax errors"
-  fi
-fi
+run_step "Configuration assertions (scripts/ci-checks.sh)" ci-checks bash scripts/ci-checks.sh
+run_step "npm run build" npm-build npm run build
+run_step "npm run check" npm-check npm run check
+run_step "npm test" npm-test npm test
+run_step "cargo test (CoreML backend)" cargo-test in_tauri cargo test --locked
+run_step "cargo check (Parakeet backend)" parakeet-check \
+  in_tauri cargo check --locked --no-default-features --features "$PARAKEET_FEATURES"
+run_step "Resampler tests (Parakeet backend)" parakeet-test \
+  in_tauri cargo test --locked --no-default-features --features "$PARAKEET_FEATURES" --lib audio::resample
+run_step "Pinned Swift correctness regressions" swift-regressions python3 scripts/check-swift-regressions.py
+run_step "cargo clippy" clippy in_tauri cargo clippy --locked --all-targets -- -D warnings
+run_step "Rust dependency audit" cargo-audit in_tauri audit_rust
+run_step "npm audit --omit=dev" npm-audit npm audit --omit=dev
+run_step "Sidecar Python tests" sidecar-tests python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
+run_step "Script Python tests" script-tests python3 -m unittest discover -s scripts -p 'test_*.py'
+# CI=true as on GitHub runners: the DMG bundler then skips its Finder layout script.
+run_step "Unsigned macOS packaging" package \
+  env CI=true cargo tauri build --target aarch64-apple-darwin --bundles app,dmg --config "$UNSIGNED_BUNDLE_CONFIG"
 
 # ── Interactive checks ────────────────────────
 if [ "$AUTO_ONLY" = "false" ]; then
@@ -363,7 +279,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
 
   printf "\n"
 
-  # ── Check 11: Permission status ──────────────
+  # ── Permission status ────────────────────────
   printf "  Checking permissions...\n"
 
   # Try to query TCC database for Accessibility
@@ -402,7 +318,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
     warn "Permissions: skipped"
   fi
 
-  # ── Check 12: ASR model available ────────────
+  # ── ASR model available ──────────────────────
   MODEL_DIR="$HOME/Library/Application Support/FluidAudio/Models"
   if [ -d "$MODEL_DIR" ]; then
     MODEL_SIZE=$(du -sh "$MODEL_DIR" 2>/dev/null | cut -f1)
@@ -421,7 +337,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
     fi
   fi
 
-  # ── Check 13: Recording smoke test ───────────
+  # ── Recording smoke test ─────────────────────
   printf "\n  Recording smoke test:\n"
   printf "    1. Press your configured hotkey (default: Cmd+Shift+Space)\n"
   printf "    2. Say \"hello world\"\n"
@@ -437,7 +353,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
     warn "Recording smoke test: skipped"
   fi
 
-  # ── Check 14: Paste verification ─────────────
+  # ── Paste verification ───────────────────────
   printf "\n  Paste verification:\n"
   printf "    1. Open TextEdit (or any text editor)\n"
   printf "    2. Place your cursor in the document\n"
@@ -453,7 +369,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
     warn "Paste verification: skipped"
   fi
 
-  # ── Check 15: Settings round-trip ────────────
+  # ── Settings round-trip ──────────────────────
   printf "\n  Settings round-trip:\n"
   printf "    1. Open Settings from the tray menu (or press Cmd+,)\n"
   printf "    2. Change a setting (e.g., toggle a checkbox or change the hotkey)\n"

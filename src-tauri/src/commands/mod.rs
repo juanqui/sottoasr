@@ -7,5 +7,6 @@ pub mod setup;
 pub mod keycapture;
 pub mod llm;
 pub mod overlay;
+pub mod audio;
 
 pub mod vocabulary;

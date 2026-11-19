@@ -3,14 +3,13 @@
 //! Uses pinned Parakeet TDT v3 with CoreML's CPU/Neural Engine configuration.
 //! Reproducible local accuracy and performance evidence lives in benchmarks/asr.
 //!
-//! Model download is handled automatically by FluidAudio's Swift layer
-//! on first call to `init_asr()`. Models are cached at:
+//! `model::prepare_speech_model` downloads missing files at the pinned
+//! revision and verifies them before `init()` loads them. Models are cached at:
 //!   ~/Library/Application Support/FluidAudio/Models/
 //!
 //! Reference: https://github.com/FluidInference/fluidaudio-rs
 
 use super::engine::{AsrEngine, AsrResult, PreparedVocabulary};
-use std::path::PathBuf;
 
 /// FluidAudio-powered ASR engine.
 /// Wraps fluidaudio-rs which bridges to the FluidAudio Swift SDK via C FFI.
@@ -27,23 +26,11 @@ impl FluidAudioEngine {
         }
     }
 
-    /// Get the model cache directory used by FluidAudio.
-    fn model_cache_dir() -> PathBuf {
-        dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("FluidAudio")
-            .join("Models")
-    }
-}
-
-impl AsrEngine for FluidAudioEngine {
-    fn init(&mut self) -> Result<(), String> {
-        if self.ready {
-            return Ok(());
-        }
-
-        log::info!("Initializing FluidAudio ASR engine...");
-        log::info!("Models will be cached at: {:?}", Self::model_cache_dir());
+    /// Loads the verified files; `replace` loads them again over a loaded model.
+    fn load(&mut self, replace: bool) -> Result<(), String> {
+        let directory = super::model::fluidaudio_model_dir()
+            .ok_or("Could not find your Application Support folder.")?;
+        log::info!("Loading FluidAudio ASR models from {}", directory.display());
 
         // Create the FluidAudio bridge
         if self.audio.is_none() {
@@ -56,11 +43,11 @@ impl AsrEngine for FluidAudioEngine {
             log::warn!("Intel Mac detected — ASR may not be available or will run on CPU");
         }
 
-        // Initialize ASR on a blocking worker. Missing artifacts download at the
-        // SDK's existing cache; failed CoreML loads preserve cached model files.
-        log::info!("Loading ASR models (first run downloads ~500 MB from HuggingFace)...");
-        audio.init_asr()
-            .map_err(|e| format!("Failed to initialize ASR: {:?}", e))?;
+        // Runs on a blocking worker. Loading never downloads, and failed
+        // CoreML loads preserve cached model files.
+        self.ready = false;
+        let loaded = if replace { audio.reload_asr(&directory) } else { audio.init_asr(&directory) };
+        loaded.map_err(|e| format!("Failed to initialize ASR: {:?}", e))?;
 
         if !audio.is_asr_available() {
             return Err("ASR initialization completed but ASR is not available".into());
@@ -69,6 +56,19 @@ impl AsrEngine for FluidAudioEngine {
         log::info!("FluidAudio 0.15.6 ready (Parakeet TDT v3, CoreML/ANE)");
         self.ready = true;
         Ok(())
+    }
+}
+
+impl AsrEngine for FluidAudioEngine {
+    fn init(&mut self) -> Result<(), String> {
+        if self.ready {
+            return Ok(());
+        }
+        self.load(false)
+    }
+
+    fn reload(&mut self) -> Result<(), String> {
+        self.load(true)
     }
 
     fn is_ready(&self) -> bool {
@@ -100,9 +100,14 @@ impl AsrEngine for FluidAudioEngine {
     fn transcribe_file_with_vocabulary(&mut self, path: &str, terms: &[String]) -> Result<AsrResult, String> {
         let audio = self.audio.as_mut()
             .ok_or("FluidAudio not initialized. Call init() first.")?;
+        // The SDK reads the vocabulary tokenizer from disk for each boosted
+        // dictation. While its folder is being replaced, transcribe unboosted.
+        let files = if terms.is_empty() { None } else { super::model::VOCABULARY_FILES.try_read().ok() };
+        let terms: &[String] = if files.is_some() { terms } else { &[] };
         let started = std::time::Instant::now();
         let result = audio.transcribe_file_with_vocabulary(path, terms)
             .map_err(|e| format!("Transcription failed: {e}"))?;
+        drop(files);
         let candidates = serde_json::from_str::<Vec<super::vocabulary::Candidate>>(&result.vocabulary_candidates)
             .unwrap_or_default();
         let text = super::vocabulary::apply_candidates(&result.text, terms, &candidates);

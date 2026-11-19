@@ -6,14 +6,19 @@
    * 1. Displays the current shortcut using macOS symbols (⌘⇧Space)
    * 2. Click to enter recording mode ("Press a shortcut...")
    * 3. Press modifier(s) + a non-modifier key to record
-   * 4. Escape cancels, Backspace/Delete clears
+   * 4. Escape cancels; Backspace/Delete clears an optional shortcut
    * 5. Clicking outside cancels recording
+   *
+   * A required shortcut (one with `defaultValue`) cannot be cleared; it offers
+   * "Reset to default" instead. That is also the only way back to Escape,
+   * because pressing Escape cancels recording.
    *
    * Outputs Tauri-compatible shortcut strings like "CommandOrControl+Shift+Space"
    */
   import { onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { startKeyCapture, stopKeyCapture } from '../utils/tauri';
   import { createEventScope } from '../utils/event-scope';
+  import { MODIFIER_ORDER, formatShortcut, modifierSymbol } from './shortcut-format';
 
   interface Props {
     value: string;
@@ -26,6 +31,8 @@
     onrecordend?: () => void;
     placeholder?: string;
     label?: string;
+    /** Marks the shortcut as required and gives the value "Reset to default" restores. */
+    defaultValue?: string;
   }
 
   let {
@@ -36,6 +43,7 @@
     onrecordend,
     placeholder = 'Click to set',
     label = 'Shortcut recorder',
+    defaultValue,
   }: Props = $props();
 
   let recording = $state(false);
@@ -43,39 +51,6 @@
   let pendingShortcut = $state('');
   let commitTimeoutId: ReturnType<typeof setTimeout> | null = null;
   let buttonEl: HTMLButtonElement;
-
-  // ---- macOS symbol mappings ----
-
-  const MODIFIER_SYMBOLS: Record<string, string> = {
-    Control: '⌃',
-    Alt: '⌥',
-    Shift: '⇧',
-    CommandOrControl: '⌘',
-    Command: '⌘',
-    CmdOrCtrl: '⌘',
-    Super: '⌘',
-    Meta: '⌘',
-  };
-
-  const MODIFIER_ORDER = ['Control', 'Alt', 'Shift', 'CommandOrControl'];
-
-  const KEY_SYMBOLS: Record<string, string> = {
-    Space: '␣',
-    Enter: '↩',
-    Backspace: '⌫',
-    Delete: '⌦',
-    Escape: '⎋',
-    Tab: '⇥',
-    ArrowUp: '↑',
-    ArrowDown: '↓',
-    ArrowLeft: '←',
-    ArrowRight: '→',
-    PageUp: '⇞',
-    PageDown: '⇟',
-    Home: '↖',
-    End: '↘',
-    CapsLock: '⇪',
-  };
 
   const JS_MODIFIER_KEYS = new Set(['Meta', 'Control', 'Shift', 'Alt']);
 
@@ -118,54 +93,11 @@
     return map[code] ?? null;
   }
 
-  function keyToDisplay(key: string): string {
-    if (KEY_SYMBOLS[key]) return KEY_SYMBOLS[key];
-    if (/^Key([A-Z])$/.test(key)) return key.slice(3);
-    if (/^Digit(\d)$/.test(key)) return key.slice(5);
-    if (/^Numpad(\d)$/.test(key)) return 'Num' + key.slice(6);
-    if (/^F\d{1,2}$/.test(key)) return key;
-    const named: Record<string, string> = {
-      Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
-      Backslash: '\\', Semicolon: ';', Quote: "'", Backquote: '`',
-      Comma: ',', Period: '.', Slash: '/', IntlBackslash: '§',
-      NumpadAdd: 'Num+', NumpadSubtract: 'Num-', NumpadMultiply: 'Num*',
-      NumpadDivide: 'Num/', NumpadDecimal: 'Num.', NumpadEnter: 'NumEnter',
-      NumpadEqual: 'Num=', NumLock: 'NumLock', ScrollLock: 'ScrollLock',
-      MediaPlayPause: '⏯', MediaStop: '⏹', MediaTrackNext: '⏭',
-      MediaTrackPrevious: '⏮', AudioVolumeUp: '🔊', AudioVolumeDown: '🔉',
-      AudioVolumeMute: '🔇', Insert: 'Ins', PrintScreen: 'PrtSc',
-      Pause: 'Pause', ContextMenu: 'Menu',
-    };
-    return named[key] ?? key;
-  }
-
-  function formatForDisplay(shortcut: string): string {
-    if (!shortcut) return '';
-    const parts = shortcut.split('+');
-    const modifiers: string[] = [];
-    let key = '';
-    for (const part of parts) {
-      if (MODIFIER_SYMBOLS[part]) {
-        modifiers.push(part);
-      } else {
-        key = part;
-      }
-    }
-    modifiers.sort((a, b) => {
-      const ai = MODIFIER_ORDER.indexOf(a);
-      const bi = MODIFIER_ORDER.indexOf(b);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    });
-    const symbolParts = modifiers.map(m => MODIFIER_SYMBOLS[m] || m);
-    if (key) symbolParts.push(keyToDisplay(key));
-    return symbolParts.join('');
-  }
-
   function formatActiveModifiers(): string {
     const parts: string[] = [];
     for (const mod of MODIFIER_ORDER) {
       if (currentModifiers.has(mod)) {
-        parts.push(MODIFIER_SYMBOLS[mod] || mod);
+        parts.push(modifierSymbol(mod));
       }
     }
     return parts.length > 0 ? parts.join('') + '...' : 'Press a shortcut...';
@@ -188,7 +120,9 @@
       return;
     }
 
-    if (code === 'Backspace' || code === 'Delete') {
+    // A required shortcut cannot be cleared; a bare Backspace or Delete is
+    // then ignored like any other key without a modifier.
+    if ((code === 'Backspace' || code === 'Delete') && defaultValue === undefined) {
       if (!payload.metaKey && !payload.ctrlKey && !payload.altKey && !payload.shiftKey) {
         pendingShortcut = '';
         onchange('');
@@ -200,7 +134,7 @@
     // Build modifier set
     const mods = new Set<string>();
     if (payload.metaKey) mods.add('CommandOrControl');
-    if (payload.ctrlKey && !payload.metaKey) mods.add('Control');
+    if (payload.ctrlKey) mods.add('Control');
     if (payload.altKey) mods.add('Alt');
     if (payload.shiftKey) mods.add('Shift');
     currentModifiers = mods;
@@ -239,7 +173,7 @@
     if (!recording) return;
     const mods = new Set<string>();
     if (payload.metaKey) mods.add('CommandOrControl');
-    if (payload.ctrlKey && !payload.metaKey) mods.add('Control');
+    if (payload.ctrlKey) mods.add('Control');
     if (payload.altKey) mods.add('Alt');
     if (payload.shiftKey) mods.add('Shift');
     currentModifiers = mods;
@@ -331,7 +265,7 @@
       scope.listen<Parameters<typeof handleModifierUpdate>[0]>('key-modifier', (event) => handleModifierUpdate(event.payload)),
     ]);
     if (!recording || disposed || generation !== captureGeneration) return;
-    try { await invoke('start_key_capture'); }
+    try { await startKeyCapture(); }
     catch (error) { console.warn('Native key capture unavailable, using keyboard fallback:', error); }
   }
 
@@ -349,7 +283,7 @@
     document.removeEventListener('mousedown', handleDocMouseDown, true);
     window.removeEventListener('blur', stopRecording);
     onrecordend?.();
-    void invoke('stop_key_capture').catch(() => {});
+    void stopKeyCapture().catch(() => {});
   }
 
   onDestroy(() => {
@@ -361,11 +295,16 @@
 
   let displayText = $derived(
     recording
-      ? (pendingShortcut ? formatForDisplay(pendingShortcut) : formatActiveModifiers())
+      ? (pendingShortcut ? formatShortcut(pendingShortcut) : formatActiveModifiers())
       : value
-        ? formatForDisplay(value)
+        ? formatShortcut(value)
         : placeholder
   );
+  let showReset = $derived(defaultValue !== undefined && value !== defaultValue && !recording);
+
+  function resetToDefault() {
+    if (defaultValue !== undefined) onchange(defaultValue);
+  }
 </script>
 
 <div class="shortcut-control">
@@ -375,6 +314,7 @@
     class:recording
     class:disabled
     class:empty={!value && !recording}
+    class:has-reset={showReset}
     onclick={() => { if (!recording && !disabled) startRecording(); }}
     type="button"
     {disabled}
@@ -382,7 +322,11 @@
   >
     <span class="shortcut-display">{displayText}</span>
   </button>
-  {#if value && !recording}
+  {#if defaultValue !== undefined}
+    {#if showReset}
+      <button class="reset-btn" onclick={resetToDefault} type="button" {disabled}>Reset to default</button>
+    {/if}
+  {:else if value && !recording}
     <button
       class="clear-btn"
       onclick={() => onchange('')}
@@ -411,7 +355,7 @@
     background: var(--input-bg);
     color: var(--text-bright);
     font-size: 14px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    font-family: var(--sans);
     cursor: pointer;
     outline: none;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -425,9 +369,13 @@
     border-color: var(--accent);
   }
 
+  .shortcut-recorder.has-reset {
+    padding-right: 124px;
+  }
+
   .shortcut-recorder.recording {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+    box-shadow: 0 0 0 2px var(--selection-bg);
     animation: pulse-border 1.5s ease-in-out infinite;
   }
 
@@ -442,10 +390,10 @@
 
   @keyframes pulse-border {
     0%, 100% {
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+      box-shadow: 0 0 0 2px var(--selection-bg);
     }
     50% {
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+      box-shadow: 0 0 0 3px var(--accent-bg);
     }
   }
 
@@ -455,7 +403,7 @@
   }
 
   .shortcut-recorder.recording .shortcut-display {
-    color: var(--accent);
+    color: var(--accent-text);
     font-style: italic;
   }
 
@@ -484,5 +432,31 @@
   .clear-btn:hover {
     background: var(--border-hover);
     color: var(--text);
+  }
+
+  .reset-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    border-radius: 6px;
+    background: var(--hover-bg);
+    color: var(--accent-text);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .reset-btn:hover:not(:disabled) {
+    background: var(--accent-bg);
+  }
+
+  .reset-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

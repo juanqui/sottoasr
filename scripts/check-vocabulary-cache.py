@@ -16,10 +16,16 @@ builds = [path for profile in ("debug", "release")
 if not builds:
     raise SystemExit("Run cargo build from src-tauri before this probe.")
 build = max(builds, key=lambda path: (path / "release/libFluidAudioBridge.a").stat().st_mtime)
+# Native SwiftPM builds keep modules in release/Modules; Swift Build (Swift 6.4
+# here) writes them into release. Only what release resolves to is current.
+modules = [path for path in (build / "release/Modules", build / "release")
+           if (path / "FluidAudio.swiftmodule").exists()]
+if not modules:
+    raise SystemExit(f"No FluidAudio module in {build / 'release'}; rebuild with cargo build.")
 with tempfile.TemporaryDirectory(prefix="sotto-cache-probe-") as scratch:
     executable = Path(scratch) / "vocabulary-cache-probe"
     args = ["swiftc", "-O", "-parse-as-library"]
-    includes = [build / "release/Modules",
+    includes = [*modules,
                 build / "checkouts/FluidAudio/Sources/FastClusterWrapper/include",
                 build / "checkouts/FluidAudio/Sources/MachTaskSelfWrapper/include",
                 build / "artifacts/fluidaudio/NemoTextProcessing/NemoTextProcessing.xcframework/macos-arm64_x86_64/Headers"]

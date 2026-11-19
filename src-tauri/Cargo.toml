@@ -27,17 +27,17 @@ tauri = { version = "2", features = [
 tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-store = "2"
-tauri-plugin-os = "2"
 tauri-plugin-updater = "2"
-tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 
-# Audio capture
-cpal = "0.15"
+# Audio capture. 0.16 is the first release whose disconnect listener holds the
+# stream weakly; with 0.15.3 a device opened from `input_devices()` kept
+# running after the stream was dropped.
+cpal = "0.16"
 hound = "3.5"
-rubato = "0.16"
+# Resampling to 16 kHz, needed only by the ONNX backend
+rubato = { version = "0.16", optional = true }
 
 # ASR backends (selected via features)
 # FluidAudio: CoreML with CPU/Neural Engine execution on Apple Silicon
@@ -45,9 +45,10 @@ fluidaudio-rs = { path = "vendor/fluidaudio-rs", optional = true }
 # parakeet-rs: ONNX Runtime, cross-platform CPU fallback
 parakeet-rs = { version = "0.3", optional = true }
 
-# HTTP client for model downloads (parakeet-rs)
+# HTTP client and SHA-256 for model downloads (parakeet-rs)
 reqwest = { version = "0.12", features = ["stream"], optional = true }
 futures-util = { version = "0.3", optional = true }
+sha2 = { version = "0.10", optional = true }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
@@ -70,6 +71,8 @@ arboard = "3"
 [dev-dependencies]
 serial_test = "3"
 tempfile = "3"
+# Paused-clock tests for deadlines and budgets
+tokio = { version = "1", features = ["test-util"] }
 
 [features]
 default = ["custom-protocol", "asr-fluidaudio", "llm-cleanup"]
@@ -78,7 +81,7 @@ default = ["custom-protocol", "asr-fluidaudio", "llm-cleanup"]
 # FluidAudio: macOS only, CoreML/Apple Neural Engine, best performance
 asr-fluidaudio = ["dep:fluidaudio-rs"]
 # parakeet-rs: Cross-platform, ONNX Runtime CPU, wider compatibility
-asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:futures-util"]
+asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:futures-util", "dep:rubato", "dep:sha2"]
 
 # Optional conservative cleanup with a stock local instruction model (Python sidecar)
 llm-cleanup = []

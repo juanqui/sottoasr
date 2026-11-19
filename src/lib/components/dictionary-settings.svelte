@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isIncompleteEntry } from '../stores/settings.svelte';
   import type { DictionaryEntry } from '../utils/tauri';
 
   interface Props {
@@ -7,6 +8,7 @@
   }
 
   let { entries, onchange }: Props = $props();
+  const id = $props.id();
 
   function updateEntry(index: number, field: keyof DictionaryEntry, value: string) {
     onchange(entries.map((entry, row) => row === index ? { ...entry, [field]: value } : entry));
@@ -22,11 +24,14 @@
     <p class="empty">No exact replacements yet.</p>
   {/if}
   {#each entries as entry, index}
+    {@const incomplete = isIncompleteEntry(entry)}
     <div class="dictionary-row">
       <label>
         <span>Heard</span>
         <input
           aria-label={`Heard alias ${index + 1}`}
+          aria-invalid={incomplete && !entry.heard.trim()}
+          aria-describedby={incomplete ? `${id}-row-${index}-error` : undefined}
           value={entry.heard}
           placeholder="Quen"
           maxlength="120"
@@ -37,6 +42,8 @@
         <span>Write instead</span>
         <input
           aria-label={`Replacement ${index + 1}`}
+          aria-invalid={incomplete && !entry.replacement.trim()}
+          aria-describedby={incomplete ? `${id}-row-${index}-error` : undefined}
           value={entry.replacement}
           placeholder="Qwen"
           maxlength="120"
@@ -50,6 +57,11 @@
         type="button"
       >Remove</button>
     </div>
+    {#if incomplete}
+      <p class="row-error" id={`${id}-row-${index}-error`}>
+        {entry.heard.trim() ? 'Add the text to write instead, or remove this row.' : 'Add the word you hear, or remove this row.'}
+      </p>
+    {/if}
   {/each}
   <button
     class="add"
@@ -99,6 +111,8 @@
   }
 
   input:focus { outline: 1px solid var(--accent); }
+  input[aria-invalid='true'] { border-color: var(--danger); }
+  .row-error { color: var(--danger); font-size: 12px; line-height: 1.5; margin: -4px 0 10px; }
   button {
     padding: 8px 10px;
     border: 1px solid var(--border);

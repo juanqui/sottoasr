@@ -1,8 +1,11 @@
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::{tauri_panel, ManagerExt, WebviewWindowExt as _};
-use crate::llm::cleanup::run_cleanup;
-use crate::models::{AppStateEnum, LlmCleanupStatus};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use crate::audio::cue::{self, Cue};
+use crate::models::{AppStateEnum, LlmCleanupStatus, Settings};
+use crate::pipeline::{Failure, FailureKind, Linger, Outcome, PipelineEvents, StopJob};
 use crate::state::{AppState, OverlaySession};
 
 // Ordinary recording stays non-activating. Recovery controls can temporarily
@@ -17,26 +20,89 @@ tauri_panel! {
     })
 }
 
-/// Maximum recording duration before auto-stop (20 minutes).
-/// Raised from 12 min in the 2026-04-11 reliability spec to support long
-/// dictations. At 1.24 tok/word and 150 WPM, 20 min ≈ 3000 words ≈ 3720
-/// output tokens — still well inside the sidecar's 16384-token ceiling.
-const MAX_RECORDING_SECS: u64 = 20 * 60;
-/// Seconds before max duration to show a warning (1 minute before).
-const WARNING_BEFORE_LIMIT_SECS: u64 = 60;
+/// Reasons are logged at startup, so they never name the keys.
+const REGISTER_FAILED: &str = "another app may be using it";
+const PTT_UNSUPPORTED: &str = "push-to-talk cannot watch that key on this Mac";
 
 /// Resolve parser aliases to the same physical key used for release polling.
 /// Unsupported keys must fail validation before a recording can become stuck.
 pub(crate) fn ptt_virtual_key(shortcut: &str) -> Result<u16, String> {
-    let parsed = shortcut.parse::<tauri_plugin_global_shortcut::Shortcut>()
+    let parsed = shortcut.parse::<Shortcut>()
         .map_err(|error| format!("Push-to-talk shortcut is invalid: {error}"))?;
-    crate::commands::keycapture::tauri_key_to_vk(&parsed.key.to_string())
-        .ok_or_else(|| format!("Push-to-talk does not support the {} key on this Mac", parsed.key))
+    ptt_key(&parsed)
+}
+
+fn ptt_key(shortcut: &Shortcut) -> Result<u16, String> {
+    crate::commands::keycapture::tauri_key_to_vk(&shortcut.key.to_string())
+        .ok_or_else(|| format!("Push-to-talk does not support the {} key on this Mac", shortcut.key))
+}
+
+/// What a configured shortcut does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShortcutRole {
+    PushToTalk,
+    Toggle,
+    /// Remembered at registration, active only while recording.
+    Cancel,
+    OpenSettings,
+}
+
+/// One configured shortcut and whether it can be registered.
+#[derive(Debug)]
+pub(crate) struct PlannedShortcut {
+    pub label: &'static str,
+    pub role: ShortcutRole,
+    /// The parsed shortcut, or why it is skipped.
+    pub shortcut: Result<Shortcut, String>,
+}
+
+/// Decide for each saved shortcut whether it can be registered. An empty
+/// required shortcut, an unreadable one, an unsupported push-to-talk key and
+/// a duplicate of an earlier entry are skipped with a reason; the others stay.
+pub(crate) fn plan_shortcuts(settings: &Settings) -> Vec<PlannedShortcut> {
+    use std::collections::hash_map::Entry;
+    let configured = [
+        ("Push-to-talk", ShortcutRole::PushToTalk, Some(settings.push_to_talk_shortcut.as_str()), true),
+        ("Alternate push-to-talk", ShortcutRole::PushToTalk, settings.push_to_talk_shortcut_alt.as_deref(), false),
+        ("Toggle recording", ShortcutRole::Toggle, Some(settings.toggle_shortcut.as_str()), true),
+        ("Alternate toggle", ShortcutRole::Toggle, settings.toggle_shortcut_alt.as_deref(), false),
+        ("Cancel recording", ShortcutRole::Cancel, Some(settings.cancel_shortcut.as_str()), true),
+        ("Alternate cancel", ShortcutRole::Cancel, settings.cancel_shortcut_alt.as_deref(), false),
+        ("Open Settings", ShortcutRole::OpenSettings, Some(settings.open_settings_shortcut.as_str()), false),
+    ];
+    let mut seen = std::collections::HashMap::new();
+    let mut plan = Vec::with_capacity(configured.len());
+    for (label, role, text, required) in configured {
+        let text = text.map(str::trim).unwrap_or_default();
+        if text.is_empty() {
+            if required {
+                plan.push(PlannedShortcut { label, role, shortcut: Err("empty".into()) });
+            }
+            continue;
+        }
+        let shortcut = parse_planned(text, role).and_then(|shortcut| match seen.entry(shortcut) {
+            Entry::Occupied(previous) => Err(format!("same as {}", previous.get())),
+            Entry::Vacant(slot) => {
+                slot.insert(label);
+                Ok(shortcut)
+            }
+        });
+        plan.push(PlannedShortcut { label, role, shortcut });
+    }
+    plan
+}
+
+fn parse_planned(text: &str, role: ShortcutRole) -> Result<Shortcut, String> {
+    let shortcut = text.parse::<Shortcut>().map_err(|_| "cannot be read".to_string())?;
+    if role == ShortcutRole::PushToTalk && ptt_key(&shortcut).is_err() {
+        return Err(PTT_UNSUPPORTED.into());
+    }
+    Ok(shortcut)
 }
 
 #[cfg(test)]
-mod ptt_tests {
-    use super::ptt_virtual_key;
+mod shortcut_tests {
+    use super::{apply_shortcut_plan, plan_shortcuts, ptt_virtual_key, ShortcutRole, REGISTER_FAILED};
 
     #[test]
     fn parsed_aliases_share_the_physical_release_key_and_unsupported_keys_fail() {
@@ -50,731 +116,479 @@ mod ptt_tests {
         };
         assert!(settings.validate().is_err());
     }
-}
 
-pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    let settings = crate::commands::settings::load_persisted_settings_checked()?;
-    settings.validate()?;
-    let result = register_shortcuts(app, &settings);
-    if result.is_err() {
-        if let Err(error) = app.global_shortcut().unregister_all() {
-            log::warn!("Could not clear partially registered shortcuts: {error}");
+    #[test]
+    fn lenient_plan_registers_valid_shortcuts_beside_invalid_ones() {
+        let settings = crate::models::Settings {
+            toggle_shortcut: "Ctrl+NotAKey".into(),
+            cancel_shortcut: "".into(),
+            // Same physical shortcut as the default push-to-talk.
+            toggle_shortcut_alt: Some("CmdOrCtrl+Shift+Space".into()),
+            push_to_talk_shortcut_alt: Some("Ctrl+F24".into()),
+            ..Default::default()
+        };
+        // Strict validation would have refused every shortcut at startup.
+        assert!(settings.validate().is_err());
+        let plan = plan_shortcuts(&settings);
+        let usable = |label: &str| plan.iter().find(|entry| entry.label == label).map(|entry| entry.shortcut.is_ok());
+        assert_eq!(usable("Push-to-talk"), Some(true));
+        assert_eq!(usable("Open Settings"), Some(true));
+        assert_eq!(usable("Toggle recording"), Some(false));
+        assert_eq!(usable("Cancel recording"), Some(false));
+        assert_eq!(usable("Alternate toggle"), Some(false));
+        assert_eq!(usable("Alternate push-to-talk"), Some(false));
+        assert_eq!(usable("Alternate cancel"), None, "an unset alternate is not reported");
+        let open_settings = plan.iter().find(|entry| entry.label == "Open Settings").unwrap();
+        assert_eq!(open_settings.role, ShortcutRole::OpenSettings);
+        // Reasons are logged, so they must not repeat the configured keys.
+        for entry in &plan {
+            if let Err(reason) = &entry.shortcut {
+                assert!(!reason.contains("NotAKey") && !reason.contains("F24"), "{reason}");
+            }
         }
     }
-    result
+
+    #[test]
+    fn one_failed_registration_does_not_stop_the_rest_and_cancel_shortcuts_are_kept() {
+        let settings = crate::models::Settings {
+            cancel_shortcut_alt: Some("Alt+Escape".into()),
+            ..Default::default()
+        };
+        let cancel = std::sync::Mutex::new(Vec::new());
+        let mut registered = Vec::new();
+        let skipped = apply_shortcut_plan(plan_shortcuts(&settings), &cancel, |role, _shortcut| {
+            assert_ne!(role, ShortcutRole::Cancel, "cancel shortcuts register only while recording");
+            if role == ShortcutRole::Toggle {
+                return Err(REGISTER_FAILED.into());
+            }
+            registered.push(role);
+            Ok(())
+        });
+        assert_eq!(skipped, vec![format!("Toggle recording ({REGISTER_FAILED})")]);
+        assert_eq!(registered, vec![ShortcutRole::PushToTalk, ShortcutRole::OpenSettings]);
+        assert_eq!(cancel.lock().unwrap().len(), 2);
+    }
 }
 
-/// Re-register all shortcuts. Called at startup and when settings change.
-/// Note: the cancel shortcut is NOT registered globally here — it is only
-/// registered while recording is active (see register_cancel_shortcut).
-pub fn register_shortcuts(
-    app: &AppHandle,
-    settings: &crate::models::Settings,
-) -> Result<(), String> {
-    let ptt_shortcut: &str = &settings.push_to_talk_shortcut;
-    let ptt_shortcut_alt = settings.push_to_talk_shortcut_alt.as_deref();
-    let toggle_shortcut: &str = &settings.toggle_shortcut;
-    let toggle_shortcut_alt = settings.toggle_shortcut_alt.as_deref();
-    let cancel_shortcut: &str = &settings.cancel_shortcut;
-    let cancel_shortcut_alt = settings.cancel_shortcut_alt.as_deref();
-    let open_settings_shortcut: &str = &settings.open_settings_shortcut;
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-
-    // Unregister all existing shortcuts first
-    app.global_shortcut().unregister_all()
-        .map_err(|error| format!("Failed to unregister existing shortcuts: {error}"))?;
-
-    // Store the cancel shortcuts for dynamic registration during recording
-    {
-        let state: tauri::State<'_, AppState> = app.state();
-        let mut cs = state.cancel_shortcut.lock().unwrap_or_else(|e| e.into_inner());
-        *cs = cancel_shortcut.to_string();
-        let mut cs_alt = state.cancel_shortcut_alt.lock().unwrap_or_else(|e| e.into_inner());
-        *cs_alt = cancel_shortcut_alt.filter(|s| !s.is_empty()).map(|s| s.to_string());
+/// Register `plan` through `register`, which receives every entry except the
+/// cancel shortcuts; those are stored in `cancel` and registered only while
+/// recording. One failure does not stop the rest. Returns one message per
+/// shortcut that is not active.
+fn apply_shortcut_plan(
+    plan: Vec<PlannedShortcut>,
+    cancel: &std::sync::Mutex<Vec<Shortcut>>,
+    mut register: impl FnMut(ShortcutRole, Shortcut) -> Result<(), String>,
+) -> Vec<String> {
+    let mut cancel_shortcuts = Vec::new();
+    let mut skipped = Vec::new();
+    for entry in plan {
+        let registered = entry.shortcut.and_then(|shortcut| match entry.role {
+            ShortcutRole::Cancel => {
+                cancel_shortcuts.push(shortcut);
+                Ok(())
+            }
+            role => register(role, shortcut),
+        });
+        if let Err(reason) = registered {
+            skipped.push(format!("{} ({reason})", entry.label));
+        }
     }
+    *cancel.lock().unwrap_or_else(|error| error.into_inner()) = cancel_shortcuts;
+    skipped
+}
 
-    // Helper: register a push-to-talk shortcut with the given key string
-    fn register_ptt(app: &AppHandle, shortcut: &str) -> Result<(), String> {
-        use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+/// Replace every global registration with `plan`. The error says whether the
+/// other shortcuts were registered or none were, so callers can report a
+/// rollback truthfully.
+fn register_plan(app: &AppHandle, plan: Vec<PlannedShortcut>) -> Result<(), String> {
+    app.global_shortcut().unregister_all()
+        .map_err(|_| "no shortcut was registered: the existing ones could not be cleared".to_string())?;
+    let state = app.state::<AppState>();
+    let skipped = apply_shortcut_plan(plan, &state.cancel_shortcuts, |role, shortcut| match role {
+        ShortcutRole::PushToTalk => match ptt_key(&shortcut) {
+            Ok(vk) => register_ptt(app, shortcut, vk),
+            Err(_) => Err(PTT_UNSUPPORTED.into()),
+        },
+        ShortcutRole::Toggle => register_toggle(app, shortcut),
+        ShortcutRole::OpenSettings => register_open_settings(app, shortcut),
+        // Kept by apply_shortcut_plan for the recording; never registered here.
+        ShortcutRole::Cancel => Ok(()),
+    });
+    if skipped.is_empty() {
+        log::info!("Keyboard shortcuts registered");
+        Ok(())
+    } else {
+        Err(format!("every other shortcut was registered; skipped: {}", skipped.join("; ")))
+    }
+}
 
-        let app_handle = app.clone();
-        let ptt_vk = ptt_virtual_key(shortcut)?;
+/// Startup registration from the in-memory settings, which are the defaults
+/// when the saved file could not be read. Each shortcut registers on its own
+/// and settings are not validated, so one bad entry (or an invalid dictionary
+/// row) cannot disable the other hotkeys. The error names the skipped
+/// shortcuts. Runs on the main thread, outside the async runtime.
+pub fn setup_hotkeys(app: &AppHandle) -> Result<(), String> {
+    let settings = app.state::<AppState>().settings.blocking_lock().clone();
+    register_plan(app, plan_shortcuts(&settings))
+}
 
-        app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state != ShortcutState::Pressed {
+/// Re-register all shortcuts from `settings` (Settings save and its
+/// rollback). Every usable shortcut is registered, so a rollback restores
+/// what it can; the error names the ones that are not active.
+/// The cancel shortcut is NOT registered globally here — it is only
+/// registered while recording is active (see register_cancel_shortcut).
+pub fn register_shortcuts(app: &AppHandle, settings: &Settings) -> Result<(), String> {
+    register_plan(app, plan_shortcuts(settings))
+}
+
+fn register_ptt(app: &AppHandle, shortcut: Shortcut, ptt_vk: u16) -> Result<(), String> {
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+        if event.state != ShortcutState::Pressed {
+            return;
+        }
+        let app = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            // Key repeat, or a second binding pressed during this recording.
+            if app.state::<AppState>().get_state() == AppStateEnum::Recording {
                 return;
             }
-            let app = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                let state: tauri::State<'_, AppState> = app.state();
-                if state.get_state() != AppStateEnum::Idle {
-                    return;
-                }
-                let Ok(generation) = handle_start_recording(&app) else { return; };
+            let Ok(generation) = handle_start_recording(&app) else { return; };
 
-                // Poll for key release via CGEventSourceKeyState
-                #[cfg(target_os = "macos")]
-                {
-                    {
-                        let vk = ptt_vk;
-                        let app_for_release = app.clone();
-                        std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-                            unsafe {
-                                extern "C" {
-                                    fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
-                                }
-                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(MAX_RECORDING_SECS);
-                                loop {
-                                    std::thread::sleep(std::time::Duration::from_millis(33));
-                                    let state: tauri::State<'_, AppState> = app_for_release.state();
-                                    if state.recording_generation.load(Ordering::SeqCst) != generation
-                                        || state.get_state() != AppStateEnum::Recording {
-                                        return;
-                                    }
-                                    if std::time::Instant::now() > deadline {
-                                        log::warn!("PTT key release polling reached the {}s recording limit", MAX_RECORDING_SECS);
-                                        break;
-                                    }
-                                    let still_pressed = CGEventSourceKeyState(0, vk);
-                                    if !still_pressed {
-                                        break;
-                                    }
-                                }
-                            }
-                            let state: tauri::State<'_, AppState> = app_for_release.state();
-                            if state.get_state() == AppStateEnum::Recording {
-                                tauri::async_runtime::spawn(async move {
-                                    stop_recording_for_generation(&app_for_release, Some(generation)).await;
-                                });
-                            }
-                        });
+            // Poll for key release via CGEventSourceKeyState
+            #[cfg(target_os = "macos")]
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(100));
+                unsafe {
+                    extern "C" {
+                        fn CGEventSourceKeyState(stateID: u32, key: u16) -> bool;
                     }
+                    let deadline = std::time::Instant::now() + Duration::from_secs(crate::pipeline::MAX_RECORDING_SECS);
+                    loop {
+                        std::thread::sleep(Duration::from_millis(33));
+                        let state: tauri::State<'_, AppState> = app.state();
+                        if state.recording_generation.load(Ordering::SeqCst) != generation
+                            || state.get_state() != AppStateEnum::Recording {
+                            return;
+                        }
+                        if std::time::Instant::now() > deadline {
+                            log::warn!("PTT key release polling reached the {}s recording limit", crate::pipeline::MAX_RECORDING_SECS);
+                            break;
+                        }
+                        if !CGEventSourceKeyState(0, ptt_vk) {
+                            break;
+                        }
+                    }
+                }
+                if app.state::<AppState>().get_state() == AppStateEnum::Recording {
+                    tauri::async_runtime::spawn(async move {
+                        handle_stop_recording(&app, Some(generation)).await;
+                    });
                 }
             });
-        }).map_err(|e| format!("Failed to register push-to-talk shortcut '{}': {}", shortcut, e))
-    }
+        });
+    }).map_err(|_| REGISTER_FAILED.to_string())
+}
 
-    // Helper: register a toggle shortcut with the given key string
-    fn register_toggle(app: &AppHandle, shortcut: &str) -> Result<(), String> {
-        use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-
-        let app_handle = app.clone();
-        app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                let app = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, AppState> = app.state();
-                    let current = state.get_state();
-                    match current {
-                        AppStateEnum::Idle => {
-                            let _ = handle_start_recording(&app);
-                        }
-                        AppStateEnum::Recording => {
-                            handle_stop_recording(&app).await;
-                        }
-                        _ => {
-                            log::info!("Toggle: ignoring (state={:?})", current);
-                        }
-                    }
-                });
+fn register_toggle(app: &AppHandle, shortcut: Shortcut) -> Result<(), String> {
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+        if event.state != ShortcutState::Pressed {
+            return;
+        }
+        let app = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            if app.state::<AppState>().get_state() == AppStateEnum::Recording {
+                handle_stop_recording(&app, None).await;
+            } else {
+                // Idle starts; a dictation still processing reports busy.
+                let _ = handle_start_recording(&app);
             }
-        }).map_err(|e| format!("Failed to register toggle shortcut '{}': {}", shortcut, e))
-    }
+        });
+    }).map_err(|_| REGISTER_FAILED.to_string())
+}
 
-    // Register primary shortcuts
-    register_ptt(app, ptt_shortcut)?;
-    register_toggle(app, toggle_shortcut)?;
-
-    // Register alt shortcuts (if set and non-empty)
-    if let Some(alt) = ptt_shortcut_alt.filter(|s| !s.is_empty()) {
-        register_ptt(app, alt)?;
-    }
-    if let Some(alt) = toggle_shortcut_alt.filter(|s| !s.is_empty()) {
-        register_toggle(app, alt)?;
-    }
-
-    // Register open-settings shortcut
-    if !open_settings_shortcut.is_empty() {
-        let app_handle = app.clone();
-        app.global_shortcut().on_shortcut(open_settings_shortcut, move |_app, _shortcut, event| {
-            use tauri_plugin_global_shortcut::ShortcutState;
-            if event.state == ShortcutState::Pressed {
-                log::info!("Open-settings hotkey pressed");
-                crate::tray::menu::open_or_focus_window(
-                    &app_handle,
-                    "settings",
-                    "settings.html",
-                    "SottoASR \u{2014} Settings",
-                    640.0,
-                    760.0,
-                );
-            }
-        }).map_err(|e| format!("Failed to register open-settings shortcut '{}': {}", open_settings_shortcut, e))?;
-    }
-
-    log::info!(
-        "Hotkeys registered: '{}' (push-to-talk), '{}' (toggle), '{}' (open-settings) | cancel '{}' (registered only while recording)",
-        ptt_shortcut, toggle_shortcut, open_settings_shortcut, cancel_shortcut
-    );
-    Ok(())
+fn register_open_settings(app: &AppHandle, shortcut: Shortcut) -> Result<(), String> {
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            log::info!("Open-settings hotkey pressed");
+            crate::tray::menu::open_or_focus_window(
+                &app_handle,
+                "settings",
+                "settings.html",
+                "SottoASR \u{2014} Settings",
+                640.0,
+                760.0,
+            );
+        }
+    }).map_err(|_| REGISTER_FAILED.to_string())
 }
 
 /// Register the cancel shortcut(s) globally. Called when recording starts.
 pub fn register_cancel_shortcut(app: &AppHandle) {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-
-    let state: tauri::State<'_, AppState> = app.state();
-    let cancel_shortcut = state.cancel_shortcut.lock()
-        .map(|cs| cs.clone())
-        .unwrap_or_else(|_| "Escape".to_string());
-    let cancel_shortcut_alt = state.cancel_shortcut_alt.lock()
-        .ok()
-        .and_then(|cs| cs.clone());
-
-    // Helper to register a single cancel shortcut string
-    let register_one = |app: &AppHandle, shortcut: &str| {
+    let shortcuts = app.state::<AppState>().cancel_shortcuts.lock().unwrap_or_else(|error| error.into_inner()).clone();
+    for shortcut in shortcuts {
         let app_handle = app.clone();
         let result = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
                 let app = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, AppState> = app.state();
-                    let current = state.get_state();
-                    if current == AppStateEnum::Recording {
+                    if app.state::<AppState>().get_state() == AppStateEnum::Recording {
                         handle_cancel_recording(&app).await;
                     }
                 });
             }
         });
-
-        match result {
-            Ok(()) => log::info!("Cancel shortcut '{}' registered (recording active)", shortcut),
-            Err(e) => log::error!("Failed to register cancel shortcut '{}': {}", shortcut, e),
+        if result.is_err() {
+            log::error!("Could not register a cancel shortcut for this recording");
         }
-    };
-
-    register_one(app, &cancel_shortcut);
-    if let Some(alt) = cancel_shortcut_alt.as_deref().filter(|s| !s.is_empty()) {
-        register_one(app, alt);
     }
 }
 
 /// Unregister the cancel shortcut(s). Called when recording stops or is cancelled.
 pub fn unregister_cancel_shortcut(app: &AppHandle) {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-
-    let state: tauri::State<'_, AppState> = app.state();
-    let cancel_shortcut = state.cancel_shortcut.lock()
-        .map(|cs| cs.clone())
-        .unwrap_or_else(|_| "Escape".to_string());
-    let cancel_shortcut_alt = state.cancel_shortcut_alt.lock()
-        .ok()
-        .and_then(|cs| cs.clone());
-
-    match app.global_shortcut().unregister(cancel_shortcut.as_str()) {
-        Ok(()) => log::info!("Cancel shortcut '{}' unregistered (recording ended)", cancel_shortcut),
-        Err(e) => log::warn!("Failed to unregister cancel shortcut '{}': {}", cancel_shortcut, e),
-    }
-    if let Some(alt) = cancel_shortcut_alt.as_deref().filter(|s| !s.is_empty()) {
-        match app.global_shortcut().unregister(alt) {
-            Ok(()) => log::info!("Cancel alt shortcut '{}' unregistered", alt),
-            Err(e) => log::warn!("Failed to unregister cancel alt shortcut '{}': {}", alt, e),
+    let shortcuts = app.state::<AppState>().cancel_shortcuts.lock().unwrap_or_else(|error| error.into_inner()).clone();
+    for shortcut in shortcuts {
+        if app.global_shortcut().unregister(shortcut).is_err() {
+            log::warn!("Could not unregister a cancel shortcut after recording");
         }
     }
 }
 
-/// Start recording: open microphone, set state, emit events.
+/// Start recording from a shortcut or IPC request. While a dictation is still
+/// processing, this reports busy instead.
 pub fn handle_start_recording(app: &AppHandle) -> Result<u64, String> {
-    let state: tauri::State<'_, AppState> = app.state();
-    let app_clone = app.clone();
+    let state = app.state::<AppState>();
+    let level_app = app.clone();
     let (error_sender, mut error_receiver) = tokio::sync::mpsc::unbounded_channel();
-    let start_result = crate::audio::capture::start_recording_capture_with_errors(&state, Box::new(move |level| {
-        let _ = app_clone.emit("audio-level", serde_json::json!({ "level": level }));
-    }), Box::new(move |generation, _error| {
-        let _ = error_sender.send(generation);
-    }));
+    let generation = crate::pipeline::start(
+        &state,
+        &TauriEvents::new(app),
+        Box::new(move |level| {
+            let _ = level_app.emit("audio-level", serde_json::json!({ "level": level }));
+        }),
+        Box::new(move |generation, _error| {
+            let _ = error_sender.send(generation);
+        }),
+    )?;
 
-    match start_result {
-        Ok(generation) => {
-            let _ = app.emit("recording-started", serde_json::json!({ "generation": generation }));
-            crate::commands::overlay::publish_state(app, AppStateEnum::Recording);
-
-            // Register cancel shortcut (only active while recording)
-            register_cancel_shortcut(app);
-
-            // Show the overlay window
-            show_overlay(app);
-
-            // Publish the start events before consuming an early device error.
-            // The callback only enqueues once; dropping the stream closes this
-            // channel so ordinary recordings do not leave a waiting task.
-            let app_for_error = app.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Some(generation) = error_receiver.recv().await {
-                    stop_recording_for_generation(&app_for_error, Some(generation)).await;
-                }
-            });
-
-            // Spawn auto-stop timer: warn at (MAX - WARNING) seconds, stop at MAX seconds.
-            // Capture the recording generation so this timer can detect if a new
-            // recording session has started (making this timer stale).
-            let app_for_timer = app.clone();
-            tokio::spawn(async move {
-                let warning_at = MAX_RECORDING_SECS - WARNING_BEFORE_LIMIT_SECS;
-                tokio::time::sleep(std::time::Duration::from_secs(warning_at)).await;
-                let state: tauri::State<'_, AppState> = app_for_timer.state();
-                if state.recording_generation.load(Ordering::SeqCst) != generation {
-                    log::info!("Auto-stop timer (gen {}) is stale, exiting", generation);
-                    return;
-                }
-                if state.get_state() != AppStateEnum::Recording {
-                    return;
-                }
-                log::info!("Recording approaching limit — {}s warning", WARNING_BEFORE_LIMIT_SECS);
-                let _ = app_for_timer.emit(
-                    "recording-time-warning",
-                    serde_json::json!({ "remaining_secs": WARNING_BEFORE_LIMIT_SECS }),
-                );
-
-                tokio::time::sleep(std::time::Duration::from_secs(WARNING_BEFORE_LIMIT_SECS)).await;
-                let state: tauri::State<'_, AppState> = app_for_timer.state();
-                if state.recording_generation.load(Ordering::SeqCst) != generation {
-                    log::info!("Auto-stop timer (gen {}) is stale after warning, exiting", generation);
-                    return;
-                }
-                if state.get_state() == AppStateEnum::Recording {
-                    log::info!("Max recording duration ({}s) reached — auto-stopping", MAX_RECORDING_SECS);
-                    stop_recording_for_generation(&app_for_timer, Some(generation)).await;
-                }
-            });
-
-            // Speculative cleanup-sidecar prewarm: page the swapped-out MLX
-            // weights back in during the recording window, so the stop-path
-            // cleanup starts hot. The flag is set HERE, synchronously, so a
-            // stop that races this spawn still finds the handoff gate (a
-            // stale-set flag can only extend a wait the sidecar genuinely
-            // needs; the guard inside prewarm_sidecar always clears it).
-            {
-                let prewarm_state: &AppState = &state;
-                prewarm_state
-                    .llm_prewarming
-                    .store(true, std::sync::atomic::Ordering::SeqCst);
-                let app_for_prewarm = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let state: tauri::State<'_, AppState> = app_for_prewarm.state();
-                    crate::llm::cleanup::prewarm_sidecar(&state).await;
-                });
-            }
-
-            log::info!("Recording started — microphone active");
-            Ok(generation)
-        }
-        Err(e) => {
-            log::error!("Failed to start audio capture: {}", e);
-            if state.get_state() == AppStateEnum::Idle {
-                show_recording_error(app, "recording-error", state.recording_generation.load(Ordering::SeqCst),
-                    serde_json::json!({ "error": &e }));
-                let _ = app.emit("recovery-recordings-changed", ());
-            }
-            Err(e)
-        }
-    }
-}
-
-/// Stop recording: close microphone, collect samples, transcribe, paste.
-pub async fn handle_stop_recording(app: &AppHandle) {
-    stop_recording_for_generation(app, None).await;
-}
-
-async fn stop_recording_for_generation(app: &AppHandle, generation: Option<u64>) {
-    let state: tauri::State<'_, AppState> = app.state();
-    if !state.claim_recording_end(generation) {
-        log::warn!("Cannot stop recording: currently in {:?} state", state.get_state());
-        return;
-    }
-
-    let recording_generation = state.recording_generation.load(Ordering::SeqCst);
-
-    unregister_cancel_shortcut(app);
-    let _ = app.emit("recording-stopped", ());
-    crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
-
-    let finished = crate::audio::capture::finish_recording_capture(&state).await;
-    let finished = match finished {
-        Ok(finished) => finished,
-        Err(error) => {
-            state.set_state(AppStateEnum::Idle);
-            crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
-            show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
-            let _ = app.emit("recovery-recordings-changed", ());
-            return;
-        }
-    };
-    let capture_error = finished.capture_error;
-    let duration_ms = finished.duration_ms;
-    let Some(temp_path) = finished.audio_path else {
-        log::info!("Recording too short ({} samples)", finished.sample_count);
-        // Tasks already joined above; the cache is simply dropped.
-        hide_overlay(app);
-        state.set_state(AppStateEnum::Idle);
-        crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
-        return;
-    };
-    log::info!("Captured {} samples at {} Hz ({:.3}s)", finished.sample_count, finished.sample_rate, duration_ms as f64 / 1000.0);
-    if let Some(error) = &capture_error {
-        show_recording_error(app, "recording-error", recording_generation, serde_json::json!({
-            "error": format!("{error}. Only the captured portion was saved; nothing will be pasted."),
-            "audio_path": temp_path.to_string_lossy()
-        }));
-    }
-
-    // Transcribe
-    let app_clone = app.clone();
-    let temp_path_str = temp_path.to_string_lossy().to_string();
-
-    // Assign a job ID for stale-result prevention
-    let job_id = state.new_job();
-    let vocabulary = state.recording_vocabulary.lock().unwrap_or_else(|error| error.into_inner()).clone();
-
-    tokio::spawn(async move {
-        let state: tauri::State<'_, AppState> = app_clone.state();
-        log::info!("Starting transcription...");
-        let result = crate::asr::engine::with_engine(&state.asr_engine, move |engine| {
-            engine.transcribe_file_with_vocabulary(&temp_path_str, &vocabulary)
-        }).await;
-
-        match result {
-            Ok(asr_result) => {
-                let mut paste_failed = capture_error.is_some();
-                log::info!("Transcription complete (RTF: {:.1}x)", asr_result.rtfx);
-
-                // Check if this job is still current (user may have started a new recording)
-                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation {
-                    log::info!("Job {} is stale, discarding transcription", job_id);
-                    return;
-                }
-
-                let raw_asr_text = asr_result.unboosted_text.clone().unwrap_or_else(|| asr_result.text.clone());
-                let mut final_text = asr_result.text.clone();
-                let cleanup_suggestion = None;
-                let cleanup_status: LlmCleanupStatus;
-
-                // LLM cleanup (if enabled).
-                let settings = state.settings.lock().await;
-                let llm_enabled = settings.llm_cleanup_enabled;
-                let auto_paste = settings.auto_paste;
-                let restore_clipboard = settings.restore_clipboard;
-                let restore_focus_before_paste = settings.restore_focus_before_paste;
-                let dictionary = settings.dictionary.clone();
-                let protected_terms: Vec<String> = settings.vocabulary.iter().cloned()
-                    .chain(dictionary.iter().map(|entry| entry.replacement.clone())).collect();
-                drop(settings);
-
-                if capture_error.is_none() {
-                    final_text = crate::dictionary::apply(&final_text, &dictionary);
-                }
-
-                let show_overlay_setting = {
-                    let s = state.settings.lock().await;
-                    s.show_overlay
-                };
-
-                if llm_enabled && capture_error.is_none() {
-                    // Transition overlay to "Cleaning up..." state so the
-                    // user sees the pipeline moved on from transcription.
-                    state.set_state(AppStateEnum::CleaningUp);
-                    crate::commands::overlay::publish_state(&app_clone, AppStateEnum::CleaningUp);
-
-                    let (cleaned, status) =
-                        run_cleanup(&state, &final_text, &protected_terms).await;
-                    cleanup_status = status;
-                    if matches!(cleanup_status, LlmCleanupStatus::Applied { .. }) {
-                        final_text = cleaned;
-                    }
-                } else {
-                    cleanup_status = LlmCleanupStatus::Disabled;
-                }
-
-
-                // Check again if this job is still current
-                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation {
-                    log::info!("Job {} is stale after cleanup, discarding", job_id);
-                    return;
-                }
-
-                // Update cached last-status and emit to the UI so the overlay
-                // can show a brief badge before hiding. Both places read the
-                // same enum, so the overlay and the history view stay in sync.
-                {
-                    let mut last = state.llm_last_status.lock().await;
-                    *last = cleanup_status.clone();
-                }
-                let _ = app_clone.emit("llm-cleanup-status", &cleanup_status);
-
-                // Decide how long to keep the overlay open after cleanup so
-                // the badge is visible to the user. Failure modes get a longer
-                // dwell since the user needs time to read the message.
-                // SkippedTooShort and Disabled get 0 because there's nothing
-                // worth interrupting the flow for.
-                let badge_dwell_ms: u64 = if !show_overlay_setting {
-                    0
-                } else {
-                    match cleanup_status {
-                        LlmCleanupStatus::Suggested { .. } | LlmCleanupStatus::Applied { .. } => 800,
-                        LlmCleanupStatus::SkippedTooShort
-                        | LlmCleanupStatus::SkippedNoCandidates
-                        | LlmCleanupStatus::NoChanges
-                        | LlmCleanupStatus::Disabled
-                        | LlmCleanupStatus::Idle => 0,
-                        LlmCleanupStatus::Unavailable { .. }
-                        | LlmCleanupStatus::Failed { .. }
-                        | LlmCleanupStatus::Rejected { .. }
-                        | LlmCleanupStatus::TimedOut { .. } => 2000,
-                    }
-                };
-
-                let transcription = crate::models::Transcription {
-                    id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
-                    text: final_text.clone(),
-                    duration_ms,
-                    created_at: chrono::Utc::now(),
-                    word_count: final_text.split_whitespace().count(),
-                    cancelled: false,
-                    capture_error: capture_error.clone(),
-                    raw_text: (final_text != raw_asr_text).then_some(raw_asr_text),
-                    cleanup_suggestion,
-                    llm_applied: matches!(cleanup_status, LlmCleanupStatus::Applied { .. }),
-                    llm_cleanup_status: cleanup_status.clone(),
-                };
-
-                // Save
-                {
-                    let mut last = state.last_transcription.lock().await;
-                    *last = Some(transcription.clone());
-                }
-                let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
-                let history_error = saved.as_ref().err().cloned();
-                if let Some(error) = &history_error {
-                    log::error!("History save failed: {error}");
-                    let _ = app_clone.emit("history-error", error);
-                }
-                crate::audio::wav::finish_after_history(&temp_path, capture_error.is_some(), saved.is_ok());
-
-                crate::commands::transcription::emit_transcription(&app_clone, &transcription, &saved);
-
-                // Paste at cursor (if auto_paste is enabled), then hide overlay
-                if capture_error.is_none() && !final_text.trim().is_empty() {
-                    if auto_paste {
-                        let target_pid = if restore_focus_before_paste {
-                            let start_pid = state.target_pid.load(Ordering::SeqCst);
-                            let current_pid = state.paste_backend.get_frontmost_pid();
-                            let our_pid = std::process::id() as i32;
-
-                            if current_pid == start_pid || current_pid == our_pid || current_pid == 0 {
-                                // Same app or SottoASR stole focus → use original target
-                                start_pid
-                            } else {
-                                // User intentionally switched apps → paste where they are now
-                                log::info!("User switched apps during recording: {} → {}, pasting at current", start_pid, current_pid);
-                                current_pid
-                            }
-                        } else {
-                            0
-                        };
-                        let paste_result = crate::paste::backend::write_text(
-                            &state.paste_backend, &final_text,
-                            crate::paste::backend::ClipboardAction::Paste { target_pid, restore: restore_clipboard },
-                        ).await;
-
-                        match paste_result {
-                            Ok(()) => {
-                                log::info!("Text pasted at cursor");
-                                let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id }));
-                            }
-                            Err(e) => {
-                                log::error!("Paste failed: {}", e);
-                                paste_failed = true;
-                                let copy = crate::paste::backend::write_text(&state.paste_backend, &final_text, crate::paste::backend::ClipboardAction::Copy).await;
-                                let clipboard_available = copy.is_ok();
-                                let mut error = match copy {
-                                    Ok(()) => { log::info!("Text copied to clipboard as fallback"); e }
-                                    Err(copy_error) => format!("{e}. Clipboard copy also failed: {copy_error}"),
-                                };
-                                if let Some(history_error) = &history_error { error.push_str(&format!(". History also could not be saved: {history_error}")); }
-                                show_recording_error(&app_clone, "paste-error", recording_generation,
-                                    serde_json::json!({ "error": error, "clipboard_available": clipboard_available,
-                                        "audio_path": history_error.as_ref().map(|_| temp_path.to_string_lossy()) }));
-                            }
-                        }
-                    } else {
-                        match crate::paste::backend::write_text(&state.paste_backend, &final_text, crate::paste::backend::ClipboardAction::Copy).await {
-                            Ok(()) => {
-                                log::info!("Text copied to clipboard (auto_paste disabled)");
-                                let _ = app_clone.emit("paste-complete", serde_json::json!({ "id": &transcription.id, "clipboard_only": true }));
-                            }
-                            Err(e) => {
-                                log::error!("Clipboard copy failed: {}", e);
-                                paste_failed = true;
-                                let error = history_error.as_ref().map(|history| format!("{e}. History also could not be saved: {history}")).unwrap_or(e);
-                                show_recording_error(&app_clone, "paste-error", recording_generation,
-                                    serde_json::json!({ "error": error, "clipboard_available": false,
-                                        "audio_path": history_error.as_ref().map(|_| temp_path.to_string_lossy()) }));
-                            }
-                        }
-                    }
-                }
-                // A storage warning must not take focus until paste finishes.
-                if let Some(error) = history_error {
-                    if let Some(interruption) = &capture_error {
-                        show_recording_error(&app_clone, "recording-error", recording_generation,
-                            serde_json::json!({ "error": format!("{interruption}. History also could not be saved: {error}. Audio was retained; nothing was pasted."),
-                                "audio_path": temp_path.to_string_lossy() }));
-                    } else if !paste_failed {
-                        paste_failed = true;
-                        show_recording_error(&app_clone, "history-save-error", recording_generation,
-                            serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
-                    }
-                }
-                // Linger briefly so the cleanup-status badge is visible to the
-                // user before the overlay hides. The paste already happened,
-                // so this only delays the hide animation, not the user-visible
-                // text appearing at the cursor.
-                if !paste_failed && badge_dwell_ms > 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(badge_dwell_ms)).await;
-                }
-                // Hide overlay after paste/copy completes
-                if !paste_failed && state.recording_generation.load(Ordering::SeqCst) == recording_generation {
-                    hide_overlay(&app_clone);
-                }
-            }
-            Err(e) => {
-                if !state.is_current_job(job_id) || state.recording_generation.load(Ordering::SeqCst) != recording_generation { return; }
-                log::error!("Transcription failed: {}", e);
-                show_recording_error(&app_clone, "transcription-error", recording_generation,
-                    serde_json::json!({ "error": e, "audio_path": temp_path.to_string_lossy() }));
-            }
-        }
-
-        if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
-            state.set_state(AppStateEnum::Idle);
-            crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
-            let _ = app_clone.emit("recovery-recordings-changed", ());
+    // Publish the start events before consuming an early device error.
+    // The callback only enqueues once. The stream's callbacks and the
+    // recording writer share its sender, so the channel closes once Stop
+    // drops the stream and the writer finishes; ordinary recordings do not
+    // leave a waiting task.
+    let app_for_error = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Some(generation) = error_receiver.recv().await {
+            handle_stop_recording(&app_for_error, Some(generation)).await;
         }
     });
 
-    log::info!("Recording stopped, transcription queued");
+    let app_for_timer = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app_for_timer.state::<AppState>();
+        let events = TauriEvents::new(&app_for_timer);
+        if crate::pipeline::wait_for_recording_limit(&state, &events, generation).await {
+            handle_stop_recording(&app_for_timer, Some(generation)).await;
+        }
+    });
+
+    // Speculative cleanup-sidecar prewarm: page the swapped-out MLX weights
+    // back in during the recording window, so the stop-path cleanup starts
+    // hot. It is counted HERE, synchronously, so a stop that races this
+    // spawn still finds the handoff gate; prewarm_sidecar releases it.
+    crate::llm::cleanup::begin_prewarm(&state);
+    let app_for_prewarm = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::llm::cleanup::prewarm_sidecar(&app_for_prewarm.state::<AppState>()).await;
+    });
+    Ok(generation)
 }
 
-/// Cancel recording: stop mic, transcribe what we have, save as cancelled, don't paste.
+/// Stop the current recording, or only `generation` when given, then
+/// transcribe and deliver in the background.
+pub async fn handle_stop_recording(app: &AppHandle, generation: Option<u64>) {
+    let state = app.state::<AppState>();
+    let events = TauriEvents::new(app);
+    if let Some(job) = crate::pipeline::claim_and_finish(&state, &events, generation).await {
+        spawn_completion(app, job);
+        log::info!("Recording stopped, transcription queued");
+    }
+}
+
+/// Cancel recording: nothing is pasted; the transcript is saved as cancelled.
 pub async fn handle_cancel_recording(app: &AppHandle) {
-    let state: tauri::State<'_, AppState> = app.state();
-    if !state.try_transition(AppStateEnum::Recording, AppStateEnum::Transcribing) {
-        log::warn!("Cannot cancel recording: currently in {:?} state", state.get_state());
-        return;
+    let state = app.state::<AppState>();
+    let events = TauriEvents::new(app);
+    if let Some(job) = crate::pipeline::cancel(&state, &events).await {
+        spawn_completion(app, job);
+        log::info!("Recording cancelled, transcription queued");
+    }
+}
+
+fn spawn_completion(app: &AppHandle, job: StopJob) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let events = TauriEvents::new(&app);
+        crate::pipeline::complete(&state, &events, job).await;
+    });
+}
+
+/// Production `PipelineEvents`: Tauri events, the overlay, sound cues and
+/// the cancel shortcut. Event names and payloads are the ones the frontend reads.
+pub(crate) struct TauriEvents {
+    app: AppHandle,
+}
+
+impl TauriEvents {
+    pub(crate) fn new(app: &AppHandle) -> Self {
+        Self { app: app.clone() }
+    }
+}
+
+fn failure_event(kind: FailureKind) -> &'static str {
+    match kind {
+        FailureKind::Recording => "recording-error",
+        FailureKind::Transcription => "transcription-error",
+        FailureKind::Paste => "paste-error",
+        FailureKind::HistorySave => "history-save-error",
+    }
+}
+
+/// How long the cleanup badge stays visible before the overlay hides.
+/// Failures stay longer so the message can be read; outcomes with nothing
+/// worth interrupting the flow for get no dwell.
+fn badge_dwell(status: &LlmCleanupStatus) -> Duration {
+    match status {
+        LlmCleanupStatus::Suggested { .. } | LlmCleanupStatus::Applied { .. } => Duration::from_millis(800),
+        LlmCleanupStatus::SkippedTooShort
+        | LlmCleanupStatus::SkippedNoCandidates
+        | LlmCleanupStatus::NoChanges
+        | LlmCleanupStatus::Disabled
+        | LlmCleanupStatus::Idle => Duration::ZERO,
+        LlmCleanupStatus::Unavailable { .. }
+        | LlmCleanupStatus::Failed { .. }
+        | LlmCleanupStatus::Rejected { .. }
+        | LlmCleanupStatus::TimedOut { .. } => Duration::from_millis(2000),
+    }
+}
+
+/// What the overlay does when a dictation ends: `None` keeps it, because a
+/// reported failure stays until the user dismisses it; otherwise it hides
+/// after the returned dwell, which keeps the cleanup badge readable.
+fn overlay_linger(outcome: &Outcome, show_overlay: bool) -> Option<Duration> {
+    match outcome {
+        Outcome::Delivered(status) if show_overlay => Some(badge_dwell(status)),
+        Outcome::Delivered(_) | Outcome::Dismissed => Some(Duration::ZERO),
+        Outcome::Failed | Outcome::Stale => None,
+    }
+}
+
+#[cfg(test)]
+mod adapter_tests {
+    use super::{overlay_linger, LlmCleanupStatus, Outcome};
+    use std::time::Duration;
+
+    #[test]
+    fn failures_stay_and_cleanup_badges_linger_before_the_hide() {
+        let applied = Outcome::Delivered(LlmCleanupStatus::Applied { elapsed_ms: 5 });
+        assert_eq!(overlay_linger(&applied, true), Some(Duration::from_millis(800)));
+        let timed_out = Outcome::Delivered(LlmCleanupStatus::TimedOut { elapsed_ms: 5 });
+        assert_eq!(overlay_linger(&timed_out, true), Some(Duration::from_millis(2000)));
+        assert_eq!(overlay_linger(&Outcome::Delivered(LlmCleanupStatus::Disabled), true), Some(Duration::ZERO));
+        assert_eq!(overlay_linger(&applied, false), Some(Duration::ZERO), "no badge without the pill");
+        assert_eq!(overlay_linger(&Outcome::Dismissed, true), Some(Duration::ZERO));
+        assert_eq!(overlay_linger(&Outcome::Failed, true), None);
+        assert_eq!(overlay_linger(&Outcome::Stale, true), None);
+    }
+}
+
+impl PipelineEvents for TauriEvents {
+    fn phase(&self, state: AppStateEnum) {
+        crate::commands::overlay::publish_state(&self.app, state);
     }
 
-    let recording_generation = state.recording_generation.load(Ordering::SeqCst);
+    fn busy(&self, state: AppStateEnum) {
+        let _ = self.app.emit("hotkey-busy", serde_json::json!({ "state": state }));
+        cue::play(&self.app, Cue::Busy);
+    }
 
-    unregister_cancel_shortcut(app);
-    hide_overlay(app);
-    let _ = app.emit("recording-cancelled", ());
-    crate::commands::overlay::publish_state(app, AppStateEnum::Transcribing);
+    fn recording_started(&self, generation: u64) {
+        let _ = self.app.emit("recording-started", serde_json::json!({ "generation": generation }));
+        register_cancel_shortcut(&self.app);
+        show_overlay(&self.app);
+        cue::play(&self.app, Cue::Start);
+    }
 
-    let finished = crate::audio::capture::finish_recording_capture(&state).await;
-    let finished = match finished {
-        Ok(finished) => finished,
-        Err(error) => {
-            state.set_state(AppStateEnum::Idle);
-            crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
-            show_recording_error(app, "transcription-error", recording_generation, serde_json::json!({ "error": error }));
-            let _ = app.emit("recovery-recordings-changed", ());
-            return;
+    fn recording_stopped(&self, _generation: u64) {
+        unregister_cancel_shortcut(&self.app);
+        let _ = self.app.emit("recording-stopped", ());
+        cue::play(&self.app, Cue::Stop);
+    }
+
+    fn recording_cancelled(&self, _generation: u64) {
+        unregister_cancel_shortcut(&self.app);
+        hide_overlay(&self.app);
+        let _ = self.app.emit("recording-cancelled", ());
+        cue::play(&self.app, Cue::Cancel);
+    }
+
+    fn time_warning(&self, remaining_secs: u64) {
+        let _ = self.app.emit("recording-time-warning", serde_json::json!({ "remaining_secs": remaining_secs }));
+    }
+
+    fn failure(&self, failure: Failure) {
+        let mut payload = serde_json::json!({ "error": failure.error });
+        if let Some(path) = failure.audio_path {
+            payload["audio_path"] = serde_json::json!(path);
         }
-    };
-    let capture_error = finished.capture_error;
-    let duration_ms = finished.duration_ms;
-    log::info!("Recording cancelled — {} samples collected", finished.sample_count);
-    if let Some(temp_path) = finished.audio_path {
-        let app_clone = app.clone();
-        if let Some(error) = &capture_error {
-            show_recording_error(app, "recording-error", recording_generation, serde_json::json!({
-                "error": format!("{error}. Only the captured portion was saved; nothing will be pasted."),
-                "audio_path": temp_path.to_string_lossy()
-            }));
+        if let Some(available) = failure.clipboard_available {
+            payload["clipboard_available"] = serde_json::json!(available);
         }
-        let temp_path_str = temp_path.to_string_lossy().to_string();
-        let vocabulary = state.recording_vocabulary.lock().unwrap_or_else(|error| error.into_inner()).clone();
-        tokio::spawn(async move {
-            let state: tauri::State<'_, AppState> = app_clone.state();
-            let result = crate::asr::engine::with_engine(&state.asr_engine, move |engine| {
-                engine.transcribe_file_with_vocabulary(&temp_path_str, &vocabulary)
-            }).await;
-            if let Err(error) = &result {
-                show_recording_error(&app_clone, "transcription-error", recording_generation,
-                    serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
-            }
-            if let Ok(asr_result) = result {
-                let transcription = crate::models::Transcription {
-                    id: crate::audio::recovery::recording_id(&temp_path).expect("capture creates a recording UUID"),
-                    text: asr_result.text.clone(),
-                    duration_ms,
-                    created_at: chrono::Utc::now(),
-                    word_count: asr_result.text.split_whitespace().count(),
-                    cancelled: true,
-                    capture_error: capture_error.clone(),
-                    raw_text: asr_result.unboosted_text.clone(),
-                    cleanup_suggestion: None,
-                    llm_applied: false,
-                    llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
-                };
-                let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
-                crate::audio::wav::finish_after_history(&temp_path, capture_error.is_some(), saved.is_ok());
-                if let Err(error) = &saved {
-                    log::error!("History save failed: {error}");
-                    let _ = app_clone.emit("history-error", &error);
-                    show_recording_error(&app_clone, "history-save-error", recording_generation,
-                        serde_json::json!({ "error": error, "audio_path": temp_path.to_string_lossy() }));
-                }
-                crate::commands::transcription::emit_transcription(&app_clone, &transcription, &saved);
-                log::info!("Cancelled transcription saved");
-            }
+        show_recording_error(&self.app, failure_event(failure.kind), failure.generation, payload);
+        cue::play(&self.app, Cue::Error);
+    }
 
-            if state.recording_generation.load(Ordering::SeqCst) == recording_generation {
-                state.set_state(AppStateEnum::Idle);
-                crate::commands::overlay::publish_state(&app_clone, AppStateEnum::Idle);
-                let _ = app_clone.emit("recovery-recordings-changed", ());
-            }
-        });
-    } else {
-        // Too short to transcribe — just save a placeholder
-        let transcription = crate::models::Transcription {
-            id: uuid::Uuid::new_v4().to_string(),
-            text: String::new(),
-            duration_ms,
-            created_at: chrono::Utc::now(),
-            word_count: 0,
-            cancelled: true,
-            capture_error: None,
-            raw_text: None,
-            cleanup_suggestion: None,
-            llm_applied: false,
-            llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
+    fn cleanup_status(&self, status: &LlmCleanupStatus) {
+        let _ = self.app.emit("llm-cleanup-status", status);
+    }
+
+    fn paste_complete(&self, id: &str, clipboard_only: bool) {
+        let payload = if clipboard_only {
+            serde_json::json!({ "id": id, "clipboard_only": true })
+        } else {
+            serde_json::json!({ "id": id })
         };
-        let saved = crate::commands::transcription::add_transcription(transcription.clone()).await;
-        crate::commands::transcription::emit_transcription(app, &transcription, &saved);
-        if let Err(error) = &saved {
-            log::error!("History save failed: {error}");
-            let _ = app.emit("history-error", &error);
-            show_recording_error(app, "history-save-error", recording_generation,
-                serde_json::json!({ "error": error }));
-        }
-        state.set_state(AppStateEnum::Idle);
-        crate::commands::overlay::publish_state(app, AppStateEnum::Idle);
+        let _ = self.app.emit("paste-complete", payload);
     }
 
-    log::info!("Recording cancelled");
+    fn transcription_saved(&self, transcription: &crate::models::Transcription, saved: &Result<Vec<String>, String>) {
+        crate::commands::transcription::emit_transcription(&self.app, transcription, saved);
+    }
+
+    fn history_error(&self, error: &str) {
+        let _ = self.app.emit("history-error", error);
+    }
+
+    fn recordings_changed(&self) {
+        let _ = self.app.emit("recovery-recordings-changed", ());
+    }
+
+    fn finished(&self, generation: u64, outcome: Outcome) -> Linger<'_> {
+        let show_overlay = self.app.state::<AppState>().show_overlay.load(Ordering::SeqCst);
+        let linger = overlay_linger(&outcome, show_overlay);
+        Box::pin(async move {
+            let Some(dwell) = linger else { return };
+            // The text is already delivered; this only delays the hide so
+            // the cleanup badge can be read.
+            if !dwell.is_zero() {
+                tokio::time::sleep(dwell).await;
+            }
+            hide_overlay_for(&self.app, generation, None);
+        })
+    }
 }
 
 /// Logical dimensions of the overlay pill window.
@@ -815,6 +629,9 @@ pub fn precreate_overlay(app: &AppHandle) {
         .resizable(false)
         .visible(false)
         .focused(false)
+        // The card never becomes key on its own, so its first click must
+        // reach the webview instead of only making the panel key.
+        .accept_first_mouse(true)
         .build()
         {
             Ok(w) => w,
@@ -826,15 +643,7 @@ pub fn precreate_overlay(app: &AppHandle) {
 
         match window.to_panel::<OverlayPanel>() {
             Ok(panel) => {
-                panel.set_transparent(true);
-                panel.set_has_shadow(false);
-                panel.set_hides_on_deactivate(false);
-                // Visible on all macOS Spaces (like Cmd+Shift+5 screenshot toolbar)
-                panel.set_collection_behavior(
-                    tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
-                    | tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
-                );
-                clear_all_backgrounds(panel.as_panel());
+                configure_overlay_panel(&panel);
 
                 // Park the hidden panel at a safe default (bottom-center
                 // of the primary display). The first real show_overlay
@@ -872,8 +681,30 @@ pub fn precreate_overlay(app: &AppHandle) {
 /// Defect C. If the panel is already visible (second and later
 /// recordings) we `orderOut:` it first, so the transport is invisible.
 fn show_overlay(app: &AppHandle) {
-    let show = app.state::<AppState>().settings.try_lock().map(|settings| settings.show_overlay).unwrap_or(false);
-    if show { show_overlay_panel(app, false); } else { hide_overlay(app); }
+    if app.state::<AppState>().show_overlay.load(Ordering::SeqCst) {
+        show_overlay_panel(app, false);
+    } else {
+        hide_overlay(app);
+    }
+}
+
+/// Shared NSPanel setup. The non-activating mask keeps a click on the overlay
+/// from activating SottoASR, which would make it the next paste target. An
+/// error card never takes keyboard focus by itself, so typing keeps going to
+/// the user's app; `OVERLAY_ACCEPTS_KEY` lets a click on the card make the
+/// panel key without activating the app.
+fn configure_overlay_panel(panel: &tauri_nspanel::PanelHandle<tauri::Wry>) {
+    use tauri_nspanel::objc2_app_kit::{NSWindowCollectionBehavior, NSWindowStyleMask};
+    panel.set_transparent(true);
+    panel.set_has_shadow(false);
+    panel.set_hides_on_deactivate(false);
+    panel.set_style_mask(panel.as_panel().styleMask() | NSWindowStyleMask::NonactivatingPanel);
+    // Visible on all macOS Spaces (like Cmd+Shift+5 screenshot toolbar)
+    panel.set_collection_behavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
+    // Synchronously clear backgrounds on ALL views in the hierarchy.
+    clear_all_backgrounds(panel.as_panel());
 }
 
 fn show_recording_error(app: &AppHandle, event: &str, generation: u64, payload: serde_json::Value) {
@@ -933,7 +764,6 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
             panel.set_level(PanelLevel::Floating.into());
             panel.set_floating_panel(true);
             panel.order_front_regardless();
-            if interactive { panel.make_key_window(); }
 
             // 5. Verify the panel actually landed on the target screen;
             //    re-apply once if the window server moved it.
@@ -955,7 +785,7 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
         // conversion failed in the past and we have a plain window instead).
         if let Some(window) = app.get_webview_window("overlay") {
             let _ = window.show();
-            if interactive { let _ = window.set_focus(); }
+            // Never focus it: a key overlay would take the user's typing.
             // Best-effort positioning via Tauri for non-panel fallback
             log::info!("Overlay shown (existing window fallback)");
             return;
@@ -978,6 +808,7 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
         .resizable(false)
         .visible(false)
         .focused(false)
+        .accept_first_mouse(true)
         .build()
         {
             Ok(w) => w,
@@ -990,16 +821,7 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
         // Convert to NSPanel for true transparency.
         match window.to_panel::<OverlayPanel>() {
             Ok(panel) => {
-                panel.set_transparent(true);
-                panel.set_has_shadow(false);
-                panel.set_hides_on_deactivate(false);
-                panel.set_collection_behavior(
-                    tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
-                    | tauri_nspanel::objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
-                );
-
-                // Synchronously clear backgrounds on ALL views in the hierarchy.
-                clear_all_backgrounds(panel.as_panel());
+                configure_overlay_panel(&panel);
 
                 // Position BEFORE showing; record session state.
                 if let Some(ref screen) = target_screen {
@@ -1009,7 +831,6 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
                 }
 
                 panel.show();
-                if interactive { panel.make_key_window(); }
 
                 // Verify post-show placement.
                 if let Some(ref screen) = target_screen {
@@ -1027,7 +848,6 @@ fn show_overlay_panel(app: &AppHandle, interactive: bool) {
             Err(e) => {
                 log::error!("Failed to convert overlay to panel: {}, showing as window", e);
                 let _ = window.show();
-                if interactive { let _ = window.set_focus(); }
             }
         }
     });
@@ -1048,6 +868,12 @@ pub(crate) fn hide_overlay(app: &AppHandle) {
 
 pub(crate) fn hide_overlay_if_revision(app: &AppHandle, revision: Option<u64>) {
     let generation = app.state::<AppState>().recording_generation.load(Ordering::SeqCst);
+    hide_overlay_for(app, generation, revision);
+}
+
+/// Hide only while `generation` is still the current recording, so a late
+/// hide cannot close a newer recording's overlay.
+fn hide_overlay_for(app: &AppHandle, generation: u64, revision: Option<u64>) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
         if !crate::commands::overlay::clear_overlay(&app, generation, revision) { return; }

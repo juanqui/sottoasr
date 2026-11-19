@@ -32,7 +32,7 @@
       "entitlements": "./Entitlements.plist",
       "signingIdentity": "Developer ID Application: Juan Villa (DR3FNR9MW9)"
     },
-    "resources": ["sidecar/llm_cleanup.py", "vendor/fluidaudio-rs/FluidAudio-LICENSE", "vendor/fluidaudio-rs/LICENSE"]
+    "resources": ["sidecar/llm_cleanup.py", "sidecar/requirements.lock", "vendor/fluidaudio-rs/FluidAudio-LICENSE", "vendor/fluidaudio-rs/LICENSE"]
   },
   "plugins": {
     "updater": {

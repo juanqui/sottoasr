@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "history-clipboard",
+  "description": "History copies a transcript to the clipboard when the user clicks Copy.",
+  "windows": ["history"],
+  "permissions": ["clipboard-manager:allow-write-text"]
+}

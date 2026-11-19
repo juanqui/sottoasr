@@ -7,7 +7,7 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 - Svelte 5 + TypeScript (frontend)
 - FluidAudio via fluidaudio-rs (CoreML/ANE — default macOS backend)
 - parakeet-rs (ONNX Runtime — cross-platform fallback via `asr-parakeet` feature flag)
-- cpal 0.15 (audio capture)
+- cpal 0.16 (audio capture)
 - Vite 8 (build tool)
 
 ## Quick Commands

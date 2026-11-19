@@ -21,7 +21,7 @@ beforeEach(() => {
   const ctx={clearRect:vi.fn(),setTransform:vi.fn(),beginPath:vi.fn(),roundRect:vi.fn(),fill:vi.fn(),fillStyle:''};
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
 });
-afterEach(async () => { if(component) await unmount(component); component=undefined; target?.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { vi.useRealTimers(); if(component) await unmount(component); component=undefined; target?.remove(); vi.unstubAllGlobals(); });
 async function render() {
   target=document.createElement('div'); document.body.append(target); component=mount(OverlayPill,{target}); flushSync();
   await vi.waitFor(() => expect(listeners.has('overlay-state')).toBe(true));
@@ -59,7 +59,7 @@ it('starts a new recording without restoring a stale predecessor error', async (
 });
 it('never claims text was copied when fallback failed', async () => {
   await render(); publish({generation:3}); fail('paste-error',{generation:3,error:'Clipboard unavailable',clipboard_available:false});
-  expect(target.textContent).not.toContain('Text is on the clipboard'); button('History').click(); expect(invoke).toHaveBeenCalledWith('open_transcription_history',undefined);
+  expect(target.textContent).not.toContain('Text is on the clipboard'); button('History').click(); expect(invoke).toHaveBeenCalledWith('open_transcription_history');
   fail('paste-error',{generation:3,error:'Permission needed',clipboard_available:true}); expect(target.textContent).toContain('Text is on the clipboard');
 });
 it('does not dismiss a newer failure when an old dismissal completes late', async () => {
@@ -92,10 +92,29 @@ it('waits for listener registration before requesting the snapshot and skips it 
   await render(); expect(invoke).not.toHaveBeenCalled(); await unmount(component!); component=undefined;
   const off=vi.fn(); registered(off); await vi.waitFor(()=>expect(off).toHaveBeenCalledOnce()); expect(invoke).not.toHaveBeenCalled();
 });
-it('labels experimental output as a History suggestion instead of cleaned dictation', async () => {
+it('says cleanup is running and labels experimental output as a History suggestion instead of cleaned dictation', async () => {
   await render(); publish({generation:1,state:'CleaningUp'});
-  expect(target.textContent).toContain('Preparing suggestion');
+  expect(target.textContent).toContain('Cleaning up');
   listeners.get('llm-cleanup-status')!({payload:{kind:'suggested',detail:{elapsed_ms:20}}}); flushSync();
   expect(target.textContent).toContain('Suggestion in History');
   expect(target.textContent).not.toContain('Cleaned');
+});
+it('shows a brief busy notice when a start is refused and clears it by itself', async () => {
+  await render(); publish({generation:1,state:'Recording',started_at_ms:Date.now()}); publish({state:'Transcribing'});
+  vi.useFakeTimers();
+  listeners.get('hotkey-busy')!({payload:{state:'Transcribing'}}); flushSync();
+  expect(target.querySelector('[role="status"]')?.textContent).toContain('Still working');
+  expect(target.textContent).toContain('Transcribing');
+  vi.advanceTimersByTime(2000); flushSync();
+  expect(target.textContent).not.toContain('Still working');
+});
+it('keeps busy presses around an error from showing once the error is dismissed', async () => {
+  await render(); publish({generation:1,state:'Transcribing'});
+  vi.useFakeTimers();
+  listeners.get('hotkey-busy')!({payload:{state:'Transcribing'}}); flushSync(); // showing when the error arrives
+  fail('transcription-error',{generation:1,error:'Decoder unavailable; audio was kept.'}); publish({state:'Idle'});
+  listeners.get('hotkey-busy')!({payload:{state:'Transcribing'}}); flushSync(); // pressed while the error shows
+  vi.advanceTimersByTime(500);
+  button('Dismiss').click(); await vi.waitFor(()=>expect(target.querySelector('.error-card')).toBeNull());
+  expect(target.textContent).not.toContain('Still working');
 });

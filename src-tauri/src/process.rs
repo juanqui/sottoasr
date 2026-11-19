@@ -1,10 +1,53 @@
 //! Owned child processes, bounded commands, and explicit application exit cleanup.
 
+use std::fmt;
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Arc, LazyLock, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::Duration;
+
+/// Why a child process was not started.
+#[derive(Debug)]
+pub(crate) enum SpawnError {
+    /// The application is exiting and starts no new children.
+    ShuttingDown,
+    /// The operating system refused to start it.
+    Os(std::io::Error),
+}
+
+impl fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SpawnError::ShuttingDown => f.write_str("Application is shutting down"),
+            SpawnError::Os(error) => write!(f, "Could not start child process: {error}"),
+        }
+    }
+}
+
+/// Why a bounded command produced no output.
+#[derive(Debug)]
+pub(crate) enum BoundedError {
+    Spawn(SpawnError),
+    /// It ran past its deadline and was killed.
+    TimedOut(Duration),
+    /// Waiting for it or reading its pipes failed.
+    Wait(std::io::Error),
+}
+
+impl fmt::Display for BoundedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoundedError::Spawn(error) => write!(f, "{error}"),
+            BoundedError::TimedOut(timeout) => write!(
+                f,
+                "Child process timed out after {} seconds",
+                timeout.as_secs()
+            ),
+            BoundedError::Wait(error) => write!(f, "Child process failed: {error}"),
+        }
+    }
+}
 
 /// Tauri exits without guaranteed managed-state Drop. Keep weak references to
 /// actual owned Child handles, never a list of potentially recycled PIDs.
@@ -22,19 +65,17 @@ struct ProcessRegistryState {
 static PROCESSES: LazyLock<ProcessRegistry> = LazyLock::new(ProcessRegistry::default);
 
 impl ProcessRegistry {
-    fn spawn(&self, command: &mut Command) -> Result<OwnedChild, String> {
+    fn spawn(&self, command: &mut Command) -> Result<OwnedChild, SpawnError> {
         let mut registry = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if registry.exiting {
-            return Err("Application is shutting down".into());
+            return Err(SpawnError::ShuttingDown);
         }
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
-        let child = command
-            .spawn()
-            .map_err(|e| format!("Could not start child process: {e}"))?;
+        let child = command.spawn().map_err(SpawnError::Os)?;
         let child = Arc::new(Mutex::new(child));
         registry.children.retain(|entry| entry.strong_count() > 0);
         registry.children.push(Arc::downgrade(&child));
@@ -77,7 +118,7 @@ pub(crate) struct OwnedChild(Arc<Mutex<Child>>);
 
 impl OwnedChild {
     pub(crate) fn spawn(command: &mut Command) -> Result<Self, String> {
-        PROCESSES.spawn(command)
+        PROCESSES.spawn(command).map_err(|error| error.to_string())
     }
 
     pub(crate) fn lock(&self) -> MutexGuard<'_, Child> {
@@ -139,7 +180,18 @@ pub(crate) fn bounded_command(
     command: &mut Command,
     timeout: Duration,
 ) -> Result<std::process::Output, String> {
-    let child = PROCESSES.spawn(command.stdout(Stdio::piped()).stderr(Stdio::piped()))?;
+    bounded_output(command, timeout).map_err(|error| error.to_string())
+}
+
+/// `bounded_command` for callers that must tell a program that cannot start
+/// from one that ran out of time.
+pub(crate) fn bounded_output(
+    command: &mut Command,
+    timeout: Duration,
+) -> Result<std::process::Output, BoundedError> {
+    let child = PROCESSES
+        .spawn(command.stdout(Stdio::piped()).stderr(Stdio::piped()))
+        .map_err(BoundedError::Spawn)?;
     fn drain(mut stream: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
@@ -156,8 +208,10 @@ pub(crate) fn bounded_command(
         });
         receiver
     }
-    let stdout = drain(child.lock().stdout.take().ok_or("Missing command stdout")?);
-    let stderr = drain(child.lock().stderr.take().ok_or("Missing command stderr")?);
+    let missing =
+        |pipe: &str| BoundedError::Wait(std::io::Error::other(format!("missing command {pipe}")));
+    let stdout = drain(child.lock().stdout.take().ok_or_else(|| missing("stdout"))?);
+    let stderr = drain(child.lock().stderr.take().ok_or_else(|| missing("stderr"))?);
     let started = std::time::Instant::now();
     let status = loop {
         let result = child.lock().try_wait();
@@ -167,11 +221,8 @@ pub(crate) fn bounded_command(
             result => {
                 child.terminate();
                 return Err(match result {
-                    Err(error) => format!("Child process failed: {error}"),
-                    _ => format!(
-                        "Child process timed out after {} seconds",
-                        timeout.as_secs()
-                    ),
+                    Err(error) => BoundedError::Wait(error),
+                    _ => BoundedError::TimedOut(timeout),
                 });
             }
         }

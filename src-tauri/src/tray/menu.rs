@@ -1,15 +1,30 @@
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+    tray::{TrayIcon, TrayIconBuilder},
     AppHandle, Manager, WebviewUrl,
 };
 
 use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Compile-time embedded tray icons (PNG template images).
 const TRAY_ICON_NORMAL: &[u8] = include_bytes!("../../icons/tray-iconTemplate.png");
 const TRAY_ICON_UPDATE: &[u8] = include_bytes!("../../icons/tray-icon-updateTemplate.png");
+
+const TRAY_ID: &str = "main-tray";
+
+/// Runs `register` on the first call only. Tauri appends every
+/// `on_menu_event` handler, so each extra registration would run every click
+/// once more. This is the only path to the registration, and only
+/// `setup_tray_menu` calls it.
+fn register_menu_handler_once(register: impl FnOnce()) {
+    static REGISTERED: AtomicBool = AtomicBool::new(false);
+    if !REGISTERED.swap(true, Ordering::SeqCst) {
+        register();
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -17,11 +32,21 @@ const TRAY_ICON_UPDATE: &[u8] = include_bytes!("../../icons/tray-icon-updateTemp
 
 /// Initial tray setup.  Called once during app launch.
 pub fn setup_tray_menu(app: &AppHandle) -> Result<(), String> {
-    build_tray_menu(app, TrayState::Normal)
+    let tray = match app.tray_by_id(TRAY_ID) {
+        Some(tray) => tray,
+        None => create_tray(app)?,
+    };
+    // Register the handler BEFORE setting the menu so the first click
+    // already has one (first-right-click-ignored bug on macOS).
+    register_menu_handler_once(|| tray.on_menu_event(handle_menu_event));
+    tray.set_menu(Some(build_menu(app, &TrayState::Normal)?)).map_err(|e| e.to_string())?;
+    log::info!("Tray menu configured");
+    Ok(())
 }
 
-/// Single canonical tray refresh. Reads UpdateState directly.
-/// Call from anywhere — periodic loop, manual check, download complete.
+/// Single canonical tray refresh. Reads UpdateState directly and replaces
+/// only the menu and icon. Call from anywhere — periodic loop, manual check,
+/// install complete.
 pub async fn refresh_tray_from_state(app: &AppHandle) {
     let state = match app.try_state::<crate::updater::UpdateState>() {
         Some(state) => state,
@@ -30,8 +55,14 @@ pub async fn refresh_tray_from_state(app: &AppHandle) {
     let (has_update, tray_state) = read_tray_state(&state).await;
     let handle = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
-        set_tray_icon(&handle, has_update);
-        if let Err(error) = build_tray_menu(&handle, tray_state) {
+        let Some(tray) = handle.tray_by_id(TRAY_ID) else {
+            log::warn!("Tray refresh skipped: the tray icon does not exist yet");
+            return;
+        };
+        set_tray_icon(&tray, has_update);
+        let menu = build_menu(&handle, &tray_state)
+            .and_then(|menu| tray.set_menu(Some(menu)).map_err(|e| e.to_string()));
+        if let Err(error) = menu {
             log::error!("Failed to rebuild tray menu: {error}");
         }
     }) {
@@ -43,19 +74,16 @@ pub async fn refresh_tray_from_state(app: &AppHandle) {
 /// when the mutex is uncontended, terminating the periodic update checker.
 async fn read_tray_state(state: &crate::updater::UpdateState) -> (bool, TrayState) {
     let version = state.available_version.lock().await.clone();
-    let app_update = state.update_available.load(std::sync::atomic::Ordering::SeqCst);
-    let model_update = state.model_update_available.load(std::sync::atomic::Ordering::SeqCst);
-    let restart = state.restart_pending.load(std::sync::atomic::Ordering::SeqCst);
+    let app_update = state.update_available.load(Ordering::SeqCst);
+    let restart = state.restart_pending.load(Ordering::SeqCst);
     let tray_state = if restart {
         TrayState::RestartPending
     } else if let Some(version) = version {
-        TrayState::UpdateAvailable(if model_update { format!("{version} (+ model)") } else { version })
-    } else if model_update {
-        TrayState::ModelUpdateAvailable
+        TrayState::UpdateAvailable(version)
     } else {
         TrayState::Normal
     };
-    (app_update || model_update || restart, tray_state)
+    (app_update || restart, tray_state)
 }
 
 // ---------------------------------------------------------------------------
@@ -65,16 +93,31 @@ async fn read_tray_state(state: &crate::updater::UpdateState) -> (bool, TrayStat
 #[derive(Debug, PartialEq)]
 enum TrayState {
     Normal,
-    UpdateAvailable(String), // version string, may include " (+ model)" suffix
+    UpdateAvailable(String), // version string
     RestartPending,
-    ModelUpdateAvailable,
 }
 
 // ---------------------------------------------------------------------------
-// Internal: build/rebuild the menu
+// Internal: build the tray and its menu
 // ---------------------------------------------------------------------------
 
-fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
+/// The tray is NOT defined in tauri.conf.json — it is created here so that
+/// creation happens after the event loop is initialized (RunEvent::Ready),
+/// avoiding the ghost/duplicate icon timing bug on macOS (tauri#9480).
+fn create_tray(app: &AppHandle) -> Result<TrayIcon, String> {
+    log::info!("Creating tray icon programmatically");
+    let icon = Image::from_bytes(TRAY_ICON_NORMAL)
+        .map_err(|e| format!("Failed to load tray icon: {}", e))?;
+    TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip("SottoASR \u{2014} Speech to Text")
+        .icon(icon)
+        .icon_as_template(true)
+        .show_menu_on_left_click(true)
+        .build(app)
+        .map_err(|e| format!("Failed to create tray icon: {}", e))
+}
+
+fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, String> {
     // -- Build menu items --
     let copy_last =
         MenuItem::with_id(app, "copy_last", "Copy Last Transcription", true, None::<&str>)
@@ -87,13 +130,12 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
     // Single update item — label varies by state, always opens the update window.
-    let update_label = match &state {
+    let update_label = match state {
         TrayState::Normal => "Check for Updates...".to_string(),
         TrayState::UpdateAvailable(version) => {
             format!("Update Available \u{2014} {}", version)
         }
         TrayState::RestartPending => "Restart to Update".to_string(),
-        TrayState::ModelUpdateAvailable => "AI Model Update Available...".to_string(),
     };
     let check_updates =
         MenuItem::with_id(app, "check_updates", &update_label, true, None::<&str>)
@@ -129,143 +171,94 @@ fn build_tray_menu(app: &AppHandle, state: TrayState) -> Result<(), String> {
     // Build the Menu from the item refs.
     let item_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
         items.iter().map(|b| b.as_ref()).collect();
-    let menu = Menu::with_items(app, &item_refs).map_err(|e| e.to_string())?;
+    Menu::with_items(app, &item_refs).map_err(|e| e.to_string())
+}
 
-    // Get or create the tray icon.
-    // The tray is NOT defined in tauri.conf.json — it is created here so that
-    // creation happens after the event loop is initialized (RunEvent::Ready),
-    // avoiding the ghost/duplicate icon timing bug on macOS (tauri#9480).
-    let tray = match app.tray_by_id("main-tray") {
-        Some(tray) => tray,
-        None => {
-            log::info!("Creating tray icon programmatically");
-            let icon = Image::from_bytes(TRAY_ICON_NORMAL)
-                .map_err(|e| format!("Failed to load tray icon: {}", e))?;
-            TrayIconBuilder::with_id("main-tray")
-                .tooltip("SottoASR \u{2014} Speech to Text")
-                .icon(icon)
-                .icon_as_template(true)
-                .show_menu_on_left_click(true)
-                .build(app)
-                .map_err(|e| format!("Failed to create tray icon: {}", e))?
-        }
-    };
-
-    // Register event handler BEFORE setting the menu to avoid a race where
-    // the first click arrives before the handler is wired up (fixes
-    // first-right-click-ignored bug on macOS).
-    tray.on_menu_event(move |app, event| {
-        match event.id().as_ref() {
-            "copy_last" => {
-                log::info!("Tray: Copy last transcription");
-                tauri::async_runtime::spawn({
-                    let app = app.clone();
-                    async move {
-                        let state: tauri::State<'_, crate::state::AppState> = app.state();
-                        let text = state.last_transcription.lock().await.as_ref().map(|item| item.text.clone());
-                        if let Some(text) = text {
-                            let length = text.chars().count();
-                            match tokio::task::spawn_blocking(move || crate::paste::copy_to_clipboard(&text)).await {
-                                Ok(Ok(())) => log::info!("Copied last transcription ({length} characters)"),
-                                Ok(Err(error)) => log::error!("Failed to copy to clipboard: {error}"),
-                                Err(error) => log::error!("Clipboard task failed: {error}"),
-                            }
-                        } else {
-                            log::info!("No transcription to copy");
-                        }
-                    }
-                });
-            }
-            "view_history" => {
-                log::info!("Tray: Opening history window");
-                open_or_focus_window(
-                    app, "history", "history.html", "SottoASR \u{2014} History", 680.0, 760.0,
-                );
-            }
-            "settings" => {
-                log::info!("Tray: Opening settings window");
-                open_or_focus_window(
-                    app, "settings", "settings.html", "SottoASR \u{2014} Settings", 640.0, 760.0,
-                );
-            }
-            "check_updates" => {
-                log::info!("Tray: Opening update window");
-                // Use context-appropriate title based on current tray state.
-                // We can't access TrayState here directly (it's dropped after build_tray_menu),
-                // so we read UpdateState to determine the title.
-                let title = if let Some(us) = app.try_state::<crate::updater::UpdateState>() {
-                    let app_update = us.update_available.load(std::sync::atomic::Ordering::SeqCst);
-                    let model_update = us.model_update_available.load(std::sync::atomic::Ordering::SeqCst);
-                    let restart = us.restart_pending.load(std::sync::atomic::Ordering::SeqCst);
-                    if model_update && !app_update && !restart {
-                        "SottoASR \u{2014} Model Update".to_string()
-                    } else {
-                        "SottoASR \u{2014} Software Update".to_string()
-                    }
-                } else {
-                    "SottoASR \u{2014} Update".to_string()
-                };
-                open_or_focus_window(
-                    app,
-                    "update",
-                    "update.html",
-                    &title,
-                    420.0,
-                    480.0,
-                );
-            }
-            "copy_diagnostics" => {
-                log::info!("Tray: Copy diagnostics");
+/// The one tray menu handler, registered by `setup_tray_menu`.
+fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
+    match event.id().as_ref() {
+        "copy_last" => {
+            log::info!("Tray: Copy last transcription");
+            tauri::async_runtime::spawn({
                 let app = app.clone();
-                tauri::async_runtime::spawn_blocking(move || {
-                    let diagnostics = collect_diagnostics(&app);
-                    match crate::paste::copy_to_clipboard(&diagnostics) {
-                        Ok(()) => log::info!(
-                            "Diagnostics copied to clipboard ({} bytes)",
-                            diagnostics.len()
-                        ),
-                        Err(e) => log::error!("Failed to copy diagnostics to clipboard: {}", e),
+                async move {
+                    let state: tauri::State<'_, crate::state::AppState> = app.state();
+                    let text = state.last_transcription.lock().await.as_ref().map(|item| item.text.clone());
+                    if let Some(text) = text {
+                        let length = text.chars().count();
+                        match tokio::task::spawn_blocking(move || crate::paste::copy_to_clipboard(&text)).await {
+                            Ok(Ok(())) => log::info!("Copied last transcription ({length} characters)"),
+                            Ok(Err(error)) => log::error!("Failed to copy to clipboard: {error}"),
+                            Err(error) => log::error!("Clipboard task failed: {error}"),
+                        }
+                    } else {
+                        log::info!("No transcription to copy");
                     }
-                });
-            }
-            "about" => {
-                log::info!("Tray: Opening about window");
-                open_or_focus_window(
-                    app, "about", "about.html", "About SottoASR", 480.0, 960.0,
-                );
-            }
-            "quit" => {
-                log::info!("Quitting SottoASR");
-                app.exit(0);
-            }
-            _ => {}
+                }
+            });
         }
-    });
-
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
-
-    log::info!("Tray menu configured");
-    Ok(())
+        "view_history" => {
+            log::info!("Tray: Opening history window");
+            open_or_focus_window(
+                app, "history", "history.html", "SottoASR \u{2014} History", 680.0, 760.0,
+            );
+        }
+        "settings" => {
+            log::info!("Tray: Opening settings window");
+            open_or_focus_window(
+                app, "settings", "settings.html", "SottoASR \u{2014} Settings", 640.0, 760.0,
+            );
+        }
+        "check_updates" => {
+            log::info!("Tray: Opening update window");
+            open_or_focus_window(
+                app, "update", "update.html", "SottoASR \u{2014} Software Update", 420.0, 480.0,
+            );
+        }
+        "copy_diagnostics" => {
+            log::info!("Tray: Copy diagnostics");
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let diagnostics = collect_diagnostics(&app);
+                match crate::paste::copy_to_clipboard(&diagnostics) {
+                    Ok(()) => log::info!(
+                        "Diagnostics copied to clipboard ({} bytes)",
+                        diagnostics.len()
+                    ),
+                    Err(e) => log::error!("Failed to copy diagnostics to clipboard: {}", e),
+                }
+            });
+        }
+        "about" => {
+            log::info!("Tray: Opening about window");
+            open_or_focus_window(
+                app, "about", "about.html", "About SottoASR", 480.0, 960.0,
+            );
+        }
+        "quit" => {
+            log::info!("Quitting SottoASR");
+            app.exit(0);
+        }
+        _ => {}
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Icon switching
 // ---------------------------------------------------------------------------
 
-fn set_tray_icon(app: &AppHandle, has_update: bool) {
+fn set_tray_icon(tray: &TrayIcon, has_update: bool) {
     let icon_bytes = if has_update {
         TRAY_ICON_UPDATE
     } else {
         TRAY_ICON_NORMAL
     };
-    if let Some(tray) = app.tray_by_id("main-tray") {
-        match Image::from_bytes(icon_bytes) {
-            Ok(icon) => {
-                let _ = tray.set_icon(Some(icon));
-                let _ = tray.set_icon_as_template(true);
-            }
-            Err(e) => log::error!("Failed to load tray icon: {}", e),
+    match Image::from_bytes(icon_bytes) {
+        Ok(icon) => {
+            let _ = tray.set_icon(Some(icon));
+            let _ = tray.set_icon_as_template(true);
         }
+        Err(e) => log::error!("Failed to load tray icon: {}", e),
     }
 }
 
@@ -285,10 +278,38 @@ fn collect_diagnostics(app: &AppHandle) -> String {
 
     let log_tail = read_log_tail(app, 100);
 
-    format!(
+    let report = format!(
         "SottoASR Diagnostics\nVersion: {}\nmacOS: {}\nDate: {}\n---\n{}",
         version, macos_version, timestamp, log_tail
-    )
+    );
+    redact_home(&report, dirs::home_dir().as_deref())
+}
+
+/// Replace the home directory with `~` so a pasted report does not carry the
+/// account name. Only a whole path component matches: a home of `/Users/ann`
+/// leaves `/Users/anna` alone.
+fn redact_home(text: &str, home: Option<&Path>) -> String {
+    let Some(home) = home
+        .and_then(Path::to_str)
+        .map(|home| home.trim_end_matches('/'))
+        .filter(|home| !home.is_empty())
+    else {
+        return text.to_string();
+    };
+    let mut redacted = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(home) {
+        let after = &rest[start + home.len()..];
+        redacted.push_str(&rest[..start]);
+        let continues_name = matches!(
+            after.chars().next(),
+            Some(next) if next.is_alphanumeric() || matches!(next, '.' | '_' | '-')
+        );
+        redacted.push_str(if continues_name { home } else { "~" });
+        rest = after;
+    }
+    redacted.push_str(rest);
+    redacted
 }
 
 /// Get macOS version string via `sw_vers`.
@@ -361,7 +382,8 @@ fn bounded_log_tail(reader: &mut (impl Read + Seek), n: usize) -> std::io::Resul
 
 #[cfg(test)]
 mod diagnostics_tests {
-    use super::bounded_log_tail;
+    use super::{bounded_log_tail, redact_home};
+    use std::path::Path;
     use std::io::Cursor;
 
     #[test]
@@ -378,6 +400,19 @@ mod diagnostics_tests {
     fn short_and_empty_logs_do_not_lose_the_first_line() {
         assert_eq!(bounded_log_tail(&mut Cursor::new(b"first\nsecond"), 100).unwrap(), "first\nsecond");
         assert_eq!(bounded_log_tail(&mut Cursor::new(b""), 100).unwrap(), "");
+    }
+
+    #[test]
+    fn diagnostics_replace_the_home_directory_with_a_tilde() {
+        let home = Some(Path::new("/Users/ann"));
+        let report = "log at /Users/ann/Library/Logs\n[Log file not found in /Users/ann]\nother /Users/anna/x";
+        assert_eq!(
+            redact_home(report, home),
+            "log at ~/Library/Logs\n[Log file not found in ~]\nother /Users/anna/x",
+        );
+        assert_eq!(redact_home("/Users/ann/x", Some(Path::new("/Users/ann/"))), "~/x");
+        assert_eq!(redact_home("/Users/ann/x", None), "/Users/ann/x");
+        assert_eq!(redact_home("/Users/ann/x", Some(Path::new("/"))), "/Users/ann/x");
     }
 }
 
@@ -439,5 +474,16 @@ mod tests {
         state.update_available.store(true, std::sync::atomic::Ordering::SeqCst);
         drop(version);
         assert_eq!(reader.await.unwrap(), (true, TrayState::UpdateAvailable("0.9.0".into())));
+    }
+
+    #[test]
+    fn menu_handler_is_registered_only_once() {
+        // The only test that touches the guard, so the first call here is the
+        // first call in this process.
+        let registrations = std::cell::Cell::new(0);
+        for _ in 0..3 {
+            register_menu_handler_once(|| registrations.set(registrations.get() + 1));
+        }
+        assert_eq!(registrations.get(), 1);
     }
 }

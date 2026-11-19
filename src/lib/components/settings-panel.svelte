@@ -5,6 +5,7 @@
   import { CleanupSetup } from '../stores/cleanup-setup.svelte';
   import { VocabularySetup } from '../stores/vocabulary-setup.svelte';
   import { createEventScope } from '../utils/event-scope';
+  import type { DownloadProgress } from '../utils/tauri';
   import ModelDashboard from './model-dashboard.svelte';
   import SettingsGeneral from './settings-general.svelte';
   import SettingsDictation from './settings-dictation.svelte';
@@ -15,14 +16,15 @@
 
   const sections = [
     { id:'general', label:'General', hint:'Shortcuts, startup, and updates.' },
-    { id:'dictation', label:'Dictation', hint:'Choose how your words reach the page.' },
+    { id:'dictation', label:'Dictation', hint:'Choose your microphone and how your words reach the page.' },
     { id:'vocabulary', label:'Vocabulary', hint:'Help SottoASR recognize the words you use.' },
-    { id:'advanced', label:'Advanced', hint:'Permissions and local model details.' },
+    { id:'advanced', label:'Advanced', hint:'Stored data, permissions, and local models.' },
   ] as const;
   let selected = $state(0);
   let feedback = $state('');
   let closeConfirm = $state(false);
   let closeError = $state('');
+  let resetConfirm = $state(false);
   let allowClose = false;
   let disposed = false;
   const cleanup = new CleanupSetup();
@@ -49,6 +51,13 @@
     feedback = 'Changes discarded.';
   }
 
+  async function resetUnreadableSettings() {
+    const reset = await settingsStore.reset();
+    if (disposed) return;
+    resetConfirm = false;
+    if (reset) feedback = 'Settings reset. The unreadable file was kept as a backup.';
+  }
+
   async function closeWindow() {
     try { allowClose = true; await getCurrentWindow().close(); }
     catch (error) { allowClose = false; closeError = String(error); }
@@ -73,6 +82,7 @@
       .then(() => { if (!disposed) void cleanup.refresh(); });
     void scope.listen('vocabulary-status', () => { void vocabulary.refresh(); })
       .then(() => { if (!disposed) void vocabulary.refresh(); });
+    void scope.listen<DownloadProgress>('llm-download-progress', (event) => { cleanup.reportProgress(event.payload); });
     void getCurrentWindow().onCloseRequested((event) => {
       if (!allowClose && (settingsStore.dirty || settingsStore.saving || cleanup.pending)) {
         event.preventDefault();
@@ -95,7 +105,14 @@
     {#if settingsStore.loading}
       <p class="load-state" role="status">Loading settings…</p>
     {:else if !settingsStore.loaded}
-      <div class="setting-error" role="alert"><p>{settingsStore.error || 'Settings are unavailable.'}</p><button class="secondary-button" type="button" onclick={() => settingsStore.load()}>Retry</button></div>
+      <div class="setting-error" role="alert">
+        <p>{settingsStore.error || 'Settings are unavailable.'}</p>
+        {#if settingsStore.loadError}<p>Back up and reset keeps the unreadable file as a backup and starts again with default settings.</p>{/if}
+        <div class="error-actions">
+          {#if settingsStore.loadError}<button class="secondary-button" type="button" disabled={settingsStore.resetting} onclick={() => { resetConfirm = true; }}>Back up and reset</button>{/if}
+          <button class="secondary-button" type="button" disabled={settingsStore.resetting} onclick={() => settingsStore.load()}>Retry</button>
+        </div>
+      </div>
     {:else}
       <div class="section-heading"><h2>{section.label}</h2><p>{section.hint}</p></div>
       {#if selected === 0}<SettingsGeneral />
@@ -108,6 +125,7 @@
     <div class="footer-feedback" aria-live="polite">
       {#if settingsStore.loading}<span>Loading settings…</span>
       {:else if !settingsStore.loaded}<span class="error">Settings unavailable</span>
+      {:else if settingsStore.validationError}<span class="error">{settingsStore.validationError}</span>
       {:else if settingsStore.error}<span class="error">{settingsStore.error}</span>
       {:else if closeError}<span class="error">{closeError}</span>
       {:else if settingsStore.warnings.length}<span class="warning">Saved. {settingsStore.warnings.join(' ')}</span>
@@ -118,11 +136,12 @@
     </div>
     <div class="footer-actions">
       <button type="button" class="cancel-button" onclick={discard} disabled={settingsStore.saving || (!settingsStore.dirty && !cleanup.pending)}>Cancel</button>
-      <button type="button" class="save-button" onclick={() => save()} disabled={!settingsStore.loaded || settingsStore.loading || settingsStore.saving || !settingsStore.dirty}>{settingsStore.saving ? 'Saving…' : 'Save'}</button>
+      <button type="button" class="save-button" onclick={() => save()} disabled={!settingsStore.loaded || settingsStore.loading || settingsStore.saving || !settingsStore.dirty || !!settingsStore.validationError}>{settingsStore.saving ? 'Saving…' : 'Save'}</button>
     </div>
   </footer>
 </div>
-<ConfirmDialog open={closeConfirm} title="Save your changes?" message={cleanup.pending ? 'Cleanup setup may finish in the background. Discarding changes keeps your saved preferences.' : 'You have unsaved settings. Save them before closing, or discard this draft.'} confirmLabel="Save and close" cancelLabel="Keep editing" secondaryLabel="Discard" busy={settingsStore.saving} confirmDisabled={cleanup.pending} onconfirm={() => save(true)} oncancel={() => { closeConfirm = false; }} onsecondary={() => { discard(); void closeWindow(); }} />
+<ConfirmDialog open={closeConfirm} title="Save your changes?" message={settingsStore.validationError ? 'A replacement in Vocabulary is incomplete. Finish or remove it to save, or discard this draft.' : cleanup.pending ? 'Cleanup setup may finish in the background. Discarding changes keeps your saved preferences.' : 'You have unsaved settings. Save them before closing, or discard this draft.'} confirmLabel="Save and close" cancelLabel="Keep editing" secondaryLabel="Discard" busy={settingsStore.saving} confirmDisabled={cleanup.pending || !!settingsStore.validationError} onconfirm={() => save(true)} oncancel={() => { closeConfirm = false; }} onsecondary={() => { discard(); void closeWindow(); }} />
+<ConfirmDialog open={resetConfirm} title="Reset settings?" message="SottoASR keeps the unreadable settings file as a backup in its settings folder, then starts again with default settings and shortcuts." confirmLabel="Back up and reset" busy={settingsStore.resetting} onconfirm={resetUnreadableSettings} oncancel={() => { resetConfirm = false; }} />
 
 <style>
   .settings-window { height:100vh; display:flex; flex-direction:column; overflow:hidden; }
@@ -131,7 +150,7 @@
   .settings-header p { margin:5px 0 0; font-size:12px; color:var(--text-dim); }
   .settings-nav { display:flex; gap:4px; padding:0 20px 12px; border-bottom:1px solid var(--border); flex:none; }
   .settings-nav button { flex:1; padding:9px 5px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--text-dim); font:inherit; font-size:12px; font-weight:500; cursor:pointer; }
-  .settings-nav button.active { background:var(--accent-bg); color:#93c5fd; border-color:#3b82f630; }
+  .settings-nav button.active { background:var(--accent-bg); color:var(--accent-text); }
   .settings-nav button:hover { color:var(--text-bright); }
   .settings-content { flex:1; min-height:0; min-width:0; overflow:auto; padding:20px; }
   .section-heading { margin:0 0 16px; }
@@ -139,12 +158,13 @@
   .section-heading p { font-size:12px; color:var(--text-dim); margin:4px 0 0; }
   .settings-footer { flex:none; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; border-top:1px solid var(--border); background:var(--bg); }
   .footer-feedback { min-width:0; font-size:11px; color:var(--text-dim); overflow-wrap:anywhere; max-height:64px; overflow:auto; }
-  .footer-feedback .error { color:#fca5a5; }
-  .footer-feedback .warning { color:#fcd34d; }
+  .footer-feedback .error { color:var(--danger); }
+  .footer-feedback .warning { color:var(--warning); }
   .footer-actions { display:flex; flex:none; gap:8px; }
   .footer-actions button { padding:8px 18px; font:inherit; font-size:12px; border-radius:8px; border:1px solid var(--border-hover); cursor:pointer; }
   .cancel-button { background:var(--card-bg); color:var(--text); }
-  .save-button { background:var(--accent); border-color:var(--accent)!important; color:white; }
+  .save-button { background:var(--accent); border-color:var(--accent)!important; color:var(--on-accent); }
   .footer-actions button:disabled { opacity:.4; cursor:default; }
   .load-state { font-size:13px; color:var(--text-dim); text-align:center; padding:32px; }
+  .error-actions { display:flex; flex-wrap:wrap; gap:8px; }
 </style>

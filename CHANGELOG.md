@@ -2,6 +2,70 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [Unreleased]
+
+Remediation of the [November 2026 application review](docs/audit/2026-11-19-application-review.md).
+
+### Fixed
+- A saved setting can no longer leave you without hotkeys. SottoASR validates settings when you save and drops an empty replacement row. At launch it registers each shortcut on its own, so one bad value no longer disables the others.
+- SottoASR now finds a microphone that is unplugged or stops sending audio during a recording. The transcript is marked as interrupted, the audio is kept, and nothing is pasted. Before, the captured part was pasted as if it were complete.
+- A tray menu click runs its action once. Before, each background update check added one more copy of the click handler.
+- A long dictation with AI cleanup no longer waits without a limit. Cleanup stops after 60 seconds, or after the first runtime failure, and the rest stays as spoken.
+- If macOS denies microphone access, or the input sends only silence, SottoASR shows an error that tells you what to examine. Before, nothing happened.
+- You can quit during a dictation. The warning now offers Quit Anyway, and SottoASR keeps the recording for recovery. If a transcription does not finish in time, SottoASR returns to idle and keeps the recording.
+- A dictation that you stop while the speech model downloads or loads no longer waits for it. It ends at once with a message, and the recording is kept. If the speech model failed to load, the message gives the load error.
+- The AI cleanup model download no longer fails on slower connections. A stall check replaces the fixed 15-minute limit, and Settings shows the download progress.
+- Repairing AI cleanup rebuilds the runtime from the start. Thus a repair also fixes a runtime whose Python was removed or upgraded. SottoASR builds the new runtime beside the old one and replaces the old one only after the new one passes its check. If you quit during setup or a repair, the next preparation recovers.
+- Quitting immediately after a paste no longer loses your clipboard. SottoASR waits up to 800 ms for the clipboard restore before it exits.
+- The shortcut recorder keeps Control when Command is also held.
+- The recording pill is no longer hidden for a whole recording when Settings is busy at that moment.
+- The shortcut recorder continues to work after macOS disables its key listener. When you press your current hotkey while you record a shortcut, a dictation no longer starts.
+- AI cleanup no longer removes one of two repeated number words ("four four seven").
+- If the app that is to receive the paste is SottoASR itself, SottoASR copies the text instead of pasting it into nothing. A click on the error pill no longer makes SottoASR the active app, and an error pill no longer takes your typing when it appears.
+- Onboarding shows the actual error of the speech engine and lets you try again in the same window. It asks macOS for Accessibility access and shows the download progress.
+- The update window no longer stays on one step without end, and a background check no longer changes what it shows.
+- "Unsaved changes" no longer appears for an edit that changes nothing. Times in History refresh every minute.
+
+### Changed
+- Text appears sooner. If the target app is already in front, SottoASR no longer activates it again with a 150 ms wait. Activation no longer brings all windows of the app to the front. History is saved after the paste, not before it.
+- When "Restore clipboard" is on, SottoASR restores all of your clipboard after a paste, including images and files, not only text. Items larger than 64 MB are not restored. The transcript on the clipboard is marked as transient so that clipboard managers do not record it, and it stays on this Mac.
+- When you delete a history entry or clear history, SottoASR also deletes the audio kept for those entries. The confirmation says so. Entries that the 5,000-entry history limit removes also lose their audio, except interrupted entries.
+- The four main shortcuts (push to talk, toggle recording, cancel recording and open Settings) can no longer be cleared. Each one has "Reset to default" instead.
+- A replacement row with only one side filled stops Save and tells you what to complete.
+- SottoASR installs the AI cleanup runtime from a bundled lock file that has a SHA-256 hash for each package. If an existing runtime differs from the lock file, cleanup starts on it at once and SottoASR rebuilds it from the lock in the background. SottoASR keeps the old runtime until the rebuilt one works. If cleanup cannot start on the old runtime, SottoASR rebuilds it at once.
+- SottoASR downloads the speech and vocabulary models at pinned revisions and verifies them against a bundled SHA-256 manifest. If the cache of an earlier version is different, it continues to work, and Settings offers a re-download with progress. The re-download also covers the vocabulary model if you use it. Dictation continues with the loaded model while the files download. A newly downloaded file that fails verification is not loaded, and the next preparation downloads it again.
+- With vocabulary words, a recording of 30 seconds or less is decoded once instead of twice.
+- The key listener of the shortcut recorder is active only while you record a shortcut.
+- The app opens links only for huggingface.co, github.com and sottoasr.app. Copied diagnostics show your home folder as `~`.
+- The cleanup runtime runs in Python isolated mode with a cleared environment. SottoASR starts system tools such as `open`, `osascript` and `curl` from their full paths.
+- AI cleanup is faster on long dictations. Protected-term patterns are compiled once, and an edit no longer causes a new count of every protected term in the transcript.
+
+### Added
+- Microphone selection in Settings. If the selected microphone is not connected, SottoASR tells you and does not record from a different microphone.
+- Optional sound cues for start, stop, cancel, busy and error (off by default).
+- Retention settings for history and for kept recordings (default: keep until you delete them), and a Delete audio action for recordings that wait for recovery.
+- If no native arm64 Python 3.11 to 3.14 is installed, enabling AI cleanup downloads a pinned, SHA-256-verified standalone Python into Application Support. You no longer need to install Python yourself. SottoASR looks for Python only in fixed install locations, not on your `PATH`.
+- A short "Still working" notice when you press a hotkey while SottoASR still processes the previous dictation.
+- Light appearance, which follows the system setting.
+- "Back up and reset" for a settings file that SottoASR cannot read.
+- Show in Finder after a CSV export.
+- Frontend warnings and errors are written to the log file.
+
+### Removed
+- The AI model update check. Each app release pins the cleanup model, so the check never found an update.
+- The unused `model_path`, `language` and `max_history` settings. SottoASR still writes them to the settings file with fixed values, so that an older version can read the file.
+- Three unused Tauri plugins (store, os, positioner) and the permissions that no window used.
+
+### Infrastructure
+- The stop path has one implementation. The pipeline tests now run the code that ships.
+- Both workflows pin each action to a commit. The release workflow gives Apple credentials only to the two steps that import the certificate and sign the app. Both workflows fail on npm advisories for production dependencies.
+- `rustls`, `rustls-webpki` and `webpki-root-certs` are updated. Six `zip` advisories are ignored in `src-tauri/.cargo/audit.toml` with a recorded reason (`zip` is built only for Windows). CI fails if `zip` is built for macOS.
+- PR CI checks the `asr-parakeet` build with `cargo check` and runs its resampler tests. The optional ONNX backend now resamples recordings to 16 kHz and reports their real duration. It downloads its model from a pinned Hugging Face commit and verifies the SHA-256 of each file.
+- cpal is updated from 0.15 to 0.16. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped, because the disconnect listener of the library held the stream. Version 0.16 holds it weakly.
+- A frontend test compares every command call with the registered commands and the capability files. `scripts/test_workflows.py` checks the action pins and the secret scopes of the workflows.
+- The unused `src/*.html` page copies, the unused recording store, five unused JavaScript plugin packages and `@types/diff` are removed.
+- `SECURITY.md` lists every network request the app makes.
+
 ## [0.11.1] — 2026-10-08
 
 ### Fixed

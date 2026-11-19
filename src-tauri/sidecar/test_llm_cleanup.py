@@ -689,7 +689,13 @@ class CleanupProtocolTests(unittest.TestCase):
         self.assertFalse(hasattr(cleanup, 'parse_generation'))
         self.assertFalse(hasattr(cleanup, 'MAX_LINE_BYTES'))
 
-    def test_fixed_revision_lookup_and_update_are_offline(self):
+    def test_model_update_check_action_is_gone(self):
+        guard = AssertionError('must not look up the model')
+        with patch.object(cleanup, 'cached_model_path', side_effect=guard):
+            response = cleanup.safe_response({'action': 'check_update'})
+        self.assertEqual(response['error_code'], 'invalid_action')
+
+    def test_fixed_revision_lookup_is_offline(self):
         calls = []
         def unavailable(*args, **kwargs):
             calls.append((args, kwargs))
@@ -697,8 +703,7 @@ class CleanupProtocolTests(unittest.TestCase):
         hub = SimpleNamespace(snapshot_download=unavailable)
         with patch.dict(sys.modules, {'huggingface_hub': hub}):
             self.assertIsNone(cleanup.cached_model_path())
-            response = cleanup.handle_request({'action': 'check_update'})
-        self.assertFalse(response['update_available'])
+        self.assertEqual(len(calls), 1)
         self.assertTrue(all(kwargs == {'revision': cleanup.MODEL_REVISION, 'local_files_only': True, 'token': False} for _, kwargs in calls))
         self.assertTrue(all(args == (cleanup.MODEL_ID,) for args, _ in calls))
 

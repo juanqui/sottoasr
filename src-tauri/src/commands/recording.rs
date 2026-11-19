@@ -7,6 +7,8 @@ pub async fn start_recording(app: AppHandle) -> Result<(), String> {
     crate::hotkeys::manager::handle_start_recording(&app).map(|_| ())
 }
 
+/// Returns once the recording is claimed and its audio is finalized;
+/// transcription and delivery continue in the background.
 #[tauri::command]
 pub async fn stop_recording(
     app: AppHandle,
@@ -16,7 +18,7 @@ pub async fn stop_recording(
     if current != AppStateEnum::Recording {
         return Err(format!("Cannot stop recording: currently in {:?} state", current));
     }
-    crate::hotkeys::manager::handle_stop_recording(&app).await;
+    crate::hotkeys::manager::handle_stop_recording(&app, None).await;
     Ok(())
 }
 

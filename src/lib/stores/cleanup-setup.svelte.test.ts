@@ -3,7 +3,7 @@ vi.mock('../utils/tauri', () => ({ getLlmStatus:vi.fn(), prepareLlmModel:vi.fn()
 import { getLlmStatus, prepareLlmModel, repairLlmRuntime } from '../utils/tauri';
 import { CleanupSetup } from './cleanup-setup.svelte';
 import type { LlmStatus } from '../utils/tauri';
-const ready: LlmStatus = { available:true, unavailable_reason:null, downloaded:true, downloading:false, loaded:true, preparing:false, setup_error:null, model_name:'Test', model_url:'https://example.com', model_path:null, download_size_mb:227, update_available:false, last_cleanup_status:{kind:'idle'} };
+const ready: LlmStatus = { available:true, unavailable_reason:null, downloaded:true, downloading:false, loaded:true, preparing:false, setup_error:null, model_name:'Test', model_url:'https://example.com', model_path:null, download_size_mb:227, last_cleanup_status:{kind:'idle'} };
 const deferred = <T>() => { let resolve!: (value:T) => void; const promise = new Promise<T>((yes) => { resolve = yes; }); return {promise,resolve}; };
 beforeEach(() => vi.resetAllMocks());
 it('shares rapid enable clicks and activates only after successful preparation', async () => {
@@ -73,4 +73,15 @@ it('never repairs while a preparation is already in flight', async () => {
   await setup.repair();
   expect(repairLlmRuntime).not.toHaveBeenCalled();
   work.resolve(ready); await pending;
+});
+it('reports download progress only while its own preparation runs', async () => {
+  const setup = new CleanupSetup();
+  setup.reportProgress({ downloaded_bytes:1, total_bytes:10 });
+  expect(setup.progress).toBeNull();
+  const work = deferred<LlmStatus>(); vi.mocked(prepareLlmModel).mockReturnValue(work.promise);
+  const pending = setup.enable(vi.fn());
+  setup.reportProgress({ downloaded_bytes:5, total_bytes:10 });
+  expect(setup.progress).toEqual({ downloaded_bytes:5, total_bytes:10 });
+  work.resolve(ready); await pending;
+  expect(setup.progress).toBeNull();
 });

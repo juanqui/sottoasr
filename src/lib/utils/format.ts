@@ -12,8 +12,7 @@ export function formatDuration(ms: number): string {
  * Format an ISO date string as a relative time description.
  * Examples: "just now", "2 minutes ago", "yesterday", "Mar 15"
  */
-export function formatRelativeTime(date: string): string {
-  const now = Date.now();
+export function formatRelativeTime(date: string, now: number = Date.now()): string {
   const then = new Date(date).getTime();
   if (isNaN(then)) return 'Unknown';
   const diffMs = now - then;

@@ -1,9 +1,9 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-const { listeners } = vi.hoisted(() => ({ listeners:new Map<string, () => void>() }));
-vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (event:string, callback:()=>void) => {listeners.set(event,callback);return () => listeners.delete(event);}) }));
-vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn(),repairLlmRuntime:vi.fn()}));
-import { getModelStatus, repairLlmRuntime } from '../utils/tauri';
+const { listeners } = vi.hoisted(() => ({ listeners:new Map<string, (event?:{payload:unknown}) => void>() }));
+vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (event:string, callback:(event?:{payload:unknown})=>void) => {listeners.set(event,callback);return () => listeners.delete(event);}) }));
+vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn(),repairLlmRuntime:vi.fn(),redownloadSpeechModel:vi.fn()}));
+import { getModelStatus, redownloadSpeechModel, repairLlmRuntime } from '../utils/tauri';
 import { CleanupSetup } from '../stores/cleanup-setup.svelte';
 import ModelDashboard from './model-dashboard.svelte';
 let target:HTMLDivElement;
@@ -13,7 +13,9 @@ beforeEach(() => {
   vi.clearAllMocks(); listeners.clear();
   vi.mocked(getModelStatus).mockResolvedValue({downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'Parakeet v3',size_bytes:null});
   cleanup = new CleanupSetup();
-  cleanup.status = {available:true,enabled:true,busy:false,loaded:true,downloaded:true,downloading:false,preparing:false,setup_error:null,unavailable_reason:null,model_name:'MiniCPM5',model_url:'',model_path:null,download_size_mb:1427,update_available:false,last_cleanup_status:{kind:'rejected',detail:{reason:'Protected span changed'}}};
+  cleanup.status = {available:true,enabled:true,busy:false,loaded:true,downloaded:true,downloading:false,preparing:false,setup_error:null,unavailable_reason:null,model_name:'MiniCPM5',model_url:'',model_path:null,download_size_mb:1427,last_cleanup_status:{kind:'rejected',detail:{reason:'Protected span changed'}}};
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
 });
 afterEach(async () => {if(component) await unmount(component);component=undefined;cleanup.dispose();target?.remove();});
 async function render() {target=document.createElement('div');document.body.append(target);component=mount(ModelDashboard,{target,props:{cleanup,onconfigure:vi.fn()}});flushSync();await vi.waitFor(()=>expect(target.textContent).toContain('Parakeet v3'));flushSync();}
@@ -49,4 +51,24 @@ it('offers a runtime repair only for runtime failures, and runs it on click', as
   // The store's continuation runs after the mocked promise resolves, so wait
   // for the render rather than asserting straight after the click.
   await vi.waitFor(()=>expect(target.textContent).not.toContain('Repair cleanup runtime'));
+});
+it('re-downloads model files that fail verification only after confirmation, with progress', async () => {
+  vi.mocked(getModelStatus).mockResolvedValue({downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'Parakeet v3',size_bytes:null,integrity_warning:'2 model files differ from the verified copies.'});
+  let finish!:()=>void;
+  vi.mocked(redownloadSpeechModel).mockReturnValueOnce(new Promise<void>((resolve)=>{finish=resolve;}));
+  await render();
+  await vi.waitFor(()=>expect(target.textContent).toContain('2 model files differ'));
+  [...target.querySelectorAll('button')].find((button)=>button.textContent?.trim()==='Re-download speech model')!.click();flushSync();
+  expect(redownloadSpeechModel).not.toHaveBeenCalled();
+  const dialog = target.querySelector('dialog')!;
+  expect(dialog.open).toBe(true);
+  [...dialog.querySelectorAll('button')].find((button)=>button.textContent?.trim()==='Re-download')!.click();flushSync();
+  expect(redownloadSpeechModel).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(false);
+  listeners.get('model-download-progress')!({payload:{downloaded_bytes:100_000_000,total_bytes:400_000_000}});flushSync();
+  expect(target.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('25');
+  listeners.get('asr-init-started')!();flushSync();
+  expect(target.querySelector('[role="progressbar"]')).toBeNull();
+  finish();
+  await vi.waitFor(()=>expect(target.textContent).toContain('Model files replaced'));
 });

@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use chrono::{DateTime, Utc};
 use tauri::{Emitter, Manager, State};
@@ -11,8 +12,12 @@ use tauri::{Emitter, Manager, State};
 use crate::audio::recovery::{recording_id, recordings_dir};
 use crate::models::{AppStateEnum, LlmCleanupStatus, Transcription};
 use crate::state::AppState;
+use super::transcription::TranscriptionStore;
 
-static RECOVERY_IO: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// Serializes the restart scan with every path that deletes recordings, so a
+/// scan never imports a legacy copy between a deletion and its tombstone.
+/// Lock it before the history store.
+pub(super) static RECOVERY_IO: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn legacy_directory() -> PathBuf {
     #[cfg(not(test))]
@@ -155,6 +160,216 @@ fn open_audio(path: &Path) -> Result<File, String> {
 
 fn receipt_path(directory: &Path, id: &str) -> PathBuf {
     directory.join(format!("sotto_{id}.recovered"))
+}
+
+/// Recording IDs name files, so only the canonical UUID form is accepted.
+fn checked_recording_id(id: &str) -> Result<(), String> {
+    match uuid::Uuid::parse_str(id) {
+        Ok(parsed) if parsed.to_string() == id => Ok(()),
+        _ => Err("Invalid recording ID".into()),
+    }
+}
+
+/// Delete a recording and its receipt. While a legacy copy remains in the
+/// temporary directory, a tombstone receipt stays instead, so the restart scan
+/// never imports that copy again. The legacy copy itself is never deleted.
+/// Returns whether a WAV was removed.
+fn remove_recording(directory: &Path, legacy: &Path, id: &str) -> Result<bool, String> {
+    checked_recording_id(id)?;
+    let name = format!("sotto_{id}.wav");
+    let receipt = receipt_path(directory, id);
+    let legacy_copy = fs::symlink_metadata(legacy.join(&name)).is_ok();
+    // The tombstone must be durable before the WAV goes. Otherwise a failed
+    // write, or a crash in between, lets the next scan import the copy again.
+    let wrote_tombstone = legacy_copy && !receipt.try_exists().map_err(|e| e.to_string())?;
+    if wrote_tombstone {
+        #[cfg(test)]
+        take_tombstone_failure(id)?;
+        crate::persistence::write_atomic(&receipt, b"Recording deleted.\n").map_err(|e| {
+            format!("Could not record the deletion, so the recording was kept: {e}")
+        })?;
+    }
+    let removed = match fs::remove_file(directory.join(&name)) {
+        Ok(()) => true,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => {
+            // A receipt hides the kept recording from recovery. Drop only the
+            // one this call wrote, so the user still sees it and can retry.
+            if wrote_tombstone {
+                let _ = fs::remove_file(&receipt);
+            }
+            return Err(format!("Could not delete the recording: {error}"));
+        }
+    };
+    if !legacy_copy {
+        match fs::remove_file(&receipt) {
+            Ok(()) => (),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+            Err(error) => return Err(format!("Could not delete the recovery receipt: {error}")),
+        }
+    }
+    Ok(removed)
+}
+
+/// Tombstone writes that fail once, as on a full disk, keyed by recording ID.
+#[cfg(test)]
+static FAILING_TOMBSTONES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+fn take_tombstone_failure(id: &str) -> Result<(), String> {
+    let mut failing = FAILING_TOMBSTONES.lock().unwrap_or_else(|e| e.into_inner());
+    match failing.iter().position(|item| item == id) {
+        Some(index) => {
+            failing.swap_remove(index);
+            Err("Could not record the deletion, so the recording was kept: injected test failure".into())
+        }
+        None => Ok(()),
+    }
+}
+
+/// Entries without a recording ID (older history) have no files to remove.
+/// Failures are logged and keep that recording.
+fn remove_recordings<'a>(directory: &Path, legacy: &Path, ids: impl IntoIterator<Item = &'a str>) -> bool {
+    let mut removed = false;
+    for id in ids {
+        if checked_recording_id(id).is_err() {
+            continue;
+        }
+        match remove_recording(directory, legacy, id) {
+            Ok(wav) => removed |= wav,
+            Err(error) => log::warn!("Could not remove retained audio of recording {id}: {error}"),
+        }
+    }
+    removed
+}
+
+/// The recordings a history change may remove. Deletes and retention hold the
+/// recovery claim, and the pipeline saves (and trims) only outside Idle; both
+/// keep a capture from starting, so none of these is a live recording.
+pub(super) struct RecordingFiles {
+    directory: PathBuf,
+    legacy: PathBuf,
+}
+
+impl RecordingFiles {
+    /// Blocking. `None`, logged, while another instance owns the recordings
+    /// (`session_error`) or their directory is unavailable. The history
+    /// change still applies; only the audio stays.
+    pub(super) fn resolve(session_error: Option<String>) -> Option<Self> {
+        let directory = match session_error {
+            Some(error) => Err(error),
+            None => recordings_dir(),
+        };
+        match directory {
+            Ok(directory) => Some(Self { directory, legacy: legacy_directory() }),
+            Err(error) => {
+                log::warn!("Retained audio was kept: {error}");
+                None
+            }
+        }
+    }
+
+    /// Returns whether a WAV was removed.
+    fn remove<'a>(&self, ids: impl IntoIterator<Item = &'a str>) -> bool {
+        remove_recordings(&self.directory, &self.legacy, ids)
+    }
+}
+
+/// Captures the second-instance guard now; resolves the directory later, on
+/// the blocking worker, and only if a history change needs it.
+pub(super) fn history_files(
+    app: &tauri::AppHandle,
+) -> impl FnOnce() -> Option<RecordingFiles> + Send + 'static {
+    let session_error = app.state::<RecoverySession>().error.clone();
+    move || RecordingFiles::resolve(session_error)
+}
+
+/// Delete one history entry, then its audio and receipt. The save comes
+/// first, so a failed save keeps both; an ID history did not list keeps its
+/// audio. Returns whether a WAV was removed.
+pub(super) fn delete_history_entry(
+    store: &mut TranscriptionStore,
+    id: &str,
+    files: impl FnOnce() -> Option<RecordingFiles>,
+) -> Result<bool, String> {
+    if !store.delete(id)? {
+        return Ok(false);
+    }
+    Ok(files().is_some_and(|files| files.remove([id])))
+}
+
+/// Clear history, then the audio and receipts of every removed entry.
+/// Returns the removed IDs and whether a WAV was removed.
+pub(super) fn clear_history(
+    store: &mut TranscriptionStore,
+    files: impl FnOnce() -> Option<RecordingFiles>,
+) -> Result<(Vec<String>, bool), String> {
+    let removed = store.clear()?;
+    let audio = !removed.is_empty()
+        && files().is_some_and(|files| files.remove(removed.iter().map(String::as_str)));
+    Ok((removed, audio))
+}
+
+/// Save an entry. Entries the 5,000-entry cap trims lose their audio and
+/// receipt once the trimmed list is durable, except interrupted ones: that
+/// audio is still the user's recovery copy. Returns the trimmed IDs.
+pub(super) fn add_history_entry(
+    store: &mut TranscriptionStore,
+    transcription: Transcription,
+    files: impl FnOnce() -> Option<RecordingFiles>,
+) -> Result<Vec<String>, String> {
+    let trimmed = store.add(transcription)?;
+    let completed: Vec<&str> = trimmed
+        .iter()
+        .filter(|item| item.capture_error.is_none())
+        .map(|item| item.id.as_str())
+        .collect();
+    let files = if completed.is_empty() { None } else { files() };
+    if let Some(files) = files {
+        files.remove(completed);
+    }
+    Ok(trimmed.into_iter().map(|item| item.id).collect())
+}
+
+/// Remove recordings last modified before `cutoff`, listed in History or not.
+fn expire_recordings(directory: &Path, legacy: &Path, cutoff: SystemTime) -> Result<bool, String> {
+    let mut expired = Vec::new();
+    for entry in
+        fs::read_dir(directory).map_err(|e| format!("Could not inspect saved recordings: {e}"))?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let Ok(id) = recording_id(&path) else {
+            continue;
+        };
+        let old = fs::symlink_metadata(&path).is_ok_and(|metadata| {
+            metadata.file_type().is_file()
+                && metadata.modified().is_ok_and(|modified| modified < cutoff)
+        });
+        if old {
+            expired.push(id);
+        }
+    }
+    Ok(remove_recordings(directory, legacy, expired.iter().map(String::as_str)))
+}
+
+/// The blocking half of a retention pass, after History durably dropped
+/// `expired`. An interrupted entry's audio is still the user's recovery copy,
+/// so it follows the recording limit, not the history limit.
+fn expire_audio(
+    directory: &Path,
+    legacy: &Path,
+    expired: &[Transcription],
+    cutoff: Option<SystemTime>,
+) -> Result<bool, String> {
+    let completed = expired
+        .iter()
+        .filter(|item| item.capture_error.is_none())
+        .map(|item| item.id.as_str());
+    let mut removed = remove_recordings(directory, legacy, completed);
+    if let Some(cutoff) = cutoff {
+        removed |= expire_recordings(directory, legacy, cutoff)?;
+    }
+    Ok(removed)
 }
 
 /// Import through an unpublished file so a crash cannot publish half a copy.
@@ -334,6 +549,15 @@ pub(crate) async fn pending_recordings(state: &AppState) -> Result<Vec<RecoveryR
     Ok(recordings)
 }
 
+/// The capture path outlives its capture, so it names the live recording
+/// only while SottoASR is not Idle, as in `pending_recordings`.
+fn active_recording_id(state: &AppState) -> Option<String> {
+    if state.get_state() == AppStateEnum::Idle {
+        return None;
+    }
+    crate::audio::capture::active_recording_path(state).and_then(|path| recording_id(&path).ok())
+}
+
 async fn pending_with_active(active: Option<PathBuf>) -> Result<Vec<RecoveryRecording>, String> {
     let _io = RECOVERY_IO.lock().await;
     // In-memory history can contain unsaved results. Only disk is an acknowledgement.
@@ -368,9 +592,11 @@ pub async fn get_recoverable_recordings(
     pending_recordings(&state).await
 }
 
-struct RecoveryClaim<'a>(&'a AppState);
+/// Holds SottoASR out of Idle, so no capture, dictation or second reprocess
+/// starts, and no delete or retention pass removes a file being reprocessed.
+pub(super) struct RecoveryClaim<'a>(&'a AppState);
 impl<'a> RecoveryClaim<'a> {
-    fn acquire(state: &'a AppState) -> Result<Self, String> {
+    pub(super) fn acquire(state: &'a AppState) -> Result<Self, String> {
         use std::sync::atomic::Ordering;
         let mut current = state
             .current_state
@@ -380,7 +606,7 @@ impl<'a> RecoveryClaim<'a> {
             || state.is_exiting.load(Ordering::SeqCst)
             || state.shortcuts_updating.load(Ordering::SeqCst)
         {
-            return Err("Finish the current operation before reprocessing a recording.".into());
+            return Err("Finish the current recording or transcription, then try again.".into());
         }
         *current = AppStateEnum::Transcribing;
         Ok(Self(state))
@@ -401,16 +627,13 @@ async fn reprocess(
     }
     let settings = state.settings.lock().await.clone();
     let terms = settings.vocabulary.clone();
-    let path = recording.audio_path.clone();
     state.new_job();
-    let result = crate::asr::engine::with_engine(&state.asr_engine, move |engine| {
-        if !engine.is_ready() {
-            return Err(
-                "The speech model is not ready. Wait for model loading, then try again.".into(),
-            );
-        }
-        engine.transcribe_file_with_vocabulary(&path, &terms)
-    })
+    let result = crate::pipeline::transcribe_with_deadline(
+        state,
+        recording.audio_path.clone(),
+        terms,
+        recording.duration_ms.unwrap_or(0),
+    )
     .await?;
     let raw = result.unboosted_text.unwrap_or_else(|| result.text.clone());
     let mut text = crate::dictionary::apply(&result.text, &settings.dictionary);
@@ -447,6 +670,7 @@ async fn reprocess(
         cleanup_suggestion: None,
         llm_applied: matches!(status, LlmCleanupStatus::Applied { .. }),
         llm_cleanup_status: status,
+        saved_at: None,
     })
 }
 
@@ -511,6 +735,106 @@ pub async fn reveal_recovery_recording(
         .find(|item| item.id == id)
         .ok_or("This recording is no longer pending recovery. Refresh History.")?;
     super::overlay::reveal_recording_audio(recording.audio_path).await
+}
+
+/// Delete a pending recording's audio after the user confirmed it.
+#[tauri::command]
+pub async fn delete_recovery_recording(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    if let Some(error) = &app.state::<RecoverySession>().error { return Err(error.clone()); }
+    checked_recording_id(&id)?;
+    if active_recording_id(&state).as_deref() == Some(id.as_str()) {
+        return Err("This recording is still in progress. Stop it, then try again.".into());
+    }
+    let result = {
+        let _claim = RecoveryClaim::acquire(&state)?;
+        let _io = RECOVERY_IO.lock().await;
+        tokio::task::spawn_blocking(move || {
+            remove_recording(&recordings_dir()?, &legacy_directory(), &id)
+        })
+        .await
+        .map_err(|e| format!("Could not delete the recording: {e}"))?
+    };
+    let _ = app.emit("recovery-recordings-changed", ());
+    result.map(|_| ())
+}
+
+/// Apply the user's retention limits; `0` keeps data until the user deletes
+/// it. A pass that finds SottoASR busy is skipped until the next one, so it
+/// never removes a file that a capture or reprocess holds. Problems are
+/// logged, never returned.
+pub async fn enforce_retention(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    // Settings loaded at startup are not validated, and a hand-edited value
+    // must not overflow the date arithmetic and end the retention timer.
+    let (history_days, audio_days) = {
+        let settings = state.settings.lock().await;
+        let limit = crate::models::Settings::MAX_RETENTION_DAYS;
+        (settings.history_retention_days.min(limit), settings.audio_retention_days.min(limit))
+    };
+    if history_days == 0 && audio_days == 0 {
+        return;
+    }
+    if let Some(error) = &app.state::<RecoverySession>().error {
+        log::warn!("Retention skipped: {error}");
+        return;
+    }
+    let (removed_ids, recoveries_changed) = retention_pass(&state, history_days, audio_days).await;
+    if !removed_ids.is_empty() {
+        log::info!("Retention removed {} history entries", removed_ids.len());
+        let _ = app.emit("history-changed", serde_json::json!({ "removed_ids": removed_ids }));
+    }
+    if recoveries_changed {
+        let _ = app.emit("recovery-recordings-changed", ());
+    }
+}
+
+/// Returns the removed history IDs and whether the recovery list changed: a
+/// WAV was removed, or an expired interrupted entry left its audio pending.
+/// Skipped while the recovery claim cannot be taken: a capture, dictation or
+/// reprocess is running.
+async fn retention_pass(state: &AppState, history_days: u32, audio_days: u32) -> (Vec<String>, bool) {
+    let Ok(_claim) = RecoveryClaim::acquire(state) else {
+        return (Vec::new(), false);
+    };
+    let _io = RECOVERY_IO.lock().await;
+    let now = Utc::now();
+    let history_cutoff = match history_days {
+        0 => None,
+        days => chrono::Duration::try_days(i64::from(days)).and_then(|age| now.checked_sub_signed(age)),
+    };
+    let expired = match history_cutoff {
+        None => Vec::new(),
+        Some(cutoff) => super::transcription::expire_history(cutoff).await.unwrap_or_else(|error| {
+            log::warn!("History retention failed: {error}");
+            Vec::new()
+        }),
+    };
+    let removed_ids: Vec<String> = expired.iter().map(|item| item.id.clone()).collect();
+    let pending_again = expired.iter().any(|item| item.capture_error.is_some());
+    let audio_cutoff = match audio_days {
+        0 => None,
+        days => SystemTime::from(now).checked_sub(Duration::from_secs(u64::from(days) * 86_400)),
+    };
+    let removed_audio = match tokio::task::spawn_blocking(move || {
+        expire_audio(&recordings_dir()?, &legacy_directory(), &expired, audio_cutoff)
+    })
+    .await
+    {
+        Ok(Ok(removed)) => removed,
+        Ok(Err(error)) => {
+            log::warn!("Recording retention failed: {error}");
+            false
+        }
+        Err(error) => {
+            log::warn!("Recording retention failed: {error}");
+            false
+        }
+    };
+    (removed_ids, removed_audio || pending_again)
 }
 
 pub(crate) fn offer_on_startup(app: &tauri::AppHandle) {
@@ -598,6 +922,290 @@ mod tests {
             .unwrap()
             .is_empty());
         assert_eq!(fs::read(source).unwrap(), bytes);
+    }
+
+    fn id_of(path: &Path) -> String {
+        recording_id(path).unwrap()
+    }
+
+    fn age(path: &Path, days: u64) {
+        let modified = SystemTime::now() - Duration::from_secs(days * 86_400);
+        OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+    }
+
+    fn entry(id: &str, created_days_ago: i64, saved_days_ago: Option<i64>, capture_error: Option<&str>) -> Transcription {
+        let now = Utc::now();
+        Transcription {
+            id: id.into(),
+            text: "Saved words.".into(),
+            duration_ms: 1000,
+            created_at: now - chrono::Duration::days(created_days_ago),
+            word_count: 2,
+            cancelled: false,
+            capture_error: capture_error.map(Into::into),
+            raw_text: None,
+            cleanup_suggestion: None,
+            llm_applied: false,
+            llm_cleanup_status: LlmCleanupStatus::Disabled,
+            saved_at: saved_days_ago.map(|days| now - chrono::Duration::days(days)),
+        }
+    }
+
+    fn write_receipt(directory: &Path, id: &str) {
+        crate::persistence::write_atomic(&receipt_path(directory, id), b"Transcript saved to History.\n").unwrap();
+    }
+
+    #[test]
+    fn history_delete_and_clear_remove_audio_only_after_a_durable_save() {
+        let durable = tempfile::tempdir().unwrap();
+        let legacy = tempfile::tempdir().unwrap();
+        let history = tempfile::tempdir().unwrap();
+        let files = || {
+            Some(RecordingFiles { directory: durable.path().to_path_buf(), legacy: legacy.path().to_path_buf() })
+        };
+        let [recovered, interrupted, completed, unlisted]: [PathBuf; 4] =
+            std::array::from_fn(|_| recording(durable.path()));
+        let (recovered_id, completed_id) = (id_of(&recovered), id_of(&completed));
+        write_receipt(durable.path(), &recovered_id);
+        write_receipt(durable.path(), &completed_id);
+        let history_path = history.path().join("history.json");
+        let mut store = TranscriptionStore::new(history_path.clone());
+        store.add(entry(&recovered_id, 400, None, None)).unwrap();
+        store.add(entry(&id_of(&interrupted), 1, None, Some("Microphone disconnected"))).unwrap();
+        store.add(entry(&completed_id, 1, None, None)).unwrap();
+
+        // Only an entry that history listed takes its audio with it.
+        assert!(!delete_history_entry(&mut store, &id_of(&unlisted), files).unwrap());
+        assert!(unlisted.exists());
+        // A failed save keeps every entry, recording and receipt.
+        fs::remove_file(&history_path).unwrap();
+        fs::create_dir(&history_path).unwrap();
+        assert!(delete_history_entry(&mut store, &recovered_id, files).is_err());
+        assert!(clear_history(&mut store, files).is_err());
+        for kept in [&recovered, &interrupted, &completed] {
+            assert!(kept.exists(), "{}", kept.display());
+        }
+        assert!(receipt_path(durable.path(), &recovered_id).exists());
+        fs::remove_dir(&history_path).unwrap();
+
+        assert!(delete_history_entry(&mut store, &recovered_id, files).unwrap());
+        assert!(!recovered.exists());
+        assert!(!receipt_path(durable.path(), &recovered_id).exists());
+        let (cleared, removed_audio) = clear_history(&mut store, files).unwrap();
+        assert_eq!(cleared.len(), 2);
+        assert!(removed_audio);
+        // The user confirmed a dialog that names audio, so the interrupted
+        // entry's recovery copy goes too.
+        assert!(!interrupted.exists());
+        assert!(!completed.exists());
+        assert!(!receipt_path(durable.path(), &completed_id).exists());
+        assert!(unlisted.exists());
+        assert!(TranscriptionStore::load(&history_path).unwrap().is_empty());
+
+        // While another instance owns the recordings, the entry goes and its
+        // audio stays.
+        let owned_elsewhere = recording(durable.path());
+        store.add(entry(&id_of(&owned_elsewhere), 1, None, None)).unwrap();
+        let other_instance = || {
+            RecordingFiles::resolve(Some("Another SottoASR instance already owns the recording directory.".into()))
+        };
+        assert!(!delete_history_entry(&mut store, &id_of(&owned_elsewhere), other_instance).unwrap());
+        assert!(owned_elsewhere.exists());
+        assert!(store.get_all().is_empty());
+    }
+
+    #[test]
+    fn deleted_legacy_recording_is_not_imported_again() {
+        let legacy = tempfile::tempdir().unwrap();
+        let durable = tempfile::tempdir().unwrap();
+        let source = recording(legacy.path());
+        let bytes = fs::read(&source).unwrap();
+        let pending = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
+        assert_eq!(pending.len(), 1);
+        let id = pending[0].id.clone();
+        let imported = durable.path().join(format!("sotto_{id}.wav"));
+        assert!(imported.exists());
+        assert!(remove_recording(durable.path(), legacy.path(), &id).unwrap());
+        assert!(!imported.exists());
+        assert!(receipt_path(durable.path(), &id).exists());
+        assert!(scan_recordings(durable.path(), legacy.path(), &[], None).unwrap().is_empty());
+        assert!(!imported.exists());
+        assert_eq!(fs::read(&source).unwrap(), bytes);
+        // Deleting again, as a later history delete would, keeps the tombstone.
+        assert!(!remove_recording(durable.path(), legacy.path(), &id).unwrap());
+        assert!(receipt_path(durable.path(), &id).exists());
+        let upper = id.to_uppercase();
+        for invalid in ["../session", "session.state", upper.as_str()] {
+            assert!(remove_recording(durable.path(), legacy.path(), invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn failed_tombstone_keeps_the_recording_and_the_scan_does_not_import_it_again() {
+        let legacy = tempfile::tempdir().unwrap();
+        let durable = tempfile::tempdir().unwrap();
+        recording(legacy.path());
+        let id = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap()[0].id.clone();
+        let imported = durable.path().join(format!("sotto_{id}.wav"));
+        let bytes = fs::read(&imported).unwrap();
+        // The receipt cannot be written, as on a full disk.
+        FAILING_TOMBSTONES.lock().unwrap().push(id.clone());
+        assert!(remove_recording(durable.path(), legacy.path(), &id).is_err());
+        assert_eq!(fs::read(&imported).unwrap(), bytes);
+        assert!(!receipt_path(durable.path(), &id).exists());
+        // A history delete logs the same failure and keeps the audio too.
+        FAILING_TOMBSTONES.lock().unwrap().push(id.clone());
+        assert!(!remove_recordings(durable.path(), legacy.path(), [id.as_str()]));
+        assert_eq!(fs::read(&imported).unwrap(), bytes);
+        let pending = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, id);
+        let recordings = fs::read_dir(durable.path())
+            .unwrap()
+            .filter(|entry| recording_id(&entry.as_ref().unwrap().path()).is_ok())
+            .count();
+        assert_eq!(recordings, 1);
+    }
+
+    /// macOS's user-immutable flag makes the WAV undeletable for its owner.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn undeletable_recording_drops_the_new_tombstone_and_stays_pending() {
+        use std::os::unix::ffi::OsStrExt;
+        let legacy = tempfile::tempdir().unwrap();
+        let durable = tempfile::tempdir().unwrap();
+        recording(legacy.path());
+        let id = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap()[0].id.clone();
+        let imported = durable.path().join(format!("sotto_{id}.wav"));
+        let path = std::ffi::CString::new(imported.as_os_str().as_bytes()).unwrap();
+        let set_flags = |flags| {
+            // SAFETY: `path` is a valid NUL-terminated path that outlives the call.
+            assert_eq!(unsafe { libc::chflags(path.as_ptr(), flags) }, 0);
+        };
+        set_flags(libc::UF_IMMUTABLE);
+        let result = remove_recording(durable.path(), legacy.path(), &id);
+        set_flags(0);
+        assert!(result.unwrap_err().contains("Could not delete the recording"));
+        assert!(imported.exists());
+        assert!(!receipt_path(durable.path(), &id).exists());
+        let pending = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, id);
+
+        // A receipt that existed before the attempt is never removed.
+        write_receipt(durable.path(), &id);
+        set_flags(libc::UF_IMMUTABLE);
+        let result = remove_recording(durable.path(), legacy.path(), &id);
+        set_flags(0);
+        assert!(result.is_err());
+        assert!(imported.exists());
+        assert!(receipt_path(durable.path(), &id).exists());
+    }
+
+    #[test]
+    fn retention_removes_only_expired_data_and_spares_recovery_copies() {
+        let durable = tempfile::tempdir().unwrap();
+        let legacy = tempfile::tempdir().unwrap();
+        let history = tempfile::tempdir().unwrap();
+        let [expired, recovered, interrupted, orphan, fresh]: [PathBuf; 5] =
+            std::array::from_fn(|_| recording(durable.path()));
+        let expired_id = id_of(&expired);
+        let recovered_id = id_of(&recovered);
+        let interrupted_id = id_of(&interrupted);
+        write_receipt(durable.path(), &expired_id);
+        write_receipt(durable.path(), &recovered_id);
+        for path in [&recovered, &interrupted, &orphan] {
+            age(path, 400);
+        }
+        // Older builds saved no `saved_at`, so write that history file directly.
+        let older_build = entry(&uuid::Uuid::new_v4().to_string(), 40, None, None);
+        let history_path = history.path().join("history.json");
+        let saved = vec![
+            entry(&expired_id, 40, Some(40), None),
+            entry(&interrupted_id, 40, Some(40), Some("Microphone disconnected")),
+            older_build.clone(),
+        ];
+        crate::persistence::write_atomic(&history_path, &serde_json::to_vec(&saved).unwrap()).unwrap();
+        let mut store = TranscriptionStore::new(history_path);
+        // Reprocessing keeps the recording's date; the store dates the save.
+        store.add(entry(&recovered_id, 400, None, None)).unwrap();
+
+        let removed = store.expire(Utc::now() - chrono::Duration::days(30)).unwrap();
+        let removed_ids: Vec<&str> = removed.iter().map(|item| item.id.as_str()).collect();
+        assert_eq!(removed_ids, [expired_id.as_str(), interrupted_id.as_str(), older_build.id.as_str()]);
+        assert_eq!(store.get_all().len(), 1);
+        assert_eq!(store.get_all()[0].id, recovered_id);
+        assert!(expire_audio(durable.path(), legacy.path(), &removed, None).unwrap());
+        assert!(!expired.exists());
+        assert!(!receipt_path(durable.path(), &expired_id).exists());
+        assert!(recovered.exists() && receipt_path(durable.path(), &recovered_id).exists());
+        // The interrupted entry's audio stays and is offered for recovery.
+        assert!(interrupted.exists());
+        let pending = scan_recordings(durable.path(), legacy.path(), &store.get_all(), None).unwrap();
+        assert!(pending.iter().any(|item| item.id == interrupted_id));
+
+        let cutoff = SystemTime::now() - Duration::from_secs(30 * 86_400);
+        assert!(expire_audio(durable.path(), legacy.path(), &[], Some(cutoff)).unwrap());
+        assert!(fresh.exists());
+        for gone in [&interrupted, &orphan, &recovered] {
+            assert!(!gone.exists(), "{}", gone.display());
+        }
+        assert!(!receipt_path(durable.path(), &recovered_id).exists());
+        assert_eq!(store.get_all()[0].id, recovered_id);
+    }
+
+    #[tokio::test]
+    async fn retention_waits_while_recording_and_reports_audio_pending_again() {
+        use crate::commands::transcription::{add_transcription, persisted_transcriptions};
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("Unused.")),
+            None,
+            Box::new(MockPasteBackend::new()),
+            Settings::default(),
+        );
+        let completed = uuid::Uuid::new_v4().to_string();
+        let interrupted = uuid::Uuid::new_v4().to_string();
+        add_transcription(entry(&completed, 400, Some(400), None)).await.unwrap();
+        add_transcription(entry(&interrupted, 400, Some(400), Some("Microphone disconnected"))).await.unwrap();
+        // A live capture keeps SottoASR out of Idle, so the pass does nothing.
+        state.set_state(AppStateEnum::Recording);
+        assert_eq!(retention_pass(&state, 30, 0).await, (Vec::new(), false));
+        assert_eq!(state.get_state(), AppStateEnum::Recording);
+        assert!(persisted_transcriptions().await.unwrap().iter().any(|item| item.id == completed));
+
+        state.set_state(AppStateEnum::Idle);
+        let (removed, recoveries_changed) = retention_pass(&state, 30, 0).await;
+        assert!(removed.contains(&completed));
+        assert!(removed.contains(&interrupted));
+        // No WAV was removed, but the interrupted entry's audio is pending again.
+        assert!(recoveries_changed);
+        assert_eq!(state.get_state(), AppStateEnum::Idle);
+        let saved = persisted_transcriptions().await.unwrap();
+        assert!(!saved.iter().any(|item| item.id == completed || item.id == interrupted));
+    }
+
+    #[test]
+    fn live_capture_is_named_only_outside_idle_and_blocks_deletion() {
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("Unused.")),
+            None,
+            Box::new(MockPasteBackend::new()),
+            Settings::default(),
+        );
+        let id = uuid::Uuid::new_v4().to_string();
+        *state.recording_audio_path.lock().unwrap() =
+            Some(std::env::temp_dir().join(format!("sotto_{id}.wav")));
+        assert_eq!(active_recording_id(&state), None);
+        state.set_state(AppStateEnum::Recording);
+        assert_eq!(active_recording_id(&state).as_deref(), Some(id.as_str()));
+        assert!(RecoveryClaim::acquire(&state).is_err());
     }
 
     #[test]

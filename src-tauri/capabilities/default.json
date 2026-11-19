@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "SottoASR application capabilities",
+  "description": "What every SottoASR window may do: read core state, listen for events, close itself, and write to the log.",
   "windows": [
     "main",
     "overlay",
@@ -13,31 +13,7 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:default",
-    "core:window:allow-create",
     "core:window:allow-close",
-    "core:window:allow-show",
-    "core:window:allow-hide",
-    "core:window:allow-set-always-on-top",
-    "core:window:allow-set-size",
-    "core:window:allow-set-position",
-    "core:window:allow-set-focus",
-    "core:window:allow-set-decorations",
-    "core:window:allow-set-skip-taskbar",
-    "core:window:allow-set-visible-on-all-workspaces",
-    "core:tray:default",
-    "core:event:default",
-    "global-shortcut:default",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
-    "global-shortcut:allow-is-registered",
-    "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-text",
-    "store:default",
-    "positioner:default",
-    "os:default",
-    "log:default",
-    "updater:default",
-    "autostart:default"
+    "log:default"
   ]
 }

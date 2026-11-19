@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -6,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::models::CleanupMode;
-use crate::process::{bounded_command, OwnedChild};
+use crate::process::{bounded_command, bounded_output, BoundedError, OwnedChild, SpawnError};
 use crate::state::AppState;
 
 /// Monotonic job ID for stale-result prevention.
@@ -64,8 +67,8 @@ pub trait LlmBackend: Send {
     /// `BatchOutcome`-style failures are `Ok` entries, never `Err`.
     fn cleanup_batch(&mut self, texts: &[String], mode: CleanupMode) -> Result<Vec<BatchItem>, String>;
     /// Send a raw JSON request and return the raw JSON response.
-    /// Used by `commands/llm.rs` for protocol-level operations like
-    /// `check_update` that bypass the typed batch API.
+    /// Used by `commands/llm.rs` for the `load` handshake, which bypasses the
+    /// typed batch API.
     fn request_raw(&mut self, req: &serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Shut down the backend. Default is a no-op.
@@ -87,17 +90,74 @@ pub struct LlmEngine {
 // We manage the sidecar as a single-owner resource behind TokioMutex.
 // Child handles and the response receiver are Send; no unsafe implementation needed.
 
+/// Response deadline for one `cleanup_batch` request: the sidecar's 10 s
+/// generation alarm plus overhead.
+pub(crate) const CLEANUP_BATCH_TIMEOUT: Duration = Duration::from_secs(15);
+
 fn request_timeout(request: &serde_json::Value) -> Duration {
-    Duration::from_secs(match request.get("action").and_then(|v| v.as_str()) {
-        Some("download") => 900,
-        Some("load") => 15,
+    match request.get("action").and_then(|v| v.as_str()) {
+        Some("load") => Duration::from_secs(15),
         // CRITICAL (spec §4.1): the batch action MUST map here. An unmapped
         // action silently gets the 5 s default, which retires the sidecar
         // mid-batch — measured 6.6 s for a real production 16-batch.
-        Some("cleanup_batch") => 15, // Ten-second generation budget + overhead.
-        Some("check_update") => 10,
-        _ => 5,
-    })
+        Some("cleanup_batch") => CLEANUP_BATCH_TIMEOUT,
+        _ => Duration::from_secs(5),
+    }
+}
+
+/// Write budget for a request that has no response deadline (the download).
+const SUPERVISED_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Which job a sidecar process does. Both roles run isolated from the user's
+/// environment (P-09); only a download may reach Hugging Face.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SidecarRole {
+    /// Load the pinned model and serve cleanup requests, offline.
+    Inference,
+    /// Fetch and verify the pinned model files.
+    Download,
+}
+
+/// Hugging Face hub cache shared by the sidecar and the Rust readiness checks.
+/// This is the library default under `HOME`; it is passed explicitly because
+/// the sidecar environment is cleared.
+pub fn hf_hub_cache() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    Ok(home.join(".cache").join("huggingface").join("hub"))
+}
+
+/// Cache directory of the pinned cleanup model.
+pub fn model_cache_dir() -> Result<PathBuf, String> {
+    Ok(hf_hub_cache()?.join(format!("models--{}", SOTTO_MODEL.id.replace('/', "--"))))
+}
+
+/// A Python command for the cleanup runtime: `-I` and a cleared environment,
+/// so user site-packages, `PYTHON*` variables and `PATH` cannot change what
+/// runs. Callers append the script or `-c` arguments.
+fn isolated_python(python: &Path, role: SidecarRole) -> Result<Command, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let mut command = Command::new(python);
+    command
+        .arg("-I")
+        .env_clear()
+        .env("HOME", &home)
+        .env("TMPDIR", std::env::temp_dir())
+        .env("PATH", "/usr/bin:/bin")
+        .env("HF_HUB_CACHE", hf_hub_cache()?);
+    match role {
+        SidecarRole::Inference => {
+            command.env("HF_HUB_OFFLINE", "1");
+        }
+        // hf-xet fills the model file in large bursts. A real download of the
+        // pinned model (2026-11-19, ~15 MB/s link) left the model cache flat
+        // for about 62 s, then jumped 211 MB → 1.43 GB; slower links would
+        // trip the 120 s stall watch on a healthy download. With xet disabled
+        // the same download grew linearly (~17 MB/s, 89 s versus 100 s).
+        SidecarRole::Download => {
+            command.env("HF_HUB_DISABLE_XET", "1");
+        }
+    }
+    Ok(command)
 }
 
 /// Read responses on a dedicated blocking thread. A partial line cannot bypass
@@ -136,9 +196,9 @@ fn response_reader(
 }
 
 impl LlmEngine {
-    /// Spawn the Python sidecar process.
-    pub fn spawn() -> Result<Self, String> {
-        // Runtime inference and update checks never install packages implicitly.
+    /// Spawn the Python sidecar process for `role`.
+    pub fn spawn(role: SidecarRole) -> Result<Self, String> {
+        // Neither role installs packages implicitly.
         // The reason is derived from the verdict so the history tooltip names
         // the real fault instead of always pointing at a model download.
         let verdict = venv_verdict();
@@ -149,13 +209,13 @@ impl LlmEngine {
         let python = venv_python()?;
         let sidecar_path = Self::sidecar_script_path()?;
         log::info!(
-            "Spawning LLM sidecar: {} {}",
+            "Spawning LLM sidecar ({role:?}): {} {}",
             python.display(),
             sidecar_path.display()
         );
 
         let child = OwnedChild::spawn(
-            Command::new(&python)
+            isolated_python(&python, role)?
                 .arg(&sidecar_path)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -226,6 +286,49 @@ impl LlmEngine {
         timeout: Duration,
     ) -> Result<serde_json::Value, String> {
         let deadline = Instant::now() + timeout;
+        self.write_request(req, deadline)?;
+        match self
+            .responses
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        {
+            Ok(line) => self.parse_response(line),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(self.close_protocol(format!(
+                "request timed out after {} seconds",
+                timeout.as_secs()
+            ))),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err(self.close_protocol("response channel disconnected"))
+            }
+        }
+    }
+
+    /// Send a request that has no response deadline. `supervise` runs every
+    /// `poll` while the reply is pending; an error from it terminates the
+    /// process and is returned as-is.
+    fn request_supervised(
+        &mut self,
+        req: &serde_json::Value,
+        poll: Duration,
+        mut supervise: impl FnMut() -> Result<(), String>,
+    ) -> Result<serde_json::Value, String> {
+        self.write_request(req, Instant::now() + SUPERVISED_WRITE_TIMEOUT)?;
+        loop {
+            match self.responses.recv_timeout(poll) {
+                Ok(line) => return self.parse_response(line),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if let Err(reason) = supervise() {
+                        self.quit();
+                        return Err(reason);
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(self.close_protocol("response channel disconnected"))
+                }
+            }
+        }
+    }
+
+    fn write_request(&mut self, req: &serde_json::Value, deadline: Instant) -> Result<(), String> {
         let mut line =
             serde_json::to_string(req).map_err(|e| format!("JSON serialize failed: {}", e))?;
         line.push('\n');
@@ -255,27 +358,18 @@ impl LlmEngine {
                 }
             }
         }
+        Ok(())
+    }
 
-        let response = self
-            .responses
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()));
-        let response_line = match response {
-            Ok(Ok(line)) => line,
-            Ok(Err(error)) => {
-                return Err(self.close_protocol(error));
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                return Err(self.close_protocol(format!(
-                    "request timed out after {} seconds",
-                    timeout.as_secs()
-                )));
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(self.close_protocol("response channel disconnected"));
-            }
-        };
-        serde_json::from_str(&response_line)
-            .map_err(|_| self.close_protocol("response was not valid JSON"))
+    fn parse_response(
+        &mut self,
+        line: Result<String, String>,
+    ) -> Result<serde_json::Value, String> {
+        match line {
+            Ok(line) => serde_json::from_str(&line)
+                .map_err(|_| self.close_protocol("response was not valid JSON")),
+            Err(error) => Err(self.close_protocol(error)),
+        }
     }
 
     fn close_protocol(&mut self, reason: impl std::fmt::Display) -> String {
@@ -285,21 +379,22 @@ impl LlmEngine {
 
     /// Register the PID before loading, so startup timeout recovery can kill it.
     pub fn spawn_tracked(pid: Arc<AtomicI32>) -> Result<Self, String> {
-        let mut engine = Self::spawn()?;
+        let mut engine = Self::spawn(SidecarRole::Inference)?;
         pid.store(engine.pid as i32, Ordering::SeqCst);
         engine.registered_pid = Some(pid);
         Ok(engine)
     }
 
-    /// Get model status from the sidecar.
-    #[allow(dead_code)]
-    pub fn status(&mut self) -> Result<serde_json::Value, String> {
-        self.request(&serde_json::json!({"action": "status"}))
-    }
-
-    /// Tell the sidecar to download the model.
-    pub fn download_model(&mut self) -> Result<(), String> {
-        let resp = self.request(&serde_json::json!({"action": "download"}))?;
+    /// Tell the sidecar to download and verify the model. There is no total
+    /// deadline: `supervise` runs every `poll` and stops the download by
+    /// returning an error (R-07).
+    pub fn download_model(
+        &mut self,
+        poll: Duration,
+        supervise: impl FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
+        let resp =
+            self.request_supervised(&serde_json::json!({"action": "download"}), poll, supervise)?;
         if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             Ok(())
         } else {
@@ -594,15 +689,25 @@ pub fn is_platform_supported() -> bool {
     true
 }
 
-/// Get the path to the app-managed Python venv for mlx-lm.
-pub fn venv_dir() -> Result<std::path::PathBuf, String> {
+/// The app's data directory, which holds the cleanup runtime.
+fn app_data_dir() -> Result<PathBuf, String> {
     let data_dir = dirs::data_dir().ok_or("Could not determine data directory")?;
-    Ok(data_dir.join("com.sottoasr.app").join("llm-venv"))
+    Ok(data_dir.join("com.sottoasr.app"))
+}
+
+/// Get the path to the app-managed Python venv for mlx-lm.
+pub fn venv_dir() -> Result<PathBuf, String> {
+    Ok(app_data_dir()?.join("llm-venv"))
 }
 
 /// Get the Python executable inside the app's venv.
-pub fn venv_python() -> Result<std::path::PathBuf, String> {
+pub fn venv_python() -> Result<PathBuf, String> {
     Ok(venv_dir()?.join("bin").join("python3"))
+}
+
+/// Where the standalone interpreter is provisioned when the Mac has none (G-06).
+fn standalone_python_root() -> Result<PathBuf, String> {
+    Ok(app_data_dir()?.join("python"))
 }
 
 /// Verdict of the venv readiness probe.
@@ -615,21 +720,27 @@ pub fn venv_python() -> Result<std::path::PathBuf, String> {
 /// runs for days, so one 5-second probe timeout cost three days of cleanup.
 /// See docs/specs/2026-04-11-llm-cleanup-reliability.md §4.6.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum VenkVerdict {
-    /// The interpreter ran and reported a runtime matching the qualified pins.
+pub enum VenvVerdict {
+    /// The interpreter ran and every locked package matches.
     Ready,
-    /// The interpreter ran and reported a definitive negative (Python < 3.11,
-    /// a missing or incorrect package), or the interpreter is absent. Only a
-    /// repair changes this.
+    /// The interpreter ran and the four top-level pins match, but other
+    /// packages differ from the lock (every 0.11.1 install). Cleanup runs on
+    /// it; Ensure reinstalls from the lock.
+    Stale(String),
+    /// No runtime is installed. Ensure creates one.
+    Missing,
+    /// The interpreter ran and reported a definitive negative (Python outside
+    /// 3.11 to 3.14, a missing or incorrect top-level package), or the runtime
+    /// exists without a working interpreter. Only a repair changes this.
     Broken(String),
     /// The probe could not complete. Transient by definition — never trusted
     /// beyond `VENV_UNKNOWN_RETRY_INTERVAL`.
     Unknown(String),
 }
 
-impl VenkVerdict {
+impl VenvVerdict {
     pub fn is_ready(&self) -> bool {
-        matches!(self, VenkVerdict::Ready)
+        matches!(self, VenvVerdict::Ready | VenvVerdict::Stale(_))
     }
 
     /// User-facing reason for `LlmCleanupStatus::Unavailable`. This string is
@@ -638,11 +749,14 @@ impl VenkVerdict {
     /// interpreter sends the user to a screen that cannot fix anything.
     pub fn unavailable_reason(&self) -> String {
         match self {
-            VenkVerdict::Ready => "Cleanup runtime is ready".into(),
-            VenkVerdict::Broken(reason) => format!(
+            VenvVerdict::Ready | VenvVerdict::Stale(_) => "Cleanup runtime is ready".into(),
+            VenvVerdict::Missing => {
+                "Cleanup runtime is not installed. Open Settings → AI cleanup to set it up.".into()
+            }
+            VenvVerdict::Broken(reason) => format!(
                 "Cleanup runtime needs repair: {reason}. Open Settings → AI cleanup and repair it."
             ),
-            VenkVerdict::Unknown(reason) => format!(
+            VenvVerdict::Unknown(reason) => format!(
                 "Cleanup runtime check did not complete ({reason}). Cleanup retries on the next recording."
             ),
         }
@@ -671,18 +785,18 @@ pub const PYTHON_VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Whether a cached verdict may still be trusted.
 ///
-/// Only `Unknown` expires: `Ready` and `Broken` are deterministic until a
-/// repair changes them, while an unanswered probe must be retried.
-fn verdict_is_fresh(verdict: &VenkVerdict, age: Duration, unknown_retry: Duration) -> bool {
+/// Only `Unknown` expires: every other verdict is deterministic until a
+/// preparation changes the runtime, while an unanswered probe must be retried.
+fn verdict_is_fresh(verdict: &VenvVerdict, age: Duration, unknown_retry: Duration) -> bool {
     match verdict {
-        VenkVerdict::Unknown(_) => age < unknown_retry,
+        VenvVerdict::Unknown(_) => age < unknown_retry,
         _ => true,
     }
 }
 
 /// A verdict plus the time it was recorded.
 struct VenvCacheEntry {
-    verdict: VenkVerdict,
+    verdict: VenvVerdict,
     recorded: Instant,
 }
 
@@ -710,10 +824,10 @@ impl VenvCache {
     /// The cached verdict, re-probing when it is missing or expired.
     fn verdict(
         &self,
-        python: &std::path::Path,
+        python: &Path,
         timeout: Duration,
         unknown_retry: Duration,
-    ) -> VenkVerdict {
+    ) -> VenvVerdict {
         let fresh =
             |entry: &VenvCacheEntry| verdict_is_fresh(&entry.verdict, entry.recorded.elapsed(), unknown_retry);
         if let Some(entry) = lock(&self.entry).as_ref() {
@@ -739,13 +853,19 @@ impl VenvCache {
         let previous = lock(&self.entry).as_ref().map(|e| e.verdict.clone());
         if previous.as_ref() != Some(&verdict) {
             match &verdict {
-                VenkVerdict::Ready => log::info!("Venv check: ready in {}ms", elapsed.as_millis()),
-                VenkVerdict::Broken(reason) => log::warn!(
+                VenvVerdict::Ready => log::info!("Venv check: ready in {}ms", elapsed.as_millis()),
+                VenvVerdict::Stale(reason) => log::info!(
+                    "Venv check: usable but stale after {}ms — {} (the next preparation reinstalls from the lock)",
+                    elapsed.as_millis(),
+                    reason
+                ),
+                VenvVerdict::Missing => log::info!("Venv check: no cleanup runtime is installed"),
+                VenvVerdict::Broken(reason) => log::warn!(
                     "Venv check: broken after {}ms — {} (cleanup disabled until repaired)",
                     elapsed.as_millis(),
                     reason
                 ),
-                VenkVerdict::Unknown(reason) => log::warn!(
+                VenvVerdict::Unknown(reason) => log::warn!(
                     "Venv check: inconclusive after {}ms — {} (re-probing in {}s)",
                     elapsed.as_millis(),
                     reason,
@@ -770,63 +890,117 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 static VENV_CACHE: VenvCache = VenvCache::new();
 
-/// Minimum version verified by the current local model experiments.
-/// Keep in sync with MIN_MLX_LM in sidecar/llm_cleanup.py.
-const MIN_MLX_LM: &str = "0.31.3";
+/// The hash-locked runtime (P-04), generated from `sidecar/requirements.in`.
+/// The probe compares against this embedded copy; installs read the bundled
+/// file beside the sidecar script, which must be identical.
+const RUNTIME_LOCK: &str = include_str!("../../sidecar/requirements.lock");
 
-/// Reproducible package versions exercised together on Apple Silicon. Explicit
-/// setup upgrades compatible existing environments in place; inference never installs.
-const RUNTIME_PACKAGES: [&str; 4] = [
-    "mlx==0.32.2",
-    "mlx-lm==0.31.3",
-    "transformers==5.3.0",
-    "huggingface-hub==1.7.2",
+/// The four top-level packages the runtime was qualified with. A mismatch
+/// here breaks the runtime; any other lock difference only makes it stale.
+/// Must match `RUNTIME_PINS` in sidecar/llm_cleanup.py and the lock (tested).
+const RUNTIME_PINS: [(&str, &str); 4] = [
+    ("mlx", "0.32.2"),
+    ("mlx-lm", "0.31.3"),
+    ("transformers", "5.3.0"),
+    ("huggingface-hub", "1.7.2"),
 ];
 
-/// Build the Python one-liner used by `probe_venv_at()` to verify the venv has
-/// both `mlx_lm` and `huggingface_hub` importable, a new-enough mlx-lm, and
-/// a supported Python version (3.11+).
+/// Interpreter versions the lock was verified on, newest first.
+const SUPPORTED_PYTHON_VERSIONS: [&str; 4] = ["3.14", "3.13", "3.12", "3.11"];
+
+/// Python's distribution-name normalization (PEP 503), for comparing lock
+/// names with installed metadata.
+fn normalize_package(name: &str) -> String {
+    name.to_ascii_lowercase().replace(['_', '.'], "-")
+}
+
+/// `(normalized name, version)` of every lock entry without an environment
+/// marker: the packages installed on every Mac (`colorama` is Windows-only).
+fn locked_versions(lock: &str) -> Vec<(String, &str)> {
+    lock.lines()
+        .filter(|line| line.starts_with(|c: char| c.is_ascii_alphanumeric()))
+        .filter_map(|line| {
+            let requirement = line.trim_end_matches('\\').trim_end();
+            if requirement.contains(';') {
+                return None;
+            }
+            let (name, version) = requirement.split_once("==")?;
+            Some((normalize_package(name), version))
+        })
+        .collect()
+}
+
+/// How long pip may wait on PyPI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PipNetwork {
+    /// pip's own timeouts: a setup the user asked for and waits on.
+    Patient,
+    /// A background sync of a working runtime: give up quickly when PyPI
+    /// cannot be reached, because the next preparation retries.
+    Brief,
+}
+
+/// The `pip` arguments that install exactly the locked, hash-verified wheels
+/// and nothing else (P-04). Run with the venv interpreter and `-I`.
+fn pip_install_args(lock: &Path, network: PipNetwork) -> Vec<OsString> {
+    let mut args: Vec<OsString> = [
+        "-m",
+        "pip",
+        "--isolated",
+        "install",
+        "--require-hashes",
+        "--only-binary",
+        ":all:",
+        "--no-deps",
+        "--disable-pip-version-check",
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .collect();
+    if network == PipNetwork::Brief {
+        args.extend(["--timeout", "10", "--retries", "1"].map(OsString::from));
+    }
+    args.extend([OsString::from("-r"), lock.into()]);
+    args
+}
+
+/// Probe run by the venv interpreter with `-c`. `@LOCK@` becomes a JSON object
+/// of every platform-independent lock entry and `@TOP@` the JSON list of the
+/// four top-level names.
 ///
-/// **CRITICAL**: This MUST be a single Python statement (semicolon-separated).
-/// A previous version used a multi-line `format!` string with `\` line
-/// continuations. Rust's `\` continuation eats all leading whitespace on the
-/// next line, which collapsed the Python indentation inside `if ... :` blocks
-/// and produced an IndentationError. That made `is_venv_ready()` always return
-/// false and turned every spawn() call into a full venv wipe-and-rebuild.
-/// See commit message for v0.7.3.
+/// **CRITICAL**: This MUST stay a single line of `;`-separated simple
+/// statements. A previous multi-line version lost its indentation to Rust's
+/// `\` continuation and failed with an IndentationError, which made every
+/// probe fail. Conditionals use `x if cond else None`, never `if cond:`.
 ///
-/// Exit code: 0 iff Python >= 3.11, mlx_lm is importable, huggingface_hub is
-/// importable, and `mlx_lm.__version__ >= MIN_MLX_LM`. Exit 1 for old Python,
-/// exit 2 for old mlx-lm. Writes a short status line to stderr so the Rust
-/// log forwarder shows the detected versions.
-///
-/// CONTRACT: `probe_venv_at` classifies exit 1 and exit 2 as a definitive
-/// `Broken` verdict and every other outcome (including a timeout) as
-/// `Unknown`. Changing these codes changes what the app is allowed to cache.
+/// CONTRACT with `probe_venv_at`: exit 1 = Python outside 3.11 to 3.14 (or
+/// an import error), exit 2 = a top-level pin differs, both `Broken`; exit 3 =
+/// only other locked packages differ, `Stale`; exit 0 = `Ready`. Any other
+/// outcome is `Unknown`. Changing these codes changes what the app caches.
+const VENV_CHECK_SCRIPT: &str = "import sys, re; \
+from importlib.metadata import distributions; \
+pv = sys.version_info[:2]; \
+py = 'Python ' + '.'.join(map(str, pv)); \
+supported = (3, 11) <= pv <= (3, 14); \
+sys.stderr.write(py + ' is not Python 3.11 to 3.14') if not supported else None; \
+sys.exit(1) if not supported else None; \
+norm = lambda name: re.sub('[-_.]+', '-', name or '').lower(); \
+got = {norm(d.metadata.get('Name')): d.version for d in distributions()}; \
+want = @LOCK@; \
+top = sorted(n for n in @TOP@ if got.get(n) != want[n]); \
+sys.stderr.write(py + ': qualified packages differ from the pins: ' + ', '.join(top)) if top else None; \
+sys.exit(2) if top else None; \
+import mlx_lm, huggingface_hub; \
+stale = sorted(n for n in want if got.get(n) != want[n]); \
+sys.stderr.write(py + (': packages differ from the runtime lock: ' + ', '.join(stale) if stale else ': runtime matches the lock')); \
+sys.exit(3 if stale else 0)";
+
 fn build_venv_check_script() -> String {
-    // Use conditional expressions (ternary) instead of compound `if:` statements,
-    // because Python doesn't allow compound statements after semicolons on a
-    // single line. `sys.exit(1) if cond else None` is valid: when cond is true,
-    // `sys.exit(1)` raises SystemExit and the process ends; when false, `None`
-    // is evaluated and execution continues.
-    format!(
-        "import sys; \
-         pv = sys.version_info[:2]; \
-         sys.stderr.write('Python ' + '.'.join(str(x) for x in pv) + ' < 3.11\\n') if pv < (3, 11) else None; \
-         sys.exit(1) if pv < (3, 11) else None; \
-         import mlx_lm, huggingface_hub; \
-         v = getattr(mlx_lm, '__version__', '0.0.0'); \
-         parts = [int(x) for x in v.split('.')[:3] if x.isdigit()]; \
-         parts += [0] * (3 - len(parts)); \
-         need = [int(x) for x in '{min}'.split('.')]; \
-         from importlib.metadata import version; \
-         pins = {pins}; \
-         ok = parts >= need and all(version(p.split('==')[0]) == p.split('==')[1] for p in pins); \
-         sys.stderr.write('Python ' + '.'.join(str(x) for x in pv) + ', mlx-lm ' + v + (' OK' if ok else ' differs from qualified runtime pins')); \
-         sys.exit(0 if ok else 2)",
-        min = MIN_MLX_LM,
-        pins = serde_json::to_string(&RUNTIME_PACKAGES).expect("static package pins serialize")
-    )
+    let lock: BTreeMap<String, &str> = locked_versions(RUNTIME_LOCK).into_iter().collect();
+    let top: Vec<&str> = RUNTIME_PINS.iter().map(|(name, _)| *name).collect();
+    VENV_CHECK_SCRIPT
+        .replace("@LOCK@", &serde_json::to_string(&lock).expect("lock versions serialize"))
+        .replace("@TOP@", &serde_json::to_string(&top).expect("pin names serialize"))
 }
 
 /// Current runtime verdict, probing only when the cache is missing or expired.
@@ -840,72 +1014,88 @@ fn build_venv_check_script() -> String {
 /// makes mlx_lm imports blow up at runtime. So the probe actually execs the
 /// venv's Python with `import mlx_lm` and caches the verdict rather than
 /// re-paying the import cost on every call.
-pub fn venv_verdict() -> VenkVerdict {
+pub fn venv_verdict() -> VenvVerdict {
     let python = match venv_python() {
         Ok(python) => python,
-        Err(error) => return VenkVerdict::Unknown(error),
+        Err(error) => return VenvVerdict::Unknown(error),
     };
     VENV_CACHE.verdict(&python, VENV_PROBE_TIMEOUT, VENV_UNKNOWN_RETRY_INTERVAL)
 }
 
 /// Invalidate the cached verdict.
 ///
-/// Call on entry to any repair as well as on success: a repair that fails
-/// partway must not leave a stale verdict behind, which is what previously
-/// stranded cleanup after the one in-app lever had already been used.
-pub fn reset_venv_cache() {
+/// Call whenever the installed runtime may have changed: after every swap,
+/// successful or not, and after recovery restored a runtime. A stale verdict
+/// is what previously stranded cleanup after the one in-app lever had
+/// already been used.
+fn reset_venv_cache() {
     VENV_CACHE.reset();
 }
 
 /// Probe a specific interpreter. Separate from `venv_verdict()` so tests can
-/// point it at a fixture.
+/// point it at a fixture. `python` is `<venv>/bin/python3`.
 ///
 /// The classification rule is exact: `Broken` requires a definitive answer —
-/// either the check script's own exit code, or an interpreter that is absent.
-/// Everything else (spawn failure, timeout, signal-killed child) is `Unknown`,
-/// because retrying is harmless while a wrong `Broken` verdict both disables
-/// cleanup and misdirects the user toward a repair that cannot help.
-fn probe_venv_at(python: &std::path::Path, timeout: Duration) -> VenkVerdict {
+/// either the check script's own exit code, or a runtime without its
+/// interpreter. Everything else (spawn failure, timeout, signal-killed child)
+/// is `Unknown`, because retrying is harmless while a wrong `Broken` verdict
+/// both disables cleanup and misdirects the user toward a repair that cannot
+/// help.
+pub(crate) fn probe_venv_at(python: &Path, timeout: Duration) -> VenvVerdict {
     if !python.exists() {
-        return VenkVerdict::Broken(format!("{} is missing", python.display()));
+        let venv = python.parent().and_then(Path::parent);
+        if venv.is_some_and(|venv| venv.symlink_metadata().is_err()) {
+            return VenvVerdict::Missing;
+        }
+        // `exists` follows links, so this also covers a dangling interpreter.
+        return VenvVerdict::Broken(format!("{} is missing", python.display()));
     }
-    match bounded_command(
-        Command::new(python).args(["-c", &build_venv_check_script()]),
-        timeout,
-    ) {
-        Ok(out) if out.status.success() => VenkVerdict::Ready,
-        // Exit 1 is the script's "Python < 3.11" verdict and exit 2 its "pins
-        // differ" verdict. Any other code is not a verdict about the runtime.
-        Ok(out) => match out.status.code() {
-            Some(1) | Some(2) => {
-                let detail = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                VenkVerdict::Broken(if detail.is_empty() {
-                    format!("{} reported an unqualified runtime", python.display())
-                } else {
-                    detail
-                })
+    let mut command = match isolated_python(python, SidecarRole::Inference) {
+        Ok(command) => command,
+        Err(error) => return VenvVerdict::Unknown(error),
+    };
+    match bounded_command(command.args(["-c", &build_venv_check_script()]), timeout) {
+        Ok(out) if out.status.success() => VenvVerdict::Ready,
+        Ok(out) => {
+            let stderr_line = last_line(&out.stderr);
+            let detail = if stderr_line.is_empty() {
+                format!("{} reported an unqualified runtime", python.display())
+            } else {
+                stderr_line
+            };
+            match out.status.code() {
+                Some(1) | Some(2) => VenvVerdict::Broken(detail),
+                Some(3) => VenvVerdict::Stale(detail),
+                Some(code) => VenvVerdict::Unknown(format!(
+                    "{} exited with {code}: {}",
+                    python.display(),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                )),
+                None => {
+                    VenvVerdict::Unknown(format!("{} was killed by a signal", python.display()))
+                }
             }
-            Some(code) => VenkVerdict::Unknown(format!(
-                "{} exited with {code}: {}",
-                python.display(),
-                String::from_utf8_lossy(&out.stderr).trim()
-            )),
-            None => VenkVerdict::Unknown(format!("{} was killed by a signal", python.display())),
-        },
-        Err(error) => VenkVerdict::Unknown(error),
+        }
+        Err(error) => VenvVerdict::Unknown(error),
     }
+}
+
+/// The last non-empty line of a process stream (progress meters use `\r`).
+fn last_line(stream: &[u8]) -> String {
+    String::from_utf8_lossy(stream)
+        .split(['\n', '\r'])
+        .map(str::trim)
+        .rfind(|line| !line.is_empty())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// Require the current cached snapshot's tokenizer, config, and every weight shard.
 pub fn is_model_downloaded() -> bool {
-    let Some(home) = dirs::home_dir() else {
+    let Ok(cache) = model_cache_dir() else {
         return false;
     };
-    let cache = home
-        .join(".cache/huggingface/hub")
-        .join(format!("models--{}", SOTTO_MODEL.id.replace('/', "--")));
-    let snapshot = cache.join("snapshots").join(MODEL_REVISION);
-    snapshot_is_complete(&snapshot)
+    snapshot_is_complete(&cache.join("snapshots").join(MODEL_REVISION))
 }
 
 fn snapshot_is_complete(snapshot: &std::path::Path) -> bool {
@@ -989,110 +1179,311 @@ fn snapshot_is_complete(snapshot: &std::path::Path) -> bool {
         })
 }
 
-/// Locate a Python 3.11+ interpreter on the host, preferring newer versions.
-///
-/// On macOS the default `python3` often resolves to Python 3.9 (shipped with
-/// Xcode Command Line Tools), which cannot install `transformers>=5.0` and
-/// therefore forces pip to pick an mlx-lm version with a broken LFM2
-/// loader. Scanning for an explicit 3.11+ interpreter avoids this trap.
-/// Returns an error if no Python 3.11+ interpreter is found — we no longer
-/// fall back to Python 3.9 because transformers v5 models use
-/// `TokenizersBackend`, which doesn't exist in transformers v4.
-fn find_compatible_python() -> Result<std::path::PathBuf, String> {
-    const SEARCH_DIRS: &[&str] = &[
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/opt/local/bin",
-        "/usr/bin",
-    ];
-    // Newest → oldest so we prefer the freshest interpreter available.
-    const VERSIONS: &[&str] = &["3.14", "3.13", "3.12", "3.11"];
+/// Fixed install locations scanned for a host interpreter, newest version
+/// first: Homebrew, /usr/local, MacPorts, the python.org framework and
+/// ~/.local/bin. `PATH` is never consulted (P-09); `/usr/bin/python3` is the
+/// Xcode 3.9 shim and is not a candidate.
+fn host_python_candidates(home: &Path) -> Vec<PathBuf> {
+    SUPPORTED_PYTHON_VERSIONS
+        .iter()
+        .flat_map(|version| {
+            let name = format!("python{version}");
+            [
+                Path::new("/opt/homebrew/bin").join(&name),
+                Path::new("/usr/local/bin").join(&name),
+                Path::new("/opt/local/bin").join(&name),
+                PathBuf::from(format!(
+                    "/Library/Frameworks/Python.framework/Versions/{version}/bin"
+                ))
+                .join(&name),
+                home.join(".local").join("bin").join(&name),
+            ]
+        })
+        .collect()
+}
 
+/// The first candidate that runs as Python 3.11 to 3.14. `Ok(None)` means no
+/// candidate is usable; `Err` means one could not be checked, which a retry
+/// may fix and which must not trigger a Python download.
+fn find_compatible_python(candidates: &[PathBuf]) -> Result<Option<PathBuf>, String> {
     let mut inconclusive: Option<String> = None;
-    for version in VERSIONS {
-        let bin_name = format!("python{}", version);
-        // Explicit directories first, then a PATH-relative lookup.
-        let mut candidates: Vec<std::path::PathBuf> = SEARCH_DIRS
-            .iter()
-            .map(|dir| std::path::PathBuf::from(dir).join(&bin_name))
-            .filter(|candidate| candidate.exists())
-            .collect();
-        if let Ok(out) =
-            bounded_command(Command::new("which").arg(&bin_name), Duration::from_secs(2))
-        {
-            if out.status.success() {
-                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !path.is_empty() {
-                    candidates.push(std::path::PathBuf::from(path));
-                }
+    for candidate in candidates.iter().filter(|candidate| candidate.is_file()) {
+        match probe_python_version(candidate) {
+            PythonProbe::Compatible => {
+                log::info!("Using {} for the cleanup runtime", candidate.display());
+                return Ok(Some(candidate.clone()));
             }
-        }
-
-        for candidate in candidates {
-            match probe_python_version(&candidate) {
-                PythonProbe::Compatible => {
-                    log::info!("Using {} for LLM venv", candidate.display());
-                    return Ok(candidate);
-                }
-                PythonProbe::Unusable(reason) => {
-                    log::debug!("Skipping {}: {}", candidate.display(), reason)
-                }
-                PythonProbe::Inconclusive(reason) => {
-                    log::warn!("Could not verify {}: {}", candidate.display(), reason);
-                    inconclusive = Some(reason);
-                }
+            PythonProbe::Unusable(reason) => {
+                log::debug!("Skipping {}: {}", candidate.display(), reason)
+            }
+            PythonProbe::Inconclusive(reason) => {
+                log::warn!("Could not verify {}: {}", candidate.display(), reason);
+                inconclusive = Some(reason);
             }
         }
     }
+    match inconclusive {
+        Some(reason) => Err(format!(
+            "Could not check the Python on this Mac ({reason}). Try again."
+        )),
+        None => Ok(None),
+    }
+}
 
-    Err(match inconclusive {
-        // Distinguish "no interpreter" from "could not verify one": the fix for
-        // the second is to retry, not to install Python.
-        Some(reason) => format!(
-            "Could not verify a Python 3.11+ interpreter ({reason}). Retry, or install one with: \
-             brew install python"
-        ),
-        None => "Python 3.11+ is required for the LLM feature but not found on this system. \
-                 Install it with: brew install python"
-            .into(),
-    })
+/// A host interpreter, else the provisioned one, else a newly provisioned copy.
+fn find_or_provision_python() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let root = standalone_python_root()?;
+    let mut candidates = host_python_candidates(&home);
+    candidates.push(STANDALONE_PYTHON.executable(&root));
+    match find_compatible_python(&candidates)? {
+        Some(python) => Ok(python),
+        None => provision_python(&root, &STANDALONE_PYTHON),
+    }
+}
+
+/// A pinned python-build-standalone interpreter archive (G-06).
+struct StandalonePython<'a> {
+    url: &'a str,
+    sha256: &'a str,
+    /// Directory under the provisioning root; the archive's `python/` is
+    /// renamed to it.
+    dir_name: &'a str,
+    /// Interpreter inside `bin/`.
+    executable: &'a str,
+}
+
+impl StandalonePython<'_> {
+    fn executable(&self, root: &Path) -> PathBuf {
+        root.join(self.dir_name).join("bin").join(self.executable)
+    }
+
+    /// The download in progress; never a usable file on its own.
+    fn archive(&self, root: &Path) -> PathBuf {
+        root.join(format!(".{}.tar.gz.partial", self.dir_name))
+    }
+
+    /// Where the archive is extracted before its `python/` is renamed.
+    fn staging(&self, root: &Path) -> PathBuf {
+        root.join(format!(".staging-{}", self.dir_name))
+    }
+}
+
+/// Delete a partial download or extraction that a quit left behind. Only a
+/// preparation downloads Python, and preparations run one at a time.
+fn remove_partial_python(root: &Path, python: &StandalonePython) {
+    remove_file_if_present(&python.archive(root));
+    if let Err(error) = remove_dir_if_present(&python.staging(root)) {
+        log::warn!("{error}");
+    }
+}
+
+/// Release `20261110`, 25,479,437 bytes. Fetched only when no Python 3.11 to
+/// 3.14 exists; the hash fixes the archive's contents before extraction.
+const STANDALONE_PYTHON: StandalonePython<'static> = StandalonePython {
+    url: "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.13.18%2B20261110-aarch64-apple-darwin-install_only_stripped.tar.gz",
+    sha256: "7a2384641584ab9984221fcb0fc9265df465922af71be71410529e2a9c3f0540",
+    dir_name: "cpython-3.13.18",
+    executable: "python3.13",
+};
+
+/// Outer bound for the Python download; curl itself fails a transfer slower
+/// than 1 KB/s for 30 s.
+const PYTHON_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(3600);
+const PYTHON_DOWNLOAD_ERROR: &str =
+    "Could not download Python for cleanup. Check your internet connection and try again.";
+
+/// Download, verify and unpack `python` under `root`. The download is an
+/// owned child process, so quitting the app stops it, and a partial archive
+/// is removed so the next attempt starts over.
+fn provision_python(root: &Path, python: &StandalonePython) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(root)
+        .map_err(|e| format!("Could not create {}: {e}", root.display()))?;
+    let archive = python.archive(root);
+    log::info!("No Python 3.11 to 3.14 found; downloading {}", python.dir_name);
+    if let Err(error) = fetch_python_archive(&archive, python.url) {
+        remove_file_if_present(&archive);
+        return Err(error);
+    }
+    let installed = install_python_archive(root, &archive, python);
+    remove_file_if_present(&archive);
+    installed
+}
+
+fn fetch_python_archive(archive: &Path, url: &str) -> Result<(), String> {
+    let output = bounded_command(
+        Command::new("/usr/bin/curl")
+            .args([
+                "-q",
+                "--fail",
+                "-L",
+                "--proto",
+                "=https",
+                "--connect-timeout",
+                "15",
+                "--speed-limit",
+                "1024",
+                "--speed-time",
+                "30",
+                "-o",
+            ])
+            .arg(archive)
+            .arg(url),
+        PYTHON_DOWNLOAD_TIMEOUT,
+    )
+    .map_err(|error| {
+        log::warn!("Python download did not finish: {error}");
+        PYTHON_DOWNLOAD_ERROR.to_string()
+    })?;
+    if !output.status.success() {
+        log::warn!(
+            "Python download failed ({}): {}",
+            output.status,
+            last_line(&output.stderr)
+        );
+        return Err(PYTHON_DOWNLOAD_ERROR.into());
+    }
+    Ok(())
+}
+
+/// Verify `archive` against the pin, extract it through a staging directory
+/// and rename its `python/` into place. A hash mismatch deletes the archive
+/// before anything is extracted.
+fn install_python_archive(
+    root: &Path,
+    archive: &Path,
+    python: &StandalonePython,
+) -> Result<PathBuf, String> {
+    let digest = sha256_of(archive)?;
+    if digest != python.sha256 {
+        log::warn!("Downloaded Python hash {digest} does not match the pin");
+        remove_file_if_present(archive);
+        return Err("Downloaded Python failed its integrity check and was deleted. Try again.".into());
+    }
+    let staging = python.staging(root);
+    remove_dir_if_present(&staging)?;
+    std::fs::create_dir_all(&staging)
+        .map_err(|e| format!("Could not create {}: {e}", staging.display()))?;
+    let placed = extract_archive(archive, &staging).and_then(|()| {
+        let extracted = staging.join("python");
+        if !extracted.join("bin").join(python.executable).is_file() {
+            return Err("Downloaded Python has an unexpected layout".to_string());
+        }
+        let target = root.join(python.dir_name);
+        remove_dir_if_present(&target)?;
+        std::fs::rename(&extracted, &target)
+            .map_err(|e| format!("Could not install the downloaded Python: {e}"))
+    });
+    if let Err(error) = remove_dir_if_present(&staging) {
+        log::warn!("{error}");
+    }
+    placed?;
+    let executable = python.executable(root);
+    match probe_python_version(&executable) {
+        PythonProbe::Compatible => {
+            log::info!("Provisioned {}", executable.display());
+            Ok(executable)
+        }
+        PythonProbe::Unusable(reason) | PythonProbe::Inconclusive(reason) => {
+            Err(format!("Downloaded Python does not run ({reason}). Try again."))
+        }
+    }
+}
+
+fn sha256_of(path: &Path) -> Result<String, String> {
+    let output = bounded_command(
+        Command::new("/usr/bin/shasum").args(["-a", "256"]).arg(path),
+        Duration::from_secs(60),
+    )?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    match stdout.split_whitespace().next() {
+        Some(digest) if output.status.success() => Ok(digest.to_ascii_lowercase()),
+        _ => Err("Could not check the downloaded Python".into()),
+    }
+}
+
+fn extract_archive(archive: &Path, destination: &Path) -> Result<(), String> {
+    let output = bounded_command(
+        Command::new("/usr/bin/tar")
+            .arg("-xzf")
+            .arg(archive)
+            .arg("-C")
+            .arg(destination),
+        Duration::from_secs(300),
+    )?;
+    if !output.status.success() {
+        log::warn!("Python archive extraction failed: {}", last_line(&output.stderr));
+        return Err("Could not unpack the downloaded Python. Try again.".into());
+    }
+    Ok(())
 }
 
 /// What probing a host interpreter for a usable version learned.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PythonProbe {
-    /// Runs and reports >= 3.11.
+    /// Runs natively on Apple Silicon and reports a version from 3.11 through
+    /// 3.14.
     Compatible,
-    /// The interpreter ran and gave a definitive answer — version < 3.11, a
-    /// nonzero exit, or unrecognized output. It cannot be used as-is.
+    /// A definitive answer: an unsupported version, an Intel interpreter
+    /// (which cannot install the arm64-only wheels), a file that cannot run,
+    /// a nonzero exit, or unrecognized output. It cannot be used.
     Unusable(String),
-    /// The probe could not complete (spawn error or timeout). Transient, and
+    /// The probe could not complete (timeout or a transient spawn failure).
     /// MUST NOT be treated as a verdict about the interpreter: reading a
     /// timeout as "unsupported interpreter" is what blocked the only in-app
     /// repair lever with a message about a perfectly healthy Python 3.14.
     Inconclusive(String),
 }
 
+/// Prints 1 only for a native arm64 interpreter in the verified range: an
+/// Intel Python under Rosetta reports `x86_64`.
+const PYTHON_VERSION_CHECK: &str = "import platform, sys; \
+print(1 if (3, 11) <= sys.version_info[:2] <= (3, 14) and platform.machine() == 'arm64' else 0)";
+
+/// `EBADARCH`: a binary built for another CPU, such as an Intel Python on a
+/// Mac without Rosetta.
+#[cfg(target_os = "macos")]
+const BAD_CPU_TYPE: Option<i32> = Some(libc::EBADARCH);
+#[cfg(not(target_os = "macos"))]
+const BAD_CPU_TYPE: Option<i32> = None;
+
+/// Spawn failures that say the file cannot run here, as opposed to a system
+/// that was briefly unable to start a process.
+fn cannot_execute(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::NotFound
+    ) || error
+        .raw_os_error()
+        .is_some_and(|code| code == libc::ENOEXEC || Some(code) == BAD_CPU_TYPE)
+}
+
 /// Probe an interpreter's version.
-fn probe_python_version(python: &std::path::Path) -> PythonProbe {
+fn probe_python_version(python: &Path) -> PythonProbe {
     probe_python_version_with(python, PYTHON_VERSION_PROBE_TIMEOUT)
 }
 
 /// Probe with an explicit budget so tests can exercise the timeout path.
-fn probe_python_version_with(python: &std::path::Path, timeout: Duration) -> PythonProbe {
-    let out = match bounded_command(
-        Command::new(python).args([
-            "-c",
-            "import sys; print(1 if sys.version_info >= (3, 11) else 0)",
-        ]),
+fn probe_python_version_with(python: &Path, timeout: Duration) -> PythonProbe {
+    let out = match bounded_output(
+        Command::new(python).args(["-I", "-c", PYTHON_VERSION_CHECK]),
         timeout,
     ) {
         Ok(out) => out,
-        Err(error) => return PythonProbe::Inconclusive(error),
+        Err(BoundedError::Spawn(SpawnError::Os(error))) if cannot_execute(&error) => {
+            return PythonProbe::Unusable(format!(
+                "{} cannot run on this Mac: {error}",
+                python.display()
+            ))
+        }
+        Err(error) => return PythonProbe::Inconclusive(error.to_string()),
     };
     match String::from_utf8_lossy(&out.stdout).trim() {
         "1" => PythonProbe::Compatible,
-        "0" => PythonProbe::Unusable(format!("{} is older than 3.11", python.display())),
+        "0" => PythonProbe::Unusable(format!(
+            "{} is not an arm64 Python 3.11 to 3.14",
+            python.display()
+        )),
         other => PythonProbe::Unusable(format!(
             "{} reported {other:?} ({}): {}",
             python.display(),
@@ -1102,97 +1493,320 @@ fn probe_python_version_with(python: &std::path::Path, timeout: Duration) -> Pyt
     }
 }
 
-/// Whether an existing venv must be refused instead of repaired.
-///
-/// Only a definitive `Unusable` verdict refuses. An `Inconclusive` probe MUST
-/// fall through to the install: a timeout says nothing about the interpreter,
-/// and refusing here is what blocked the only in-app repair lever with a
-/// message about a healthy Python 3.14.
-fn refuse_existing_runtime(probe: &PythonProbe) -> Option<String> {
-    match probe {
-        PythonProbe::Unusable(reason) => Some(format!(
-            "Existing cleanup runtime has an unsupported Python interpreter ({reason}). \
-             Its files were preserved; repair the runtime before downloading."
-        )),
-        _ => None,
+/// Budget for creating a venv, including its bundled pip.
+const VENV_CREATE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Budget for installing the locked wheels.
+const PIP_INSTALL_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// The bundled lock beside the sidecar script. It must equal the embedded copy
+/// the probe compares against, or every install would read as stale.
+fn runtime_lock_path() -> Result<PathBuf, String> {
+    let lock = LlmEngine::sidecar_script_path()?.with_file_name("requirements.lock");
+    match std::fs::read_to_string(&lock) {
+        Ok(contents) if contents == RUNTIME_LOCK => Ok(lock),
+        Ok(_) => Err("Cleanup runtime lock does not match this app; reinstall SottoASR".into()),
+        Err(_) => Err("Cleanup runtime lock is missing; reinstall SottoASR".into()),
     }
 }
 
-/// Install/upgrade the runtime during an explicit model download or repair.
-/// Preserve existing environments and refuse only a definitively unusable
-/// interpreter.
-pub fn setup_venv() -> Result<(), String> {
-    let venv = venv_dir()?;
-    // Reset on entry, not only on success: a repair that fails partway must not
-    // leave a stale verdict cached, or the next attempt inherits it.
-    reset_venv_cache();
-
-    if let Some(parent) = venv.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create venv parent dir: {}", e))?;
-    }
-
-    let python = venv.join("bin").join("python3");
-    if venv.exists() && python.exists() {
-        let probe = probe_python_version(&python);
-        if let Some(refusal) = refuse_existing_runtime(&probe) {
-            return Err(refusal);
-        }
-        // A transient probe failure MUST NOT block an explicit repair: this is
-        // the only in-app lever that can fix a broken runtime, and the install
-        // below reports the real error if the interpreter is genuinely
-        // unusable.
-        if let PythonProbe::Inconclusive(reason) = &probe {
-            log::warn!(
-                "Could not verify the cleanup interpreter ({reason}); \
-                 continuing with the explicit repair"
-            );
-        }
-    }
-
-    // An env whose interpreter is gone cannot be repaired by pip. Creating a
-    // venv over an existing directory is idempotent and preserves
-    // site-packages, so this covers the absent-venv case too.
-    if !python.exists() {
-        let host_python = find_compatible_python()?;
-        let status = bounded_command(
-            Command::new(&host_python).args(["-m", "venv", &venv.to_string_lossy()]),
-            Duration::from_secs(60),
-        )?
-        .status;
-        if !status.success() {
-            return Err("Could not create cleanup Python runtime".into());
-        }
-    }
-
-    log::info!("Installing the verified cleanup runtime into venv...");
+/// Install exactly the locked wheels into the venv at `python`.
+fn install_lock(python: &Path, lock: &Path, network: PipNetwork) -> Result<(), String> {
+    log::info!("Installing the locked cleanup runtime...");
     let output = bounded_command(
-        Command::new(&python)
-            .args([
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "--disable-pip-version-check",
-                "--timeout",
-                "30",
-                "--retries",
-                "2",
-            ])
-            .args(RUNTIME_PACKAGES),
-        Duration::from_secs(600),
-    )?;
+        Command::new(python).arg("-I").args(pip_install_args(lock, network)),
+        PIP_INSTALL_TIMEOUT,
+    )
+    .map_err(|error| format!("Could not install the cleanup runtime: {error}"))?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("pip install failed: {}", stderr));
+        log::warn!(
+            "pip install failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        let detail = last_line(&output.stderr);
+        return Err(if detail.is_empty() {
+            "Could not install the cleanup runtime. Try again.".into()
+        } else {
+            format!("Could not install the cleanup runtime: {detail}")
+        });
+    }
+    Ok(())
+}
+
+/// Create a venv at `venv` (which must not exist) and install the lock.
+fn create_venv_at(
+    host_python: &Path,
+    venv: &Path,
+    lock: &Path,
+    network: PipNetwork,
+) -> Result<(), String> {
+    log::info!("Creating the cleanup runtime with {}", host_python.display());
+    let output = bounded_command(
+        Command::new(host_python).args(["-I", "-m", "venv"]).arg(venv),
+        VENV_CREATE_TIMEOUT,
+    )
+    .map_err(|error| format!("Could not create the cleanup Python runtime: {error}"))?;
+    if !output.status.success() {
+        log::warn!(
+            "venv creation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+        return Err("Could not create the cleanup Python runtime. Try again.".into());
+    }
+    install_lock(&venv.join("bin").join("python3"), lock, network)
+}
+
+fn remove_dir_if_present(path: &Path) -> Result<(), String> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Could not remove {}: {error}", path.display())),
+    }
+}
+
+fn remove_file_if_present(path: &Path) {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => log::warn!("Could not remove {}: {error}", path.display()),
+    }
+}
+
+fn create_parent(path: &Path) -> Result<(), String> {
+    let parent = path.parent().ok_or("Cleanup runtime has no parent directory")?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Could not create {}: {e}", parent.display()))
+}
+
+/// The runtime steps a preparation runs (R-12). Create, sync and Repair all
+/// build a new runtime in a staging directory beside the installed one and
+/// rename it into place only after its install and probe passed, so a quit
+/// at any point leaves either the old runtime or the new one, never a partial
+/// one. The old runtime stays aside until the caller keeps the new one.
+/// `AppRuntime` works on the app's directories; tests use temporary ones.
+pub(crate) trait RuntimeSetup: Clone + Send + Sync + 'static {
+    /// Undo what a quit or crash during an earlier preparation left behind.
+    fn recover(&self) -> Result<(), String>;
+    fn verdict(&self) -> VenvVerdict;
+    /// Build and check a new runtime in staging. The installed one is untouched.
+    fn build(&self, network: PipNetwork) -> Result<(), String>;
+    /// Swap the staged runtime into place, keeping the old one aside.
+    fn install_built(&self) -> Result<(), String>;
+    /// Keep the installed runtime: delete every aside copy.
+    fn keep_installed(&self);
+    /// Put the aside copy back in place of the installed runtime.
+    fn restore_previous(&self) -> Result<(), String>;
+}
+
+/// The cleanup runtime under the app's data directory.
+#[derive(Clone, Copy)]
+pub(crate) struct AppRuntime;
+
+impl RuntimeSetup for AppRuntime {
+    fn recover(&self) -> Result<(), String> {
+        let restored = recover_runtime_at(&venv_dir()?)?;
+        remove_partial_python(&standalone_python_root()?, &STANDALONE_PYTHON);
+        if restored {
+            reset_venv_cache();
+        }
+        Ok(())
     }
 
-    // A concurrent readiness check can cache a verdict while pip runs (the
-    // entry reset above is not enough on its own); clear it now that the
-    // runtime is verified.
-    reset_venv_cache();
-    log::info!("LLM venv setup complete");
+    fn verdict(&self) -> VenvVerdict {
+        venv_verdict()
+    }
+
+    fn build(&self, network: PipNetwork) -> Result<(), String> {
+        let venv = venv_dir()?;
+        let lock = runtime_lock_path()?;
+        let host_python = find_or_provision_python()?;
+        build_runtime_at(&staging_path(&venv), &host_python, &lock, network)
+    }
+
+    fn install_built(&self) -> Result<(), String> {
+        let venv = venv_dir()?;
+        let result = install_built_at(&venv, &staging_path(&venv), chrono::Utc::now());
+        reset_venv_cache();
+        result
+    }
+
+    fn keep_installed(&self) {
+        match venv_dir() {
+            Ok(venv) => sweep_aside_dirs(&venv),
+            Err(error) => log::warn!("{error}"),
+        }
+    }
+
+    fn restore_previous(&self) -> Result<(), String> {
+        let result = restore_previous_at(&venv_dir()?);
+        reset_venv_cache();
+        result
+    }
+}
+
+fn sibling_name(venv: &Path, suffix: &str) -> String {
+    let name = venv
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
+    format!("{name}{suffix}")
+}
+
+/// Where a new runtime is built before it replaces `venv`.
+pub(crate) fn staging_path(venv: &Path) -> PathBuf {
+    venv.with_file_name(sibling_name(venv, ".staging"))
+}
+
+fn aside_prefix(venv: &Path) -> String {
+    sibling_name(venv, ".aside-")
+}
+
+/// Undo an interrupted preparation. A runtime stranded in an aside directory
+/// with nothing in its place moves back first; a staging directory is an
+/// unfinished build and is removed. Returns whether a runtime was restored.
+pub(crate) fn recover_runtime_at(venv: &Path) -> Result<bool, String> {
+    let mut restored = false;
+    if venv.symlink_metadata().is_err() {
+        if let Some(aside) = newest_aside(venv) {
+            log::warn!("Restoring the cleanup runtime an interrupted preparation moved aside");
+            std::fs::rename(&aside, venv).map_err(|e| {
+                format!(
+                    "Could not restore the previous cleanup runtime from {}: {e}",
+                    aside.display()
+                )
+            })?;
+            restored = true;
+        }
+    }
+    let staging = staging_path(venv);
+    if staging.symlink_metadata().is_ok() {
+        log::warn!("Removing an unfinished cleanup runtime build");
+        remove_dir_if_present(&staging)?;
+    }
+    Ok(restored)
+}
+
+fn newest_aside(venv: &Path) -> Option<PathBuf> {
+    let prefix = aside_prefix(venv);
+    std::fs::read_dir(venv.parent()?)
+        .ok()?
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+        .map(|entry| entry.path())
+        // The UTC suffix sorts by time.
+        .max()
+}
+
+/// Build a new runtime in `staging` from `host_python`, install the lock and
+/// require a Ready probe. A fresh venv matters: `python -m venv` over an
+/// existing directory keeps a dangling interpreter link, and pip leaves
+/// satisfied pins untouched. A failure removes `staging`.
+pub(crate) fn build_runtime_at(
+    staging: &Path,
+    host_python: &Path,
+    lock: &Path,
+    network: PipNetwork,
+) -> Result<(), String> {
+    remove_dir_if_present(staging)?;
+    create_parent(staging)?;
+    let built = create_venv_at(host_python, staging, lock, network).and_then(|()| {
+        match probe_venv_at(&staging.join("bin").join("python3"), VENV_PROBE_TIMEOUT) {
+            VenvVerdict::Ready => Ok(()),
+            VenvVerdict::Missing => {
+                Err("The new cleanup runtime has no interpreter. Try again.".to_string())
+            }
+            VenvVerdict::Stale(detail)
+            | VenvVerdict::Broken(detail)
+            | VenvVerdict::Unknown(detail) => {
+                Err(format!("The new cleanup runtime failed its check: {detail}"))
+            }
+        }
+    });
+    if built.is_err() {
+        if let Err(error) = remove_dir_if_present(staging) {
+            log::warn!("{error}");
+        }
+    }
+    built
+}
+
+/// Put the staged runtime in place. The installed runtime moves to
+/// `<venv>.aside-<UTC>` first and comes back if the rename fails. The aside
+/// copy stays until `sweep_aside_dirs` or `restore_previous_at`.
+pub(crate) fn install_built_at(
+    venv: &Path,
+    staging: &Path,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), String> {
+    let aside = if venv.symlink_metadata().is_ok() {
+        let aside = venv.with_file_name(format!(
+            "{}{}",
+            aside_prefix(venv),
+            now.format("%Y%m%dT%H%M%SZ")
+        ));
+        std::fs::rename(venv, &aside)
+            .map_err(|e| format!("Could not move the old cleanup runtime aside: {e}"))?;
+        Some(aside)
+    } else {
+        None
+    };
+    if let Err(error) = std::fs::rename(staging, venv) {
+        if let Err(removal) = remove_dir_if_present(staging) {
+            log::warn!("{removal}");
+        }
+        let error = format!("Could not put the new cleanup runtime in place: {error}");
+        return Err(restore_aside(venv, aside, error));
+    }
+    log::info!("Cleanup runtime installed");
     Ok(())
+}
+
+/// Replace the installed runtime with the newest aside copy: the new runtime
+/// did not load, the previous one did.
+pub(crate) fn restore_previous_at(venv: &Path) -> Result<(), String> {
+    let aside = newest_aside(venv).ok_or("The previous cleanup runtime is gone")?;
+    remove_dir_if_present(venv)?;
+    std::fs::rename(&aside, venv).map_err(|e| {
+        format!(
+            "Could not restore the previous cleanup runtime from {}: {e}",
+            aside.display()
+        )
+    })?;
+    log::info!("Previous cleanup runtime restored");
+    Ok(())
+}
+
+/// Delete every aside copy beside `venv`, including the newest one.
+pub(crate) fn sweep_aside_dirs(venv: &Path) {
+    let Some(parent) = venv.parent() else {
+        return;
+    };
+    let prefix = aside_prefix(venv);
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(&prefix) {
+            if let Err(error) = remove_dir_if_present(&entry.path()) {
+                log::warn!("{error}");
+            }
+        }
+    }
+}
+
+/// Move the aside copy back after a failed swap and return the error to
+/// report, naming the aside copy when it could not be moved back. The next
+/// preparation's recovery retries that move.
+fn restore_aside(venv: &Path, aside: Option<PathBuf>, error: String) -> String {
+    let Some(aside) = aside else {
+        return error;
+    };
+    match std::fs::rename(&aside, venv) {
+        Ok(()) => error,
+        Err(rename) => {
+            log::warn!("Could not restore the previous cleanup runtime: {rename}");
+            format!("{error}. The previous runtime was kept at {}", aside.display())
+        }
+    }
 }
 
 /// Check if the feature was compiled in.
@@ -1307,44 +1921,6 @@ pub fn kill_orphan(state: &AppState) {
     }
     crate::process::terminate_registered(pid as u32);
     log::warn!("Terminated registered cleanup process (pid={})", pid);
-}
-
-/// Check if a newer model is available on HuggingFace.
-/// Returns Ok(true) if update available, Ok(false) if up to date, Err on failure.
-/// Does NOT load the MLX model — only reads refs/main and calls repo_info().
-///
-/// A temporary unloaded sidecar performs the network query. It never borrows
-/// the resident process, changes its PID, or delays active cleanup inference.
-pub async fn check_model_update(_app: &tauri::AppHandle) -> Result<bool, String> {
-    tokio::task::spawn_blocking(|| match LlmEngine::spawn() {
-        Ok(mut e) => {
-            let resp = e.request_raw(&serde_json::json!({"action": "check_update"}));
-            e.quit();
-            match resp {
-                Ok(response) => model_update_available(&response),
-                Err(e) => Err(format!("Check failed: {}", e)),
-            }
-        }
-        Err(e) => Err(format!("Could not spawn sidecar: {}", e)),
-    })
-    .await
-    .map_err(|e| format!("Check panicked: {}", e))?
-}
-
-fn model_update_available(response: &serde_json::Value) -> Result<bool, String> {
-    if response.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-        return Err(format!(
-            "Model update check failed: {}",
-            response
-                .get("error")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("invalid sidecar response")
-        ));
-    }
-    response
-        .get("update_available")
-        .and_then(serde_json::Value::as_bool)
-        .ok_or_else(|| "Model update check returned no availability result".into())
 }
 
 /// The single model configuration for SottoASR transcript cleanup.
@@ -1513,37 +2089,126 @@ mod tests {
         assert!(is_zombie_error(&error));
     }
 
+    /// The value of a top-level `NAME = <literal>` assignment in the sidecar.
+    fn sidecar_assignment(sidecar: &'static str, name: &str) -> &'static str {
+        let prefix = format!("{name} = ");
+        sidecar
+            .lines()
+            .find_map(|line| line.strip_prefix(prefix.as_str()))
+            .unwrap_or_else(|| panic!("sidecar has no {name} assignment"))
+    }
+
+    /// S-06: the Rust constants, the bundled sidecar and the lock describe one
+    /// runtime and one model.
     #[test]
-    fn rust_and_bundled_sidecar_select_the_same_pinned_model() {
+    fn lock_sidecar_and_rust_pins_agree() {
         let sidecar = include_str!("../../sidecar/llm_cleanup.py");
-        assert!(sidecar.contains(SOTTO_MODEL.id));
-        assert!(sidecar.contains(MODEL_REVISION));
-        assert!(sidecar.contains(PROMPT_SHA256));
+        let quoted = |name: &str| -> String {
+            serde_json::from_str(sidecar_assignment(sidecar, name)).unwrap()
+        };
+        assert_eq!(quoted("MODEL_ID"), SOTTO_MODEL.id);
+        assert_eq!(quoted("MODEL_NAME"), SOTTO_MODEL.display_name);
+        assert_eq!(quoted("MODEL_REVISION"), MODEL_REVISION);
+        assert_eq!(quoted("PROMPT_SHA256"), PROMPT_SHA256);
+
+        let sidecar_pins: BTreeMap<String, String> =
+            serde_json::from_str(sidecar_assignment(sidecar, "RUNTIME_PINS")).unwrap();
+        let rust_pins: BTreeMap<String, String> = RUNTIME_PINS
+            .iter()
+            .map(|(name, version)| (name.to_string(), version.to_string()))
+            .collect();
+        assert_eq!(sidecar_pins, rust_pins);
+        let locked: BTreeMap<String, &str> = locked_versions(RUNTIME_LOCK).into_iter().collect();
+        for (name, version) in RUNTIME_PINS {
+            assert_eq!(locked.get(name).copied(), Some(version), "{name} differs from the lock");
+        }
+
         assert!(validate_loaded_model(&serde_json::json!({"ok":true})).is_err());
         assert!(validate_loaded_model(&serde_json::json!({"ok":true,"model_id":SOTTO_MODEL.id,"revision":MODEL_REVISION,"prompt_sha256":PROMPT_SHA256,"warmed":true})).is_ok());
-        assert!(sidecar.contains(SOTTO_MODEL.display_name));
     }
 
+    /// P-04: every lock entry is pinned by hash, and the install accepts
+    /// nothing else.
     #[test]
-    fn failed_model_update_check_is_not_reported_as_up_to_date() {
-        let failed = serde_json::json!({"ok": false, "error": "offline"});
-        assert!(model_update_available(&failed)
-            .unwrap_err()
-            .contains("offline"));
-        assert!(model_update_available(&serde_json::json!({"ok": true})).is_err());
-        for available in [false, true] {
-            assert_eq!(
-                model_update_available(&serde_json::json!({
-                    "ok": true, "update_available": available,
-                })),
-                Ok(available)
-            );
+    fn every_lock_entry_carries_a_hash_and_the_install_requires_hashes() {
+        let lines: Vec<&str> = RUNTIME_LOCK.lines().collect();
+        let mut entries = 0;
+        for (index, line) in lines.iter().enumerate() {
+            if !line.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+                continue;
+            }
+            entries += 1;
+            assert!(line.contains("=="), "{line} is not pinned");
+            let hashes = lines[index + 1..]
+                .iter()
+                .take_while(|next| next.starts_with(' '))
+                .filter(|next| {
+                    next.trim()
+                        .trim_end_matches('\\')
+                        .trim()
+                        .strip_prefix("--hash=sha256:")
+                        .is_some_and(|hex| hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+                })
+                .count();
+            assert!(hashes > 0, "{line} carries no hash");
         }
+        assert_eq!(entries, 35);
+        assert_eq!(locked_versions(RUNTIME_LOCK).len(), 34, "only colorama carries a marker");
+
+        let args = |network| -> Vec<String> {
+            pip_install_args(Path::new("/bundle/requirements.lock"), network)
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(
+            args(PipNetwork::Patient),
+            [
+                "-m",
+                "pip",
+                "--isolated",
+                "install",
+                "--require-hashes",
+                "--only-binary",
+                ":all:",
+                "--no-deps",
+                "--disable-pip-version-check",
+                "-r",
+                "/bundle/requirements.lock",
+            ]
+        );
+        // The background sync only shortens pip's network patience.
+        let brief = args(PipNetwork::Brief);
+        assert_eq!(&brief[..9], &args(PipNetwork::Patient)[..9]);
+        assert_eq!(
+            &brief[9..],
+            ["--timeout", "10", "--retries", "1", "-r", "/bundle/requirements.lock"]
+        );
     }
 
+    /// R-07: no total deadline, but a cache that stops growing ends the
+    /// download and its process. The clock is injected: each poll is 30 s.
     #[test]
-    fn installed_runtime_matches_the_verified_minimum() {
-        assert!(RUNTIME_PACKAGES.contains(&format!("mlx-lm=={MIN_MLX_LM}").as_str()));
+    fn stalled_download_fails_after_the_stall_limit() {
+        let mut engine = stub_engine("import time; time.sleep(20)");
+        let start = Instant::now();
+        let mut now = start;
+        let mut watch =
+            crate::llm::download::DownloadStallWatch::new(1_000, start, Duration::from_secs(120));
+        let mut polls = 0;
+        let error = engine
+            .download_model(Duration::from_millis(5), || {
+                polls += 1;
+                now += Duration::from_secs(30);
+                watch.observe(1_000, now)
+            })
+            .unwrap_err();
+        assert!(error.contains("120 seconds"), "{error}");
+        assert_eq!(polls, 4);
+        assert!(
+            engine.child.lock().try_wait().unwrap().is_some(),
+            "the stalled download process is stopped"
+        );
     }
 
     fn stub_engine(script: &str) -> LlmEngine {
@@ -1799,46 +2464,105 @@ mod tests {
         assert!(!is_zombie_error("Invalid JSON response"));
     }
 
-
-    /// Run `python3 -c "..."` against the real `build_venv_check_script()` to
-    /// prove the generated Python actually parses and executes. We don't care
-    /// whether mlx_lm is importable here — we care about SyntaxError /
-    /// IndentationError, which would surface as exit 1 with parse error on
-    /// stderr. Exit code 1 (ModuleNotFoundError) is an acceptable outcome in
-    /// a minimal Python; exit 2 (version check failed) is also acceptable;
-    /// exit 0 (ok) is acceptable. Any syntax/indent error fails the test.
-    #[test]
-    fn venv_check_script_parses_in_python() {
-        let script = build_venv_check_script();
-        let python = which_python3();
-        let Some(python) = python else {
-            // No system python3 available in the test env — skip silently.
-            eprintln!("(skipping: no python3 on PATH)");
-            return;
-        };
-        let out = Command::new(&python)
-            .args(["-c", &script])
-            .output()
-            .expect("exec python3");
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        assert!(
-            !stderr.contains("SyntaxError") && !stderr.contains("IndentationError"),
-            "generated venv check script failed to parse as Python: {}",
-            stderr
-        );
+    /// A real interpreter for tests that run Python code. They fail instead of
+    /// passing silently when there is none.
+    fn test_interpreter() -> PathBuf {
+        let home = dirs::home_dir().expect("home directory");
+        std::iter::once(PathBuf::from("python3"))
+            .chain(host_python_candidates(&home))
+            .find(|candidate| probe_python_version(candidate) == PythonProbe::Compatible)
+            .expect(
+                "this test needs an arm64 Python 3.11 to 3.14 as python3 on PATH or in \
+                 Homebrew, MacPorts, the python.org framework or ~/.local/bin",
+            )
     }
 
-    fn which_python3() -> Option<std::path::PathBuf> {
-        let out = Command::new("which").arg("python3").output().ok()?;
-        if !out.status.success() {
-            return None;
+    /// The host probe's own decision: the real check script runs on a real
+    /// interpreter that reports the fixture's machine type and version.
+    #[test]
+    fn python_probe_accepts_only_a_native_arm64_interpreter() {
+        let real = test_interpreter();
+        let directory = tempfile::TempDir::new().unwrap();
+        let reporting = |name: &str, machine: &str, version: &str| {
+            interpreter_fixture(
+                &directory,
+                name,
+                &format!(
+                    "exec '{}' -I - \"$3\" <<'PROBE'\nimport platform, sys\n\
+                     sys.version_info = {version}\nplatform.machine = lambda: '{machine}'\n\
+                     exec(sys.argv[1])\nPROBE",
+                    real.display()
+                ),
+            )
+        };
+        let native = probe_python_version(&reporting("native", "arm64", "(3, 13, 0, 'final', 0)"));
+        assert_eq!(native, PythonProbe::Compatible);
+        for (name, machine, version) in [
+            ("rosetta", "x86_64", "(3, 13, 0, 'final', 0)"),
+            ("too-new", "arm64", "(3, 15, 0, 'final', 0)"),
+        ] {
+            let probe = probe_python_version(&reporting(name, machine, version));
+            assert!(
+                matches!(&probe, PythonProbe::Unusable(reason) if reason.contains("not an arm64 Python 3.11 to 3.14")),
+                "{name}: {probe:?}"
+            );
         }
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if path.is_empty() {
-            None
-        } else {
-            Some(std::path::PathBuf::from(path))
+    }
+
+    /// The real probe script against a venv whose site-packages carries the
+    /// lock's metadata and empty `mlx_lm` / `huggingface_hub` modules:
+    /// matching versions are Ready, a floated transitive version is Stale and
+    /// keeps cleanup running, a floated top-level pin is Broken.
+    #[test]
+    fn a_runtime_with_a_floated_transitive_version_is_reported_stale() {
+        let base = test_interpreter();
+        let directory = tempfile::TempDir::new().unwrap();
+        let venv = directory.path().join("llm-venv");
+        let created = Command::new(&base)
+            .args(["-I", "-m", "venv", "--without-pip"])
+            .arg(&venv)
+            .status()
+            .unwrap();
+        assert!(created.success(), "{} could not create a venv", base.display());
+        let python = venv.join("bin").join("python3");
+        let site = std::fs::read_dir(venv.join("lib"))
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.path().join("site-packages"))
+            .find(|path| path.is_dir())
+            .expect("venv site-packages");
+        let write_dist = |name: &str, version: &str| {
+            let dist = site.join(format!("{}.dist-info", name.replace('-', "_")));
+            std::fs::create_dir_all(&dist).unwrap();
+            std::fs::write(
+                dist.join("METADATA"),
+                format!("Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n"),
+            )
+            .unwrap();
+        };
+        for (name, version) in locked_versions(RUNTIME_LOCK) {
+            write_dist(&name, version);
         }
+        for module in ["mlx_lm", "huggingface_hub"] {
+            std::fs::create_dir_all(site.join(module)).unwrap();
+            std::fs::write(site.join(module).join("__init__.py"), "").unwrap();
+        }
+        assert_eq!(probe_venv_at(&python, Duration::from_secs(10)), VenvVerdict::Ready);
+
+        write_dist("certifi", "2025.1.31");
+        let stale = probe_venv_at(&python, Duration::from_secs(10));
+        assert!(
+            matches!(&stale, VenvVerdict::Stale(reason) if reason.contains("certifi")),
+            "{stale:?}"
+        );
+        assert!(stale.is_ready(), "a stale runtime keeps cleanup running");
+
+        write_dist("transformers", "5.2.0");
+        let broken = probe_venv_at(&python, Duration::from_secs(10));
+        assert!(
+            matches!(&broken, VenvVerdict::Broken(reason) if reason.contains("transformers")),
+            "{broken:?}"
+        );
     }
 
     /// Write an executable shell fixture standing in for a Python interpreter.
@@ -1864,15 +2588,19 @@ mod tests {
     }
 
     #[test]
-    fn probe_classifies_the_check_scripts_own_verdicts_as_broken() {
+    fn probe_classifies_the_check_scripts_own_verdicts() {
         let directory = tempfile::TempDir::new().unwrap();
-        // Exit 1 is the script's "Python < 3.11" verdict, exit 2 its pin verdict.
         for (name, code, stderr) in [
-            ("old-python", 1, "Python 3.9 < 3.11"),
+            ("old-python", 1, "Python 3.9 is not Python 3.11 to 3.14"),
             (
                 "pin-mismatch",
                 2,
-                "Python 3.14, mlx-lm 0.30.0 differs from qualified runtime pins",
+                "Python 3.14: qualified packages differ from the pins: mlx-lm",
+            ),
+            (
+                "stale",
+                3,
+                "Python 3.13: packages differ from the runtime lock: certifi",
             ),
         ] {
             let fixture = interpreter_fixture(
@@ -1880,10 +2608,12 @@ mod tests {
                 name,
                 &format!("echo '{stderr}' >&2\nexit {code}"),
             );
-            match probe_venv_at(&fixture, Duration::from_secs(5)) {
-                VenkVerdict::Broken(reason) => assert_eq!(reason, stderr),
-                other => panic!("expected Broken for exit {code}, got {other:?}"),
-            }
+            let expected = if code == 3 {
+                VenvVerdict::Stale(stderr.into())
+            } else {
+                VenvVerdict::Broken(stderr.into())
+            };
+            assert_eq!(probe_venv_at(&fixture, Duration::from_secs(5)), expected, "exit {code}");
         }
     }
 
@@ -1895,44 +2625,50 @@ mod tests {
         let slow = interpreter_fixture(&directory, "slow", "sleep 30");
         assert!(matches!(
             probe_venv_at(&slow, Duration::from_millis(200)),
-            VenkVerdict::Unknown(_)
+            VenvVerdict::Unknown(_)
         ));
 
         // A signal-killed child is not a verdict either, and is distinguishable
         // from a timeout in the reason.
         let killed = interpreter_fixture(&directory, "killed", "kill -9 $$");
         match probe_venv_at(&killed, Duration::from_secs(5)) {
-            VenkVerdict::Unknown(reason) => assert!(reason.contains("signal"), "{reason}"),
+            VenvVerdict::Unknown(reason) => assert!(reason.contains("signal"), "{reason}"),
             other => panic!("a signal-killed probe is not a verdict: {other:?}"),
         }
     }
 
     #[test]
-    fn probe_treats_a_missing_interpreter_as_broken() {
+    fn probe_separates_a_missing_runtime_from_a_broken_one() {
         let directory = tempfile::TempDir::new().unwrap();
-        assert!(matches!(
-            probe_venv_at(&directory.path().join("absent"), Duration::from_secs(5)),
-            VenkVerdict::Broken(_)
-        ));
+        let python = directory.path().join("llm-venv").join("bin").join("python3");
+        assert_eq!(probe_venv_at(&python, Duration::from_secs(5)), VenvVerdict::Missing);
+        std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(directory.path().join("removed-python"), &python).unwrap();
+        assert!(
+            matches!(probe_venv_at(&python, Duration::from_secs(5)), VenvVerdict::Broken(_)),
+            "a dangling interpreter link needs a repair"
+        );
     }
 
     #[test]
     fn only_an_unknown_verdict_expires() {
         let retry = Duration::from_secs(15);
         let day = Duration::from_secs(86_400);
-        assert!(verdict_is_fresh(&VenkVerdict::Ready, day, retry));
+        assert!(verdict_is_fresh(&VenvVerdict::Ready, day, retry));
+        assert!(verdict_is_fresh(&VenvVerdict::Stale("certifi".into()), day, retry));
+        assert!(verdict_is_fresh(&VenvVerdict::Missing, day, retry));
         assert!(verdict_is_fresh(
-            &VenkVerdict::Broken("old python".into()),
+            &VenvVerdict::Broken("old python".into()),
             day,
             retry
         ));
         assert!(verdict_is_fresh(
-            &VenkVerdict::Unknown("timed out".into()),
+            &VenvVerdict::Unknown("timed out".into()),
             Duration::from_secs(1),
             retry
         ));
         assert!(!verdict_is_fresh(
-            &VenkVerdict::Unknown("timed out".into()),
+            &VenvVerdict::Unknown("timed out".into()),
             retry,
             retry
         ));
@@ -1953,7 +2689,7 @@ mod tests {
 
         assert!(matches!(
             cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
-            VenkVerdict::Unknown(_)
+            VenvVerdict::Unknown(_)
         ));
         set_fixture_mode(&fixture, 0o755);
         assert!(
@@ -1972,13 +2708,13 @@ mod tests {
 
         assert!(matches!(
             cache.verdict(&fixture, Duration::from_secs(5), retry),
-            VenkVerdict::Unknown(_)
+            VenvVerdict::Unknown(_)
         ));
         // The interpreter becomes usable, but the cached Unknown is still fresh.
         set_fixture_mode(&fixture, 0o755);
         assert!(matches!(
             cache.verdict(&fixture, Duration::from_secs(5), retry),
-            VenkVerdict::Unknown(_)
+            VenvVerdict::Unknown(_)
         ));
     }
 
@@ -1995,7 +2731,7 @@ mod tests {
         for _ in 0..3 {
             assert!(matches!(
                 cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
-                VenkVerdict::Broken(_)
+                VenvVerdict::Broken(_)
             ));
         }
         assert_eq!(
@@ -2017,32 +2753,234 @@ mod tests {
         let cache = VenvCache::new();
         assert!(matches!(
             cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
-            VenkVerdict::Broken(_)
+            VenvVerdict::Broken(_)
         ));
         cache.reset();
         assert!(matches!(
             cache.verdict(&fixture, Duration::from_secs(5), Duration::ZERO),
-            VenkVerdict::Broken(_)
+            VenvVerdict::Broken(_)
         ));
         assert_eq!(invocation_count(&counter), 2);
     }
 
-    /// The regression that blocked the only in-app repair lever: a probe
-    /// timeout was read as "unsupported interpreter", so `setup_venv` refused
-    /// to run and the runtime became unrecoverable from Settings.
+    /// Stand-in host interpreter: `-I -m venv <dir>` creates
+    /// `<dir>/bin/python3` as a copy of `venv_python`.
+    fn host_python_fixture(
+        directory: &tempfile::TempDir,
+        name: &str,
+        venv_python: &Path,
+    ) -> PathBuf {
+        interpreter_fixture(
+            directory,
+            name,
+            &format!(
+                "mkdir -p \"$4/bin\" && cp '{}' \"$4/bin/python3\"",
+                venv_python.display()
+            ),
+        )
+    }
+
+    /// R-12: `python -m venv` over the old directory kept the dangling link.
+    /// A rebuild makes a fresh venv in staging, installs the lock there and
+    /// passes the probe; only then does it replace the runtime and sweep
+    /// every aside copy.
     #[test]
-    fn an_inconclusive_probe_does_not_refuse_an_existing_runtime() {
-        assert!(refuse_existing_runtime(&PythonProbe::Compatible).is_none());
-        assert!(refuse_existing_runtime(&PythonProbe::Inconclusive(
-            "Child process timed out after 10 seconds".into()
-        ))
-        .is_none());
-        let refusal = refuse_existing_runtime(&PythonProbe::Unusable("3.9".into()))
-            .expect("a definitively unusable interpreter must be refused");
-        assert!(
-            refusal.contains("unsupported Python interpreter"),
-            "{refusal}"
+    fn repair_replaces_a_venv_whose_interpreter_link_dangles() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let pip_args = directory.path().join("pip-args");
+        let pip = interpreter_fixture(
+            &directory,
+            "pip-ok",
+            &format!(
+                "[ \"$2\" = \"-c\" ] && exit 0\nprintf '%s\\n' \"$@\" > '{}'",
+                pip_args.display()
+            ),
         );
+        let host = host_python_fixture(&directory, "host", &pip);
+        let lock = directory.path().join("requirements.lock");
+        std::fs::write(&lock, RUNTIME_LOCK).unwrap();
+        let root = directory.path().join("support");
+        let venv = root.join("llm-venv");
+        let staging = staging_path(&venv);
+        let interpreter = venv.join("bin").join("python3");
+        std::fs::create_dir_all(interpreter.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(root.join("upgraded-away").join("python3"), &interpreter)
+            .unwrap();
+        std::fs::create_dir_all(root.join("llm-venv.aside-20260101T000000Z")).unwrap();
+        assert!(matches!(
+            probe_venv_at(&interpreter, Duration::from_secs(5)),
+            VenvVerdict::Broken(_)
+        ));
+
+        build_runtime_at(&staging, &host, &lock, PipNetwork::Patient).unwrap();
+        assert!(
+            !interpreter.exists(),
+            "the installed runtime is untouched until the swap"
+        );
+        install_built_at(&venv, &staging, chrono::Utc::now()).unwrap();
+
+        assert!(interpreter.is_file(), "the rebuilt interpreter resolves");
+        assert!(!staging.exists());
+        let recorded = std::fs::read_to_string(&pip_args).unwrap();
+        let recorded: Vec<&str> = recorded.lines().collect();
+        let expected: Vec<String> = std::iter::once("-I".to_string())
+            .chain(
+                pip_install_args(&lock, PipNetwork::Patient)
+                    .iter()
+                    .map(|arg| arg.to_string_lossy().into_owned()),
+            )
+            .collect();
+        assert_eq!(recorded, expected);
+        let asides = || -> Vec<_> {
+            std::fs::read_dir(&root)
+                .unwrap()
+                .flatten()
+                .map(|entry| entry.file_name())
+                .filter(|name| name.to_string_lossy().contains(".aside-"))
+                .collect()
+        };
+        assert_eq!(asides().len(), 2, "the old runtime waits aside until it is let go");
+        sweep_aside_dirs(&venv);
+        assert!(asides().is_empty(), "{:?}", asides());
+    }
+
+    /// A sync whose new runtime does not load goes back to the old one.
+    #[test]
+    fn an_installed_runtime_can_give_way_to_the_previous_one() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let root = directory.path().join("support");
+        let venv = root.join("llm-venv");
+        let staging = staging_path(&venv);
+        std::fs::create_dir_all(&venv).unwrap();
+        std::fs::write(venv.join("marker"), "previous runtime").unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::write(staging.join("marker"), "synced runtime").unwrap();
+
+        install_built_at(&venv, &staging, chrono::Utc::now()).unwrap();
+        assert_eq!(std::fs::read_to_string(venv.join("marker")).unwrap(), "synced runtime");
+        restore_previous_at(&venv).unwrap();
+
+        assert_eq!(std::fs::read_to_string(venv.join("marker")).unwrap(), "previous runtime");
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            1,
+            "no aside copy or staging directory is left"
+        );
+    }
+
+    #[test]
+    fn a_failed_build_leaves_the_installed_runtime_untouched() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let pip = interpreter_fixture(
+            &directory,
+            "pip-offline",
+            "[ \"$2\" = \"-c\" ] && exit 0\necho 'ERROR: network is unreachable' >&2\nexit 1",
+        );
+        let host = host_python_fixture(&directory, "host", &pip);
+        let lock = directory.path().join("requirements.lock");
+        std::fs::write(&lock, RUNTIME_LOCK).unwrap();
+        let root = directory.path().join("support");
+        let venv = root.join("llm-venv");
+        std::fs::create_dir_all(venv.join("bin")).unwrap();
+        std::fs::write(venv.join("marker"), "previous runtime").unwrap();
+
+        let error =
+            build_runtime_at(&staging_path(&venv), &host, &lock, PipNetwork::Brief).unwrap_err();
+
+        assert!(error.contains("network is unreachable"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(venv.join("marker")).unwrap(),
+            "previous runtime"
+        );
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            1,
+            "the failed build leaves no staging or aside directory"
+        );
+    }
+
+    /// A quit between moving the runtime aside and renaming the new one in
+    /// strands the runtime; the next preparation moves it back and drops the
+    /// unfinished build and any partial Python download.
+    #[test]
+    fn recovery_restores_a_stranded_runtime_and_drops_unfinished_work() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let root = directory.path().join("support");
+        let venv = root.join("llm-venv");
+        let older = root.join("llm-venv.aside-20260101T000000Z");
+        let newest = root.join("llm-venv.aside-20261119T101500Z");
+        std::fs::create_dir_all(&older).unwrap();
+        std::fs::create_dir_all(&newest).unwrap();
+        std::fs::write(newest.join("marker"), "newest runtime").unwrap();
+        std::fs::create_dir_all(staging_path(&venv).join("bin")).unwrap();
+
+        assert!(recover_runtime_at(&venv).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(venv.join("marker")).unwrap(),
+            "newest runtime"
+        );
+        assert!(!staging_path(&venv).exists());
+        assert!(
+            !recover_runtime_at(&venv).unwrap(),
+            "an installed runtime is left alone"
+        );
+
+        let python_root = directory.path().join("python");
+        let python = test_python("unused");
+        std::fs::create_dir_all(python.staging(&python_root).join("python")).unwrap();
+        std::fs::write(python.archive(&python_root), b"partial").unwrap();
+        remove_partial_python(&python_root, &python);
+        assert!(!python.archive(&python_root).exists());
+        assert!(!python.staging(&python_root).exists());
+    }
+
+    fn test_python(sha256: &str) -> StandalonePython<'_> {
+        StandalonePython {
+            url: "https://example.invalid/unused",
+            sha256,
+            dir_name: "cpython-test",
+            executable: "python3.13",
+        }
+    }
+
+    /// G-06: the provisioned archive is extracted only after its hash
+    /// matches, through a staging directory; a mismatch deletes the download.
+    #[test]
+    fn standalone_python_installs_only_a_hash_matched_archive() {
+        let directory = tempfile::TempDir::new().unwrap();
+        let source = directory.path().join("source");
+        let packaged = source.join("python").join("bin").join("python3.13");
+        std::fs::create_dir_all(packaged.parent().unwrap()).unwrap();
+        std::fs::write(&packaged, "#!/bin/sh\necho 1\n").unwrap();
+        set_fixture_mode(&packaged, 0o755);
+        let root = directory.path().join("python");
+        std::fs::create_dir_all(&root).unwrap();
+        let archive = root.join(".cpython-test.tar.gz.partial");
+        // Pack once and reuse the bytes: gzip stamps the current time, so two
+        // packs that straddle a second boundary have different digests.
+        let packed = Command::new("/usr/bin/tar")
+            .arg("-czf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&source)
+            .arg("python")
+            .status()
+            .unwrap();
+        assert!(packed.success());
+        let bytes = std::fs::read(&archive).unwrap();
+        let digest = sha256_of(&archive).unwrap();
+
+        let error = install_python_archive(&root, &archive, &test_python(&"0".repeat(64)))
+            .unwrap_err();
+        assert!(error.contains("integrity check"), "{error}");
+        assert!(!archive.exists(), "a mismatched download is deleted");
+        assert!(!root.join("cpython-test").exists(), "nothing is extracted");
+
+        std::fs::write(&archive, &bytes).unwrap();
+        let installed = install_python_archive(&root, &archive, &test_python(&digest)).unwrap();
+        assert_eq!(installed, root.join("cpython-test").join("bin").join("python3.13"));
+        assert!(installed.is_file());
+        assert!(!root.join(".staging-cpython-test").exists(), "staging is removed");
     }
 
     #[test]
@@ -2057,8 +2995,16 @@ mod tests {
         assert_eq!(probe("new", "echo 1", generous), PythonProbe::Compatible);
         let old = probe("old", "echo 0", generous);
         assert!(
-            matches!(&old, PythonProbe::Unusable(reason) if reason.contains("older than 3.11")),
+            matches!(&old, PythonProbe::Unusable(reason) if reason.contains("not an arm64 Python 3.11 to 3.14")),
             "{old:?}"
+        );
+        // A file that cannot be executed is a verdict, not a transient failure.
+        let unrunnable = interpreter_fixture(&directory, "not-executable", "echo 1");
+        set_fixture_mode(&unrunnable, 0o644);
+        let refused = probe_python_version_with(&unrunnable, generous);
+        assert!(
+            matches!(&refused, PythonProbe::Unusable(reason) if reason.contains("cannot run")),
+            "{refused:?}"
         );
         assert!(matches!(
             probe("slow", "sleep 30", Duration::from_millis(200)),
@@ -2071,12 +3017,15 @@ mod tests {
     #[test]
     fn unavailable_reasons_name_the_real_recovery() {
         let broken =
-            VenkVerdict::Broken("python3 is older than 3.11".into()).unavailable_reason();
+            VenvVerdict::Broken("python3 is not Python 3.11 to 3.14".into()).unavailable_reason();
         assert!(broken.contains("repair"), "{broken}");
         assert!(!broken.contains("Download the model"), "{broken}");
 
+        let missing = VenvVerdict::Missing.unavailable_reason();
+        assert!(missing.contains("not installed"), "{missing}");
+
         let unknown =
-            VenkVerdict::Unknown("Child process timed out after 20 seconds".into())
+            VenvVerdict::Unknown("Child process timed out after 20 seconds".into())
                 .unavailable_reason();
         assert!(unknown.contains("retries"), "{unknown}");
         assert!(!unknown.contains("Download the model"), "{unknown}");

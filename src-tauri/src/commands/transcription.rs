@@ -1,7 +1,8 @@
-use tauri::State;
+use tauri::{Emitter, State};
 use crate::state::AppState;
 use crate::models::Transcription;
-use std::path::PathBuf;
+use chrono::{DateTime, Utc};
+use std::path::{Path, PathBuf};
 
 /// Quote text cells and mark formula-looking content as text for spreadsheet
 /// import. Only the export gains a prefix; stored dictation stays byte-identical.
@@ -33,32 +34,51 @@ impl TranscriptionStore {
     }
 
     /// Add a transcription (newest first), capping at 5000 entries, and persist.
-    pub fn add(&mut self, transcription: Transcription) -> Result<Vec<String>, String> {
+    /// Returns the entries the cap removed, only once the trimmed list is durable.
+    pub fn add(&mut self, mut transcription: Transcription) -> Result<Vec<Transcription>, String> {
+        // Retention measures age from the first save: a recovered recording
+        // keeps the date of its audio in `created_at`.
+        if transcription.saved_at.is_none() {
+            transcription.saved_at = Some(Utc::now());
+        }
         // Retrying a recording replaces its unsaved/partial result, not its ID.
         self.items.retain(|item| item.id != transcription.id);
         self.items.insert(0, transcription);
+        #[cfg(test)]
+        take_injected_failure(&self.items[0].id)?;
         // Keep the newly captured text in memory if storage fails. Never destroy
         // an unreadable existing file by replacing it with an empty fallback.
         let retained = self.items.len().min(5000);
         self.save_items(&self.items[..retained])?;
-        let removed = self.items[retained..].iter().map(|item| item.id.clone()).collect();
-        self.items.truncate(retained);
+        Ok(self.items.split_off(retained))
+    }
+
+    /// Delete a transcription by ID and persist. Returns whether it existed.
+    pub fn delete(&mut self, id: &str) -> Result<bool, String> {
+        let remaining: Vec<_> = self.items.iter().filter(|t| t.id != id).cloned().collect();
+        self.save_items(&remaining)?;
+        let removed = remaining.len() != self.items.len();
+        self.items = remaining;
         Ok(removed)
     }
 
-    /// Delete a transcription by ID and persist.
-    pub fn delete(&mut self, id: &str) -> Result<(), String> {
-        let remaining: Vec<_> = self.items.iter().filter(|t| t.id != id).cloned().collect();
-        self.save_items(&remaining)?;
-        self.items = remaining;
-        Ok(())
+    /// Clear all transcriptions and persist. Returns the removed IDs.
+    pub fn clear(&mut self) -> Result<Vec<String>, String> {
+        self.save_items(&[])?;
+        Ok(self.items.drain(..).map(|item| item.id).collect())
     }
 
-    /// Clear all transcriptions and persist.
-    pub fn clear(&mut self) -> Result<(), String> {
-        self.save_items(&[])?;
-        self.items.clear();
-        Ok(())
+    /// Remove entries first saved before `cutoff` and persist. Entries saved by
+    /// older builds have no `saved_at` and are measured from `created_at`.
+    pub fn expire(&mut self, cutoff: DateTime<Utc>) -> Result<Vec<Transcription>, String> {
+        let expired = |item: &Transcription| item.saved_at.unwrap_or(item.created_at) < cutoff;
+        if !self.items.iter().any(expired) {
+            return Ok(Vec::new());
+        }
+        let (removed, remaining): (Vec<_>, Vec<_>) = self.items.iter().cloned().partition(expired);
+        self.save_items(&remaining)?;
+        self.items = remaining;
+        Ok(removed)
     }
 
     /// Export all transcriptions as CSV.
@@ -133,6 +153,28 @@ fn storage_path() -> Result<PathBuf, String> {
     Ok(TEST_DIR.path().join("transcriptions.json"))
 }
 
+#[cfg(test)]
+static FAILING_SAVES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The next save of this entry fails once, as a full disk would. Keyed by ID
+/// so a test running in parallel cannot consume another test's failure.
+#[cfg(test)]
+pub(crate) fn fail_next_save(id: &str) {
+    FAILING_SAVES.lock().unwrap_or_else(|e| e.into_inner()).push(id.to_owned());
+}
+
+#[cfg(test)]
+fn take_injected_failure(id: &str) -> Result<(), String> {
+    let mut failing = FAILING_SAVES.lock().unwrap_or_else(|e| e.into_inner());
+    match failing.iter().position(|item| item == id) {
+        Some(index) => {
+            failing.swap_remove(index);
+            Err("History could not be saved: injected test failure".into())
+        }
+        None => Ok(()),
+    }
+}
+
 /// Persistent transcription store — survives app restarts and reinstalls.
 /// Stored at ~/Library/Application Support/com.sottoasr.app/transcriptions.json
 static TRANSCRIPTIONS: std::sync::LazyLock<Result<tokio::sync::Mutex<TranscriptionStore>, String>> =
@@ -161,44 +203,75 @@ pub async fn get_transcriptions() -> Result<Vec<Transcription>, String> {
     }).await
 }
 
+/// Deleting history also deletes its retained audio: the dialog names it.
+/// The recovery claim keeps a reprocess from losing the file it reads.
 #[tauri::command]
-pub async fn get_last_transcription(
+pub async fn delete_transcription(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<Option<Transcription>, String> {
-    let last = state.last_transcription.lock().await;
-    Ok(last.clone())
+    id: String,
+) -> Result<(), String> {
+    let files = super::recovery::history_files(&app);
+    let removed_audio = {
+        let _claim = super::recovery::RecoveryClaim::acquire(&state)?;
+        let _io = super::recovery::RECOVERY_IO.lock().await;
+        with_store(move |store| super::recovery::delete_history_entry(store, &id, files)).await?
+    };
+    if removed_audio {
+        let _ = app.emit("recovery-recordings-changed", ());
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn delete_transcription(id: String) -> Result<(), String> {
-    with_store(move |store| store.delete(&id)).await
+pub async fn clear_transcriptions(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let files = super::recovery::history_files(&app);
+    let (removed, removed_audio) = {
+        let _claim = super::recovery::RecoveryClaim::acquire(&state)?;
+        let _io = super::recovery::RECOVERY_IO.lock().await;
+        with_store(move |store| super::recovery::clear_history(store, files)).await?
+    };
+    if removed_audio {
+        let _ = app.emit("recovery-recordings-changed", ());
+    }
+    Ok(removed)
 }
 
-#[tauri::command]
-pub async fn clear_transcriptions() -> Result<Vec<String>, String> {
-    with_store(|store| {
-        let removed = store.items.iter().map(|item| item.id.clone()).collect();
-        store.clear()?;
-        Ok(removed)
-    }).await
+/// Retention's history half. The caller holds the recovery claim and lock,
+/// and removes the audio of the returned entries.
+pub(super) async fn expire_history(cutoff: DateTime<Utc>) -> Result<Vec<Transcription>, String> {
+    with_store(move |store| store.expire(cutoff)).await
 }
 
-/// Export all transcriptions as CSV.
-#[tauri::command]
-pub async fn export_transcriptions_csv() -> Result<String, String> {
-    with_store(|store| {
-        store.ensure_loaded()?;
-        Ok(store.export_csv())
-    }).await
+const CSV_EXPORT_PREFIX: &str = "SottoASR-transcriptions-";
+
+fn csv_export_name(date: chrono::NaiveDate, id: uuid::Uuid) -> String {
+    format!("{CSV_EXPORT_PREFIX}{}-{id}.csv", date.format("%Y-%m-%d"))
+}
+
+/// True only for names `write_csv_export` produces.
+fn is_csv_export_name(name: &str) -> bool {
+    let Some(stem) = name.strip_prefix(CSV_EXPORT_PREFIX).and_then(|rest| rest.strip_suffix(".csv")) else {
+        return false;
+    };
+    let (Some(date), Some(id)) = (stem.get(..10), stem.get(11..)) else {
+        return false;
+    };
+    match (chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d"), uuid::Uuid::parse_str(id)) {
+        (Ok(date), Ok(id)) => csv_export_name(date, id) == name,
+        _ => false,
+    }
 }
 
 /// Export through native file I/O: WKWebView has no browser download handler.
 /// Reserve a unique name before atomic replacement, so an existing export is
 /// never overwritten and success means the complete CSV reached disk.
-fn write_csv_export(directory: &std::path::Path, csv: &str) -> Result<PathBuf, String> {
+fn write_csv_export(directory: &Path, csv: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(directory).map_err(|error| format!("Could not access Downloads: {error}"))?;
-    let path = directory.join(format!("SottoASR-transcriptions-{}-{}.csv",
-        chrono::Utc::now().format("%Y-%m-%d"), uuid::Uuid::new_v4()));
+    let path = directory.join(csv_export_name(Utc::now().date_naive(), uuid::Uuid::new_v4()));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -224,8 +297,49 @@ pub async fn export_transcriptions_csv_file() -> Result<String, String> {
     }).await
 }
 
+/// The webview supplies this path, so only an export this app wrote directly
+/// into Downloads, as a regular file and not a link, may reach Finder.
+fn checked_csv_export(path: &Path, downloads: &Path) -> Result<PathBuf, String> {
+    let refused = || String::from("Only a CSV export in your Downloads folder can be shown.");
+    let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(refused)?;
+    if path.parent() != Some(downloads) || !is_csv_export_name(name) {
+        return Err(refused());
+    }
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| format!("The export is no longer in Downloads: {error}"))?;
+    if !metadata.file_type().is_file() {
+        return Err(refused());
+    }
+    Ok(path.to_path_buf())
+}
+
+#[tauri::command]
+pub async fn reveal_csv_export(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let downloads = dirs::download_dir().ok_or("Could not locate your Downloads folder")?;
+        let path = checked_csv_export(Path::new(&path), &downloads)?;
+        #[cfg(target_os = "macos")]
+        {
+            let status = std::process::Command::new("/usr/bin/open").arg("-R").arg(path).status()
+                .map_err(|error| format!("Could not open Finder: {error}"))?;
+            if status.success() { Ok(()) } else { Err("Finder could not show the export.".into()) }
+        }
+        #[cfg(not(target_os = "macos"))]
+        { let _ = path; Err("Showing exports is supported on macOS".into()) }
+    }).await.map_err(|error| format!("Could not open Finder: {error}"))?
+}
+
+/// Entries the 5,000-entry cap removes lose their audio and receipt, except
+/// interrupted ones: that audio is still the user's recovery copy.
 pub async fn add_transcription(transcription: Transcription) -> Result<Vec<String>, String> {
-    with_store(move |store| store.add(transcription)).await
+    // Lock order is recovery I/O, then the store, as in the restart scan.
+    let _io = super::recovery::RECOVERY_IO.lock().await;
+    with_store(move |store| {
+        // A second instance cannot record or reprocess, so it never saves here.
+        super::recovery::add_history_entry(store, transcription, || {
+            super::recovery::RecordingFiles::resolve(None)
+        })
+    }).await
 }
 
 /// Recovery must not mistake the in-memory copy of a failed save for durability.
@@ -239,7 +353,6 @@ pub(crate) async fn persisted_transcriptions() -> Result<Vec<Transcription>, Str
 /// Only a successful durable save can acknowledge the existing retention policy.
 /// Failed saves keep recovery-only entries without telling the UI to remove data.
 pub fn emit_transcription(app: &tauri::AppHandle, transcription: &Transcription, saved: &Result<Vec<String>, String>) {
-    use tauri::Emitter;
     #[derive(Clone, serde::Serialize)]
     struct SavedEvent<'a> {
         #[serde(flatten)]
@@ -254,7 +367,6 @@ pub fn emit_transcription(app: &tauri::AppHandle, transcription: &Transcription,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use tempfile::TempDir;
 
     #[test]
@@ -296,6 +408,7 @@ mod tests {
             cleanup_suggestion: None,
             llm_applied: false,
             llm_cleanup_status: crate::models::LlmCleanupStatus::Idle,
+            saved_at: None,
         }
     }
 
@@ -304,6 +417,91 @@ mod tests {
         let path = dir.path().join("transcriptions.json");
         let store = TranscriptionStore::new(path);
         (dir, store)
+    }
+
+    fn ids(entries: &[Transcription]) -> Vec<&str> {
+        entries.iter().map(|entry| entry.id.as_str()).collect()
+    }
+
+    #[test]
+    fn first_save_records_saved_at_and_later_saves_keep_it() {
+        let (_directory, mut store) = temp_store();
+        let mut recovered = make_transcription("recovered", "speech from an old recording");
+        recovered.created_at = Utc::now() - chrono::Duration::days(400);
+        let before = Utc::now();
+        store.add(recovered).unwrap();
+        let saved_at = store.get_all()[0].saved_at.expect("store sets saved_at");
+        assert!(saved_at >= before);
+        assert_eq!(TranscriptionStore::load(&store.path).unwrap()[0].saved_at, Some(saved_at));
+        let mut kept = make_transcription("kept", "text");
+        kept.saved_at = Some(saved_at - chrono::Duration::days(2));
+        store.add(kept.clone()).unwrap();
+        assert_eq!(store.get_all()[0].saved_at, kept.saved_at);
+    }
+
+    #[test]
+    fn expire_removes_only_entries_saved_before_the_cutoff() {
+        let (_directory, mut store) = temp_store();
+        let now = Utc::now();
+        let mut recovered = make_transcription("recovered", "recent save of old audio");
+        recovered.created_at = now - chrono::Duration::days(400);
+        recovered.saved_at = Some(now - chrono::Duration::days(1));
+        let mut expired = make_transcription("expired", "old");
+        expired.saved_at = Some(now - chrono::Duration::days(40));
+        store.add(expired).unwrap();
+        store.add(recovered).unwrap();
+        let mut older_build = make_transcription("older-build", "saved without saved_at");
+        older_build.created_at = now - chrono::Duration::days(40);
+        store.items.push(older_build);
+        let removed = store.expire(now - chrono::Duration::days(30)).unwrap();
+        assert_eq!(ids(&removed), ["expired", "older-build"]);
+        assert_eq!(ids(&store.get_all()), ["recovered"]);
+        assert_eq!(ids(&TranscriptionStore::load(&store.path).unwrap()), ["recovered"]);
+        assert!(store.expire(now - chrono::Duration::days(30)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn injected_save_failure_hits_only_the_named_entry_once() {
+        let (_directory, mut store) = temp_store();
+        let id = uuid::Uuid::new_v4().to_string();
+        fail_next_save(&id);
+        store.add(make_transcription("other", "unaffected")).unwrap();
+        assert!(store.add(make_transcription(&id, "unsaved")).is_err());
+        assert_eq!(store.get_all()[0].text, "unsaved");
+        assert_eq!(ids(&TranscriptionStore::load(&store.path).unwrap()), ["other"]);
+        store.add(make_transcription(&id, "saved on retry")).unwrap();
+        assert_eq!(TranscriptionStore::load(&store.path).unwrap()[0].text, "saved on retry");
+    }
+
+    #[test]
+    fn only_this_apps_exports_in_downloads_can_be_revealed() {
+        let downloads = TempDir::new().unwrap();
+        let elsewhere = TempDir::new().unwrap();
+        let export = write_csv_export(downloads.path(), "text\n").unwrap();
+        assert!(is_csv_export_name(export.file_name().unwrap().to_str().unwrap()));
+        assert_eq!(checked_csv_export(&export, downloads.path()).unwrap(), export);
+        let foreign = write_csv_export(elsewhere.path(), "text\n").unwrap();
+        assert!(checked_csv_export(&foreign, downloads.path()).is_err());
+        let dotted = downloads.path().join("..").join(downloads.path().file_name().unwrap())
+            .join(export.file_name().unwrap());
+        assert!(checked_csv_export(&dotted, downloads.path()).is_err());
+        let renamed = downloads.path().join("notes.csv");
+        std::fs::write(&renamed, "private").unwrap();
+        assert!(checked_csv_export(&renamed, downloads.path()).is_err());
+        let missing = downloads.path().join(csv_export_name(Utc::now().date_naive(), uuid::Uuid::new_v4()));
+        assert!(checked_csv_export(&missing, downloads.path()).is_err());
+        for name in ["SottoASR-transcriptions-2026-13-01-00000000-0000-0000-0000-000000000000.csv",
+            "SottoASR-transcriptions-2026-11-19-00000000-0000-0000-0000-000000000000.csv.app",
+            "SottoASR-transcriptions-2026-11-19-0000000000000000000000000000000.csv",
+            "SottoASR-transcriptions-2026-11-19_00000000-0000-0000-0000-000000000000.csv"] {
+            assert!(!is_csv_export_name(name), "{name}");
+        }
+        #[cfg(unix)]
+        {
+            let link = downloads.path().join(csv_export_name(Utc::now().date_naive(), uuid::Uuid::new_v4()));
+            std::os::unix::fs::symlink(&renamed, &link).unwrap();
+            assert!(checked_csv_export(&link, downloads.path()).is_err());
+        }
     }
 
     #[test]
@@ -353,7 +551,7 @@ mod tests {
         let (_dir, mut store) = temp_store();
         store.items = (0..5000).map(|i| make_transcription(&i.to_string(), "text")).collect();
         let removed = store.add(make_transcription("new", "newest")).unwrap();
-        assert_eq!(removed, ["4999"]);
+        assert_eq!(ids(&removed), ["4999"]);
         assert_eq!(store.items.len(), 5000);
         assert_eq!(store.items[0].id, "new");
         assert_eq!(store.items[4999].id, "4998");
@@ -371,7 +569,7 @@ mod tests {
         assert!(store.path.is_dir());
         store.path = directory.path().join("recovered.json");
         let removed = store.add(make_transcription("next", "next dictation")).unwrap();
-        assert_eq!(removed, ["4998", "4999"]);
+        assert_eq!(ids(&removed), ["4998", "4999"]);
         assert_eq!(store.items[1].id, "recovery");
         let persisted = TranscriptionStore::load(&store.path).unwrap();
         assert_eq!(persisted[1].text, "unsaved dictation");
@@ -487,6 +685,7 @@ mod tests {
         transcription.raw_text = Some("+SUM(1,2)".into());
         transcription.capture_error = Some("@device".into());
         transcription.cleanup_suggestion = Some("-2".into());
+        transcription.saved_at = Some(Utc::now());
         store.add(transcription.clone()).unwrap();
         let exported = store.export_csv();
         for cell in ["\"'=1+1\"", "\"'+SUM(1,2)\"", "\"'@device\"", "\"'-2\""] {

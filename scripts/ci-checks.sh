@@ -104,7 +104,15 @@ ALL_RUST_WINDOWS=$(
     | grep -v '^$'
 )
 
-# Extract windows from capabilities JSON
+# Every page Vite builds (the keys of rollupOptions.input) is a window too.
+VITE_WINDOWS=$(
+  awk '/input: *[{]/{inside=1; next} inside && /[}]/{exit} inside' "$REPO_ROOT/vite.config.ts" \
+    | grep -oE '^[[:space:]]*[a-z_]+:' \
+    | sed -E 's/[[:space:]:]//g' \
+    | sort -u
+)
+
+# capabilities/default.json is the file that lists every window
 CAP_WINDOWS=$(jq -r '.windows[]' "$REPO_ROOT/src-tauri/capabilities/default.json" | sort -u)
 
 MISSING_FROM_CAP=false
@@ -117,8 +125,21 @@ for w in $ALL_RUST_WINDOWS; do
   fi
 done
 
+if [ -z "$VITE_WINDOWS" ]; then
+  fail "No pages found in rollupOptions.input in vite.config.ts"
+  MISSING_FROM_CAP=true
+fi
+for w in $VITE_WINDOWS; do
+  if echo "$CAP_WINDOWS" | grep -qx "$w"; then
+    pass "Page '$w' listed in capabilities"
+  else
+    fail "Page '$w' built by Vite but MISSING from capabilities/default.json"
+    MISSING_FROM_CAP=true
+  fi
+done
+
 if [ "$MISSING_FROM_CAP" = false ]; then
-  pass "All Rust-created windows are in capabilities"
+  pass "All Rust-created windows and Vite pages are in capabilities/default.json"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -178,16 +199,8 @@ INVOKE_CMDS=$(
     | sort -u
 )
 
-# Known plugin commands that are NOT custom handlers (provided by Tauri plugins)
-PLUGIN_COMMANDS="restart"
-
 MISSING_IPC=false
 for cmd in $INVOKE_CMDS; do
-  # Skip known plugin commands
-  if echo "$PLUGIN_COMMANDS" | grep -qw "$cmd"; then
-    pass "invoke('$cmd') — plugin command (skipped)"
-    continue
-  fi
   if echo "$HANDLER_FNS" | grep -qx "$cmd"; then
     pass "invoke('$cmd') maps to registered handler"
   else

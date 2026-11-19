@@ -6,11 +6,16 @@
 .settings-window .shortcut-field + .shortcut-field { margin-top:15px; }
 .settings-window .shortcut-pair { display:flex; gap:8px; margin-top:6px; }
 .settings-window .shortcut-pair > * { flex:1; min-width:0; }
+.settings-window .setting-field { display:block; margin-top:14px; }
+.settings-window .setting-field:first-of-type { margin-top:0; }
+.settings-window .setting-select { display:block; width:100%; box-sizing:border-box; margin-top:6px; border:1px solid var(--border); background:var(--input-bg); color:var(--text-bright); padding:8px 10px; border-radius:8px; font:inherit; font-size:13px; }
+.settings-window .setting-select:focus { outline:1px solid var(--accent); }
 .settings-window .secondary-button { border:1px solid var(--border-hover); border-radius:8px; background:var(--input-bg); color:var(--text); padding:8px 11px; font:inherit; font-size:12px; cursor:pointer; }
 .settings-window .secondary-button:hover:not(:disabled) { color:var(--text-bright); border-color:var(--text-dim); }
 .settings-window .secondary-button:disabled { opacity:.45; cursor:default; }
-.settings-window .danger { color:#fca5a5; }
+.settings-window .danger { color:var(--danger); }
 .settings-window .setting-status { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; margin-top:12px; }
-.settings-window .setting-error { font-size:12px; line-height:1.5; color:#fca5a5; background:#ef444410; padding:10px 12px; border:1px solid #ef444430; border-radius:8px; overflow-wrap:anywhere; margin:12px 0; }
+.settings-window .setting-error { font-size:12px; line-height:1.5; color:var(--danger); background:var(--danger-bg); padding:10px 12px; border-radius:8px; overflow-wrap:anywhere; margin:12px 0; }
 .settings-window .setting-error p { margin:0 0 8px; }
-.settings-window .setting-success { color:#86efac; font-size:12px; margin:10px 0 0; }
+.settings-window .setting-warning { font-size:12px; line-height:1.5; color:var(--warning); background:var(--warning-bg); padding:10px 12px; border-radius:8px; overflow-wrap:anywhere; margin:8px 0; }
+.settings-window .setting-success { color:var(--success); font-size:12px; margin:10px 0 0; }

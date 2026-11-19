@@ -1,9 +1,15 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
   import { createEventScope } from '../utils/event-scope';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount, onDestroy } from 'svelte';
-  import type { PermissionStatus } from '../utils/tauri';
+  import {
+    checkAllPermissions, completeSetup, downloadModel, getAsrBackend, getSettings,
+    openAccessibilitySettings, openMicrophoneSettings, requestAccessibilityPermission,
+    requestMicrophonePermission, restartApp,
+  } from '../utils/tauri';
+  import type { DownloadProgress } from '../utils/tauri';
+  import DownloadProgressBar from './download-progress.svelte';
+  import { shortcutKeys } from './shortcut-format';
 
   type Step = 'welcome' | 'permissions' | 'model' | 'ready' | 'restart' | 'error';
 
@@ -11,14 +17,18 @@
   let micPermission = $state<string>('not_determined'); // "authorized", "denied", "not_determined", "restricted"
   let axPermission = $state(false);
   let axFunctional = $state(false);
+  let axRequested = $state(false);
   let needsRestart = $state(false);
   let backendName = $state('');
   let progressMessage = $state('');
-  let progressPercent = $state(0);
+  let download = $state<DownloadProgress | null>(null);
   let errorMessage = $state('');
+  let actionError = $state('');
   let isProcessing = $state(false);
   let restarting = $state(false);
   let restartError = $state('');
+  let shortcuts = $state<{ keys: string[]; description: string }[]>([]);
+  let shortcutsUnavailable = $state(false);
 
   // Poll interval for permission checks
   let permissionPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -34,46 +44,23 @@
   let allPermissionsGranted = $derived(micGranted && axPermission && axFunctional);
 
   onMount(async () => {
+    await Promise.all([
+      scope.listen<{ step: string; message: string }>('setup-progress', (event) => {
+        progressMessage = event.payload.message;
+      }),
+      scope.listen<DownloadProgress>('model-download-progress', (event) => {
+        if (isProcessing) download = event.payload;
+      }),
+    ]);
+    if (disposed) return;
     try {
-      const info = await invoke<{ backend: string; model_available: boolean }>('get_asr_backend');
+      const info = await getAsrBackend();
       if (disposed) return;
       backendName = info.backend;
-
-      if (info.model_available) {
-        currentStep = 'permissions';
-        startPermissionPolling();
-      }
+      if (info.model_available && currentStep === 'welcome') goToPermissions();
     } catch (e) {
       console.error('Failed to get backend info:', e);
     }
-
-    await scope.listen<{ step: string; message: string }>('setup-progress', (event) => {
-      progressMessage = event.payload.message;
-    });
-
-    await scope.listen<{ progress: number; current_file: string; status: string }>(
-      'model-download-progress',
-      (event) => {
-        progressPercent = Math.round(event.payload.progress * 100);
-        if (event.payload.current_file) {
-          progressMessage = `Downloading ${event.payload.current_file}...`;
-        }
-        if (event.payload.status === 'complete') {
-          progressMessage = 'Download complete!';
-        }
-      }
-    );
-
-    await scope.listen('asr-init-complete', () => {
-      currentStep = 'ready';
-      isProcessing = false;
-    });
-
-    await scope.listen<{ error: string }>('asr-init-error', (event) => {
-      errorMessage = event.payload.error;
-      currentStep = 'error';
-      isProcessing = false;
-    });
   });
 
   onDestroy(() => {
@@ -104,7 +91,7 @@
     if (disposed || checkingPermissions) return;
     checkingPermissions = true;
     try {
-      const status = await invoke<PermissionStatus>('check_all_permissions');
+      const status = await checkAllPermissions();
       if (disposed) return;
       micPermission = status.microphone;
       axPermission = status.accessibility_api;
@@ -116,33 +103,40 @@
   }
 
   async function requestMicrophone() {
+    actionError = '';
     try {
-      await invoke('request_microphone_permission');
+      await requestMicrophonePermission();
       // Recheck after prompt
       if (!disposed) permissionCheckTimeout = setTimeout(checkPermissions, 500);
     } catch (e) {
-      console.error('Microphone request failed:', e);
+      if (!disposed) actionError = String(e);
     }
   }
 
+  /** The first press shows the macOS prompt, which also lists SottoASR in System Settings. */
   async function requestAccessibility() {
-    await invoke('request_accessibility_permission');
+    actionError = '';
+    try {
+      if (axRequested) await openAccessibilitySettings();
+      else await requestAccessibilityPermission();
+      if (!disposed) axRequested = true;
+    } catch (e) {
+      if (!disposed) actionError = String(e);
+    }
   }
 
-  async function openAccessibilitySettings() {
-    await invoke('open_accessibility_settings');
+  async function showMicrophoneSettings() {
+    actionError = '';
+    try { await openMicrophoneSettings(); }
+    catch (e) { if (!disposed) actionError = String(e); }
   }
 
-  async function openMicrophoneSettings() {
-    await invoke('open_microphone_settings');
-  }
-
-  async function restartApp() {
+  async function restartNow() {
     if (restarting) return;
     restarting = true;
     restartError = '';
     try {
-      await invoke('restart_app');
+      await restartApp();
     } catch (error) { if (!disposed) restartError = String(error); }
     finally { if (!disposed) restarting = false; }
   }
@@ -152,6 +146,7 @@
     startPermissionPolling();
   }
 
+  /** Runs from Permissions, and again in place from the error step. */
   async function startSetup() {
     stopPermissionPolling();
 
@@ -160,31 +155,53 @@
       currentStep = 'restart';
       return;
     }
+    if (isProcessing) return;
 
     isProcessing = true;
     currentStep = 'model';
-    progressMessage = 'Initializing speech recognition...';
-    progressPercent = 0;
+    errorMessage = '';
+    download = null;
+    progressMessage = 'Preparing speech recognition…';
 
     try {
-      const result = await invoke<{
-        backend: string;
-        microphone_permission: boolean;
-        accessibility_permission: boolean;
-        asr_ready: boolean;
-      }>('complete_setup');
-
+      // The parakeet build needs its files before setup can load them; the
+      // FluidAudio build downloads during setup and returns at once here.
+      const backend = await getAsrBackend();
+      if (disposed) return;
+      if (!backend.model_available) {
+        progressMessage = 'Downloading the speech model…';
+        await downloadModel();
+        if (disposed) return;
+      }
+      const result = await completeSetup();
+      if (disposed) return;
       if (result.asr_ready) {
         currentStep = 'ready';
+        void loadShortcuts();
       } else {
-        errorMessage = 'ASR engine failed to initialize. Please try again.';
+        errorMessage = result.error || 'Speech recognition could not start. Try again.';
         currentStep = 'error';
       }
-    } catch (e: any) {
-      errorMessage = e?.toString() || 'Setup failed';
+    } catch (e) {
+      if (disposed) return;
+      errorMessage = String(e) || 'Setup failed. Try again.';
       currentStep = 'error';
     } finally {
-      isProcessing = false;
+      if (!disposed) isProcessing = false;
+    }
+  }
+
+  async function loadShortcuts() {
+    try {
+      const settings = await getSettings();
+      if (disposed) return;
+      shortcuts = [
+        { keys: shortcutKeys(settings.push_to_talk_shortcut), description: 'Push-to-talk — hold to record, release to transcribe' },
+        { keys: shortcutKeys(settings.toggle_shortcut), description: 'Toggle — press to start, press again to stop' },
+        { keys: shortcutKeys(settings.cancel_shortcut), description: 'Cancel current recording' },
+      ];
+    } catch {
+      if (!disposed) shortcutsUnavailable = true;
     }
   }
 
@@ -192,11 +209,6 @@
     stopPermissionPolling();
     const win = getCurrentWindow();
     await win.close();
-  }
-
-  function retrySetup() {
-    errorMessage = '';
-    currentStep = 'welcome';
   }
 </script>
 
@@ -270,7 +282,7 @@
               Grant Access
             </button>
           {:else if micPermission === 'denied'}
-            <button class="secondary small" onclick={openMicrophoneSettings}>
+            <button class="secondary small" onclick={showMicrophoneSettings}>
               Open Settings
             </button>
           {/if}
@@ -293,8 +305,8 @@
           {#if needsRestart}
             <span class="permission-note restart-note">Restart required</span>
           {:else if !axPermission}
-            <button class="secondary small" onclick={openAccessibilitySettings}>
-              Open System Settings
+            <button class="secondary small" onclick={requestAccessibility}>
+              {axRequested ? 'Open System Settings' : 'Grant Access'}
             </button>
           {/if}
         </div>
@@ -318,6 +330,7 @@
           Toggle SottoASR <strong>on</strong> in System Settings &gt; Privacy &amp; Security &gt; Accessibility.
         </p>
       {/if}
+      {#if actionError}<p class="error-message" role="alert">{actionError}</p>{/if}
 
       <div class="button-row">
         <button class="secondary" onclick={() => { stopPermissionPolling(); currentStep = 'welcome'; }}>
@@ -339,11 +352,8 @@
 
         <p class="progress-message">{progressMessage || 'Preparing...'}</p>
 
-        {#if progressPercent > 0 && progressPercent < 100}
-          <div class="progress-bar-container">
-            <div class="progress-bar" style="width: {progressPercent}%"></div>
-          </div>
-          <p class="progress-detail">{progressPercent}%</p>
+        {#if download}
+          <DownloadProgressBar progress={download} label="Speech model download" />
         {/if}
       </div>
 
@@ -361,20 +371,18 @@
       <h2>SottoASR is Ready!</h2>
       <p class="subtitle">Speech recognition is set up and ready to use.</p>
 
-      <div class="shortcuts-preview">
-        <div class="shortcut">
-          <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd>
-          <span>Push-to-talk — hold to record, release to transcribe</span>
+      {#if shortcuts.length}
+        <div class="shortcuts-preview">
+          {#each shortcuts as shortcut (shortcut.description)}
+            <div class="shortcut">
+              {#each shortcut.keys as key}<kbd>{key}</kbd>{/each}
+              <span>{shortcut.description}</span>
+            </div>
+          {/each}
         </div>
-        <div class="shortcut">
-          <kbd>⌘</kbd><kbd>⇧</kbd><kbd>D</kbd>
-          <span>Toggle — press to start, press again to stop</span>
-        </div>
-        <div class="shortcut">
-          <kbd>Esc</kbd>
-          <span>Cancel current recording</span>
-        </div>
-      </div>
+      {:else if shortcutsUnavailable}
+        <p class="note">Your shortcuts are listed in Settings under General.</p>
+      {/if}
 
       <p class="note">
         SottoASR lives in your menu bar. Look for the microphone icon at the top of your screen.
@@ -404,7 +412,7 @@
         <button class="secondary" onclick={closeOnboarding}>
           Later
         </button>
-        <button class="primary" disabled={restarting} onclick={restartApp}>
+        <button class="primary" disabled={restarting} onclick={restartNow}>
           Restart Now
         </button>
       </div>
@@ -421,7 +429,7 @@
         <button class="secondary" onclick={closeOnboarding}>
           Skip for Now
         </button>
-        <button class="primary" onclick={retrySetup}>
+        <button class="primary" disabled={isProcessing} onclick={startSetup}>
           Try Again
         </button>
       </div>
@@ -437,9 +445,9 @@
     justify-content: center;
     min-height: 100vh;
     padding: 2rem;
-    background: var(--bg, #1a1a1a);
-    color: var(--text, #e0e0e0);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
   }
 
   .step {
@@ -452,24 +460,24 @@
     font-size: 3rem;
     margin-bottom: 1rem;
   }
-  .icon-large.success { color: #22c55e; }
-  .icon-large.error { color: #ef4444; font-weight: bold; }
+  .icon-large.success { color: var(--success); }
+  .icon-large.error { color: var(--danger); font-weight: bold; }
 
   h1 {
     font-size: 1.75rem;
     font-weight: 700;
     margin: 0 0 0.5rem;
-    color: #fff;
+    color: var(--text-bright);
   }
   h2 {
     font-size: 1.4rem;
     font-weight: 600;
     margin: 0 0 0.5rem;
-    color: #fff;
+    color: var(--text-bright);
   }
 
   .subtitle {
-    color: #999;
+    color: var(--text-dim);
     font-size: 0.95rem;
     line-height: 1.5;
     margin: 0 0 1.5rem;
@@ -487,7 +495,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    background: var(--card-bg, #242424);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
     border-radius: 10px;
   }
   .feature-icon {
@@ -497,16 +506,16 @@
   .feature strong {
     display: block;
     font-size: 0.9rem;
-    color: #fff;
+    color: var(--text-bright);
   }
   .feature span {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-dim);
   }
 
   .note {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--text-dim);
     margin: 1rem 0;
     line-height: 1.5;
   }
@@ -524,12 +533,12 @@
     align-items: center;
     gap: 0.75rem;
     padding: 1rem;
-    background: var(--card-bg, #242424);
+    background: var(--card-bg);
     border-radius: 10px;
-    border: 1px solid #333;
+    border: 1px solid var(--border);
   }
   .permission-item.granted {
-    border-color: #22c55e44;
+    border-color: var(--success);
   }
   .permission-status {
     font-size: 1.2rem;
@@ -537,28 +546,28 @@
     width: 1.5rem;
     text-align: center;
   }
-  .check { color: #22c55e; }
-  .pending { color: #666; }
-  .denied { color: #ef4444; }
-  .warning-icon { color: #f59e0b; font-weight: bold; }
-  .warning-icon-large { color: #f59e0b; }
-  .warning-note { color: #f59e0b; }
-  .restart-note { color: #f59e0b; font-weight: 500; }
+  .check { color: var(--success); }
+  .pending { color: var(--text-dim); }
+  .denied { color: var(--danger); }
+  .warning-icon { color: var(--warning); font-weight: bold; }
+  .warning-icon-large { color: var(--warning); }
+  .warning-note { color: var(--warning); }
+  .restart-note { color: var(--warning); font-weight: 500; }
   .permission-info {
     flex: 1;
   }
   .permission-info strong {
     display: block;
     font-size: 0.9rem;
-    color: #fff;
+    color: var(--text-bright);
   }
   .permission-info span {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-dim);
   }
   .permission-note {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
@@ -569,8 +578,8 @@
   .progress-spinner {
     width: 48px;
     height: 48px;
-    border: 3px solid #333;
-    border-top-color: var(--accent, #3b82f6);
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
     border-radius: 50%;
     margin: 0 auto 1rem;
   }
@@ -582,27 +591,8 @@
   }
   .progress-message {
     font-size: 0.95rem;
-    color: #ccc;
+    color: var(--text);
     margin: 0.5rem 0;
-  }
-  .progress-bar-container {
-    width: 100%;
-    height: 6px;
-    background: #333;
-    border-radius: 3px;
-    margin: 1rem 0 0.5rem;
-    overflow: hidden;
-  }
-  .progress-bar {
-    height: 100%;
-    background: var(--accent, #3b82f6);
-    border-radius: 3px;
-    transition: width 0.3s ease;
-  }
-  .progress-detail {
-    font-size: 0.85rem;
-    color: #888;
-    margin: 0;
   }
 
   /* Shortcuts */
@@ -618,7 +608,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
-    background: var(--card-bg, #242424);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
     border-radius: 10px;
     flex-wrap: wrap;
   }
@@ -626,17 +617,17 @@
     display: inline-block;
     padding: 0.2rem 0.45rem;
     font-size: 0.75rem;
-    font-family: -apple-system, monospace;
-    background: #333;
-    border: 1px solid #444;
+    font-family: var(--sans);
+    background: var(--code-bg);
+    border: 1px solid var(--border-hover);
     border-radius: 4px;
-    color: #ccc;
+    color: var(--text);
     min-width: 1.5rem;
     text-align: center;
   }
   .shortcut > span {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-dim);
     margin-left: 0.25rem;
   }
 
@@ -654,26 +645,25 @@
   button:active { opacity: 0.8; }
 
   .primary {
-    background: var(--accent, #3b82f6);
-    color: #fff;
+    background: var(--accent);
+    color: var(--on-accent);
     width: 100%;
     margin-top: 0.5rem;
   }
   .primary:disabled {
-    background: #333;
-    color: #666;
     cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 0.5;
   }
   .primary:disabled:hover {
-    opacity: 0.6;
+    opacity: 0.5;
   }
   .success-note {
-    color: #22c55e;
+    color: var(--success);
   }
   .secondary {
-    background: #333;
-    color: #ccc;
+    background: var(--card-bg);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border-hover);
   }
   .small {
     font-size: 0.8rem;
@@ -691,12 +681,11 @@
   }
 
   .error-message {
-    color: #ef4444;
+    color: var(--danger);
     font-size: 0.9rem;
     padding: 1rem;
-    background: #ef444410;
+    background: var(--danger-bg);
     border-radius: 8px;
-    border: 1px solid #ef444433;
     margin: 1rem 0;
     word-break: break-word;
   }

@@ -9,8 +9,8 @@ export function installFixture({ historyCount = 0, dictionaryCount = 0, label = 
     toggle_shortcut: 'CommandOrControl+Shift+D',
     cancel_shortcut: 'Escape', open_settings_shortcut: 'CommandOrControl+Shift+Comma',
     show_overlay: true, auto_paste: true, restore_clipboard: true, restore_focus_before_paste: true,
-    model_path: '', language: 'auto', max_history: 500, launch_at_login: false,
-    llm_cleanup_enabled: false, auto_check_updates: true, vocabulary: [],
+    launch_at_login: false, llm_cleanup_enabled: false, auto_check_updates: true, vocabulary: [],
+    input_device: null, sound_cues: false, history_retention_days: 0, audio_retention_days: 0,
     dictionary: Array.from({ length: dictionaryCount }, (_, index) => ({
       heard: `Misspelled ${index}`, replacement: `Preferred ${index}`,
     })),
@@ -53,7 +53,10 @@ export function installFixture({ historyCount = 0, dictionaryCount = 0, label = 
       metrics.ipc.push({ command, at: performance.now() });
       if (command === 'plugin:event|listen') { const id = nextId++; events.set(id, args); return id; }
       if (command === 'plugin:event|unlisten') { events.delete(args.eventId); return; }
+      if (command === 'plugin:log|log') return;
       if (command === 'get_settings') return structuredClone(settings);
+      if (command === 'get_settings_load_error') return null;
+      if (command === 'list_input_devices') return [{ name: 'Synthetic microphone', is_default: true }];
       if (command === 'update_settings') {
         Object.assign(settings, args.newSettings);
         return { settings: structuredClone(settings), warnings: [] };
@@ -61,18 +64,23 @@ export function installFixture({ historyCount = 0, dictionaryCount = 0, label = 
       if (command === 'get_vocabulary_status') return {
         supported: true, downloaded: false, loaded: false, preparing: false, download_size_mb: 103, error: null,
       };
+      if (command === 'get_model_status') return {
+        initializing: false, error: null, downloaded: true, loaded: true, path: '/synthetic/speech-model',
+        name: 'Synthetic speech model', size_bytes: 460_000_000, integrity_warning: null,
+      };
       if (command === 'get_transcriptions') return structuredClone(history);
+      if (command === 'get_recoverable_recordings') return [];
+      if (command === 'get_recovery_notice') return null;
       if (command === 'get_overlay_snapshot') return structuredClone(overlay);
       if (command === 'get_llm_status') return {
         available: true, unavailable_reason: null, downloaded: false, downloading: false,
         loaded: false, preparing: false, setup_error: null,
         model_name: 'Synthetic cleanup model', model_url: 'https://example.invalid/local-model', download_size_mb: 227,
-        update_available: false, last_cleanup_status: { kind: 'idle' },
+        last_cleanup_status: { kind: 'idle' },
       };
       if (command === 'check_all_permissions') return {
         microphone: 'authorized', accessibility_api: true, accessibility_functional: true, needs_restart: false,
       };
-      if (command === 'check_llm_update') return false;
       metrics.unknownCommands.push(command);
       throw new Error(`UI benchmark has no fixture for command: ${command}`);
     },

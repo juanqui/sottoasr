@@ -3,7 +3,8 @@
   import { transcriptionStore } from '../stores/transcriptions.svelte';
   import { createEventScope } from '../utils/event-scope';
   import { formatDuration } from '../utils/format';
-  import { getRecoverableRecordings, getRecoveryNotice, recoverRecording, revealRecoveryRecording } from '../utils/tauri';
+  import { deleteRecoveryRecording, getRecoverableRecordings, getRecoveryNotice, recoverRecording, revealRecoveryRecording } from '../utils/tauri';
+  import ConfirmDialog from './confirm-dialog.svelte';
   import type { RecoveryRecording } from '../utils/tauri';
 
   let items = $state<RecoveryRecording[]>([]);
@@ -14,6 +15,9 @@
   let reprocessErrors = $state<Record<string, string>>({});
   let revealErrors = $state<Record<string, string>>({});
   let processingId = $state<string | null>(null);
+  let deleteErrors = $state<Record<string, string>>({});
+  let deleteTarget = $state<RecoveryRecording | null>(null);
+  let deleting = $state(false);
   let status = $state('');
   let disposed = false;
   let refreshGeneration = 0;
@@ -72,8 +76,9 @@
       const transcription = await recoverRecording(item.id);
       if (disposed) return;
       // The native command saves history before it returns, so the returned
-      // record is durable. The store dedupes if its event arrives too.
-      transcriptionStore.add(transcription);
+      // record is durable, even if retention removed an earlier entry with
+      // this ID. The store dedupes if its event arrives too.
+      transcriptionStore.addSaved(transcription);
       // Retire in-flight snapshots before removing the acknowledged recording.
       ++refreshGeneration;
       items = items.filter((entry) => entry.id !== item.id);
@@ -95,6 +100,30 @@
       await revealRecoveryRecording(item.id);
     } catch (err) {
       if (!disposed) revealErrors = { ...revealErrors, [item.id]: `Finder did not open: ${String(err)}` };
+    }
+  }
+
+  async function confirmDeleteAudio() {
+    const item = deleteTarget;
+    if (!item || deleting) return;
+    deleting = true;
+    status = '';
+    const remaining = { ...deleteErrors };
+    delete remaining[item.id];
+    deleteErrors = remaining;
+    try {
+      await deleteRecoveryRecording(item.id);
+      if (disposed) return;
+      // Retire in-flight snapshots before removing the deleted recording.
+      ++refreshGeneration;
+      items = items.filter((entry) => entry.id !== item.id);
+      status = 'Recording deleted.';
+      void refresh(true);
+    } catch (err) {
+      // The backend refuses while the recording is in use; its text says what to do.
+      if (!disposed) deleteErrors = { ...deleteErrors, [item.id]: `Could not delete audio: ${String(err)}` };
+    } finally {
+      if (!disposed) { deleting = false; deleteTarget = null; }
     }
   }
 
@@ -135,40 +164,44 @@
         {#if item.error}<p class="recovery-item-error">{item.error}</p>{/if}
         {#if reprocessErrors[item.id]}<p class="recovery-item-error" role="alert">{reprocessErrors[item.id]}</p>{/if}
         {#if revealErrors[item.id]}<p class="recovery-item-error" role="alert">{revealErrors[item.id]}</p>{/if}
+        {#if deleteErrors[item.id]}<p class="recovery-item-error" role="alert">{deleteErrors[item.id]}</p>{/if}
         <div class="recovery-actions">
-          <button type="button" class="reprocess" disabled={processingId !== null || !!item.error} onclick={() => reprocess(item)}>{processingId === item.id ? 'Reprocessing…' : 'Reprocess'}</button>
+          <button type="button" class="reprocess" disabled={processingId !== null || deleting || !!item.error} onclick={() => reprocess(item)}>{processingId === item.id ? 'Reprocessing…' : 'Reprocess'}</button>
           <button type="button" class="reveal" onclick={() => showInFinder(item)}>Show in Finder</button>
+          <button type="button" class="delete-audio" disabled={processingId === item.id || deleting} onclick={() => { deleteTarget = item; }}>Delete audio</button>
         </div>
       </div>
     {/each}
   </section>
 {/if}
+<ConfirmDialog open={deleteTarget !== null} title="Delete this recording?" message={deleteTarget ? `This permanently deletes the audio recorded ${createdAt(deleteTarget)}. You cannot reprocess it afterwards.` : ''} confirmLabel="Delete audio" busy={deleting} onconfirm={confirmDeleteAudio} oncancel={() => { deleteTarget = null; }} />
 
 <style>
   .recovery {
     margin: 0;
     padding: 12px 14px;
-    border: 1px solid #fbbf2438;
+    border: 1px solid var(--border);
     border-radius: 10px;
-    background: #fbbf2408;
+    background: var(--warning-bg);
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-  h2 { margin: 0; font-size: 13px; font-weight: 600; color: #fcd34d; }
+  h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--warning); }
   .recovery-lead, .recovery-notice { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
   .recovery-notice { color: var(--text); }
-  .recovery-error { margin: 0; padding: 8px; border-radius: 8px; background: #ef444410; color: #fca5a5; font-size: 12px; overflow-wrap: anywhere; }
+  .recovery-error { margin: 0; padding: 8px; border-radius: 8px; background: var(--danger-bg); color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
   .recovery-error button { margin-left: 8px; padding: 4px 8px; background: var(--card-bg); color: var(--text); border: 1px solid var(--border-hover); border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer; }
-  .recovery-status { margin: 0; font-size: 12px; color: var(--accent); overflow-wrap: anywhere; user-select: text; }
+  .recovery-status { margin: 0; font-size: 12px; color: var(--accent-text); overflow-wrap: anywhere; user-select: text; }
   .recovery-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); }
   .recovery-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; font-size: 12px; color: var(--text-dim); }
   .recovery-created { color: var(--text); }
   .recovery-path { margin: 0; font-family: var(--mono); font-size: 11px; color: var(--text-dim); user-select: text; cursor: text; white-space: normal; overflow-wrap: anywhere; }
-  .recovery-item-error { margin: 0; font-size: 11px; color: #fca5a5; line-height: 1.5; overflow-wrap: anywhere; user-select: text; }
+  .recovery-item-error { margin: 0; font-size: 11px; color: var(--danger); line-height: 1.5; overflow-wrap: anywhere; user-select: text; }
   .recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
   .recovery-actions button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 11px; background: var(--input-bg); color: var(--text-bright); cursor: pointer; transition: border-color 0.15s ease; }
   .recovery-actions button:hover:not(:disabled) { border-color: var(--border-hover); }
-  .recovery-actions .reprocess:not(:disabled):hover { color: var(--accent); border-color: var(--accent); }
+  .recovery-actions .reprocess:not(:disabled):hover { color: var(--accent-text); border-color: var(--accent); }
+  .recovery-actions .delete-audio:not(:disabled):hover { color: var(--danger); border-color: var(--danger); }
   .recovery-actions button:disabled { opacity: 0.5; cursor: default; }
 </style>

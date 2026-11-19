@@ -27,7 +27,7 @@ const browser = await chromium.launch({headless:true,...(process.env.SOTTO_UI_BR
 
 function installFlows({statusError=false, settingsError=false}={}) {
   const original = window.__TAURI_INTERNALS__.invoke;
-  const status = {available:true,unavailable_reason:null,downloaded:false,downloading:false,loaded:false,preparing:false,setup_error:null,model_name:'Synthetic cleanup model',model_path:null,model_url:'https://example.invalid/model',download_size_mb:227,update_available:false,last_cleanup_status:{kind:'idle'}};
+  const status = {available:true,unavailable_reason:null,downloaded:false,downloading:false,loaded:false,preparing:false,setup_error:null,model_name:'Synthetic cleanup model',model_path:null,model_url:'https://example.invalid/model',download_size_mb:227,last_cleanup_status:{kind:'idle'}};
   window.__flow = {prepareCalls:0,saved:[],violations:[],opened:[],copies:[],copyError:false};
   document.addEventListener('securitypolicyviolation',(event)=>window.__flow.violations.push({directive:event.effectiveDirective,blocked:event.blockedURI}));
   let pending;
@@ -100,8 +100,9 @@ try {
     llm_cleanup_status:{kind:'suggested',detail:{elapsed_ms:20}},removed_ids:[],
   }));
   await history.getByRole('searchbox').fill('Qwen');await history.locator('.item-body').click();
-  await history.getByRole('button',{name:'Diff',exact:true}).click();
-  await history.getByRole('button',{name:'Copy transcript',exact:true}).click();
+  await history.getByRole('button',{name:'Changes',exact:true}).click();
+  // Row buttons carry the entry's time in their accessible name.
+  await history.getByRole('button',{name:/^Copy transcript, transcription from /}).click();
   assert.equal(await history.evaluate(()=>window.__flow.copies.at(-1)),'Qwen said the word um in the note.');
   await history.evaluate(()=>{window.__flow.copyError=true;});
   await history.getByRole('button',{name:'Copy suggestion',exact:true}).click();

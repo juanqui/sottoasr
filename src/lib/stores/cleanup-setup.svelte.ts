@@ -1,5 +1,5 @@
 import { getLlmStatus, prepareLlmModel, repairLlmRuntime } from '../utils/tauri';
-import type { LlmStatus } from '../utils/tauri';
+import type { DownloadProgress, LlmStatus } from '../utils/tauri';
 
 const READY_NOTICE = 'Ready. Save to enable AI cleanup.';
 const REPAIRED_NOTICE = 'Cleanup runtime repaired.';
@@ -11,6 +11,8 @@ export class CleanupSetup {
   pending = $state(false);
   error = $state('');
   notice = $state('');
+  /** Latest `llm-download-progress` payload of the preparation in flight. */
+  progress: DownloadProgress | null = $state(null);
   private disposed = false;
   private intent = 0;
   private statusRequest = 0;
@@ -72,6 +74,7 @@ export class CleanupSetup {
     this.pending = true;
     this.error = '';
     this.notice = '';
+    this.progress = null;
     try {
       const status = await action();
       if (this.disposed || intent !== this.intent) return;
@@ -85,7 +88,7 @@ export class CleanupSetup {
     } catch (error) {
       if (!this.disposed && intent === this.intent) this.error = error instanceof Error ? error.message : String(error);
     } finally {
-      if (!this.disposed && intent === this.intent) this.pending = false;
+      if (!this.disposed && intent === this.intent) { this.pending = false; this.progress = null; }
     }
   }
 
@@ -99,7 +102,13 @@ export class CleanupSetup {
     if (this.pending) this.notice = 'Activation cancelled. Setup may finish in the background; cleanup stays off.';
     else if (this.notice === READY_NOTICE) this.notice = '';
     this.pending = false;
+    this.progress = null;
     this.error = '';
+  }
+
+  /** Progress is shown only for the preparation this window started. */
+  reportProgress(progress: DownloadProgress) {
+    if (this.pending && !this.disposed) this.progress = progress;
   }
 
   acknowledgeSaved(enabled: boolean) {

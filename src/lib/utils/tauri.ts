@@ -31,6 +31,8 @@ export interface Transcription {
 	llm_applied?: boolean;
 	cleanup_suggestion?: string | null;
 	llm_cleanup_status?: LlmCleanupStatus;
+	/** When the entry was first saved to history; absent on entries from older builds. */
+	saved_at?: string | null;
 }
 
 /** Native eviction acknowledgements are present only after a durable save. */
@@ -72,15 +74,19 @@ export interface Settings {
 	auto_paste: boolean;
 	restore_clipboard: boolean;
 	restore_focus_before_paste: boolean;
-	model_path: string;
-	language: string;
-	max_history: number;
 	launch_at_login: boolean;
 	llm_cleanup_enabled: boolean;
 	llm_cleanup_mode: 'retype' | 'replace';
 	dictionary: DictionaryEntry[];
 	vocabulary: string[];
 	auto_check_updates: boolean;
+	/** cpal input device name; null or absent follows the system default. */
+	input_device?: string | null;
+	sound_cues: boolean;
+	/** Days to keep history; 0 keeps entries until the user deletes them. */
+	history_retention_days: number;
+	/** Days to keep retained recordings; 0 keeps them until the user deletes them. */
+	audio_retention_days: number;
 }
 
 export interface ModelStatus {
@@ -91,6 +97,8 @@ export interface ModelStatus {
 	path: string | null;
 	name: string;
 	size_bytes: number | null;
+	/** Set when the cached speech model differs from the files this build was qualified with. */
+	integrity_warning?: string | null;
 }
 
 // ---- Recording commands ----
@@ -113,10 +121,6 @@ export function getTranscriptions(): Promise<Transcription[]> {
 	return invoke("get_transcriptions");
 }
 
-export function getLastTranscription(): Promise<Transcription | null> {
-	return invoke("get_last_transcription");
-}
-
 export function deleteTranscription(id: string): Promise<void> {
 	return invoke("delete_transcription", { id });
 }
@@ -129,8 +133,9 @@ export function exportTranscriptionsCsvFile(): Promise<string> {
 	return invoke("export_transcriptions_csv_file");
 }
 
-export function exportTranscriptionsCsv(): Promise<string> {
-	return invoke("export_transcriptions_csv");
+/** Show a CSV export in Finder. Accepts only a path this app exported to Downloads. */
+export function revealCsvExport(path: string): Promise<void> {
+	return invoke("reveal_csv_export", { path });
 }
 
 // ---- Settings commands ----
@@ -146,6 +151,36 @@ export interface UpdateSettingsResult {
 
 export function updateSettings(newSettings: Settings): Promise<UpdateSettingsResult> {
 	return invoke("update_settings", { newSettings });
+}
+
+/** Why saved settings could not be read; null when they loaded normally. */
+export function getSettingsLoadError(): Promise<string | null> {
+	return invoke("get_settings_load_error");
+}
+
+/** Back up the unreadable settings file and start again from defaults. */
+export function resetSettings(): Promise<Settings> {
+	return invoke("reset_settings");
+}
+
+export interface InputDevice {
+	name: string;
+	is_default: boolean;
+}
+
+export function listInputDevices(): Promise<InputDevice[]> {
+	return invoke("list_input_devices");
+}
+
+/** Payload of `model-download-progress` and `llm-download-progress`. */
+export interface DownloadProgress {
+	downloaded_bytes: number;
+	total_bytes: number;
+}
+
+/** Payload of `hotkey-busy`: a start was requested while a dictation is still being processed. */
+export interface HotkeyBusy {
+	state: AppStateEnum;
 }
 
 export interface VocabularyStatus {
@@ -189,14 +224,6 @@ export interface PermissionStatus {
 	needs_restart: boolean;
 }
 
-export function checkMicrophonePermission(): Promise<boolean> {
-	return invoke("check_microphone_permission");
-}
-
-export function checkAccessibilityPermission(): Promise<boolean> {
-	return invoke("check_accessibility_permission");
-}
-
 export function requestAccessibilityPermission(): Promise<void> {
 	return invoke("request_accessibility_permission");
 }
@@ -230,6 +257,8 @@ export interface SetupResult {
 	accessibility_permission: boolean;
 	asr_ready: boolean;
 	model_available: boolean;
+	/** The speech engine's own error text when `asr_ready` is false. */
+	error: string | null;
 }
 
 export function getAsrBackend(): Promise<AsrBackendInfo> {
@@ -240,16 +269,17 @@ export function getModelStatus(): Promise<ModelStatus> {
 	return invoke("get_model_status");
 }
 
-export function needsOnboarding(): Promise<boolean> {
-	return invoke("needs_onboarding");
-}
-
 export function initAsr(): Promise<void> {
 	return invoke("init_asr");
 }
 
 export function downloadModel(): Promise<void> {
 	return invoke("download_model");
+}
+
+/** Replace speech-model files that fail verification. Downloads about 460 MB. */
+export function redownloadSpeechModel(): Promise<void> {
+	return invoke("redownload_speech_model");
 }
 
 export function completeSetup(): Promise<SetupResult> {
@@ -272,7 +302,6 @@ export interface LlmStatus {
 	model_url: string;
 	download_size_mb: number;
 	model_path: string | null;
-	update_available: boolean;
 	last_cleanup_status: LlmCleanupStatus;
 }
 
@@ -289,32 +318,8 @@ export function repairLlmRuntime(): Promise<LlmStatus> {
 	return invoke("repair_llm_runtime");
 }
 
-export function checkLlmUpdate(): Promise<boolean> {
-	return invoke("check_llm_update");
-}
-
-export function downloadLlmModel(): Promise<void> {
-	return invoke("download_llm_model");
-}
-
-export function updateLlmModel(): Promise<void> {
-	return invoke("update_llm_model");
-}
-
-export function cancelLlmDownload(): Promise<void> {
-	return invoke("cancel_llm_download");
-}
-
 export function deleteLlmModel(): Promise<void> {
 	return invoke("delete_llm_model");
-}
-
-export function loadLlmModel(): Promise<void> {
-	return invoke("load_llm_model");
-}
-
-export function unloadLlmModel(): Promise<void> {
-	return invoke("unload_llm_model");
 }
 
 // ---- App update commands ----
@@ -325,7 +330,6 @@ export interface UpdateStatus {
 	release_notes: string | null;
 	downloading: boolean;
 	restart_pending: boolean;
-	model_update_available: boolean;
 }
 
 export interface UpdateDownloadProgress {
@@ -377,10 +381,47 @@ export function revealRecoveryRecording(id: string): Promise<void> {
 	return invoke("reveal_recovery_recording", { id });
 }
 
+/** Delete a pending recording's audio. This cannot be undone. */
+export function deleteRecoveryRecording(id: string): Promise<void> {
+	return invoke("delete_recovery_recording", { id });
+}
+
 /**
  * Wording for an unclean exit that left no recoverable audio.
  * Null when the last session ended cleanly.
  */
 export function getRecoveryNotice(): Promise<string | null> {
 	return invoke("get_recovery_notice");
+}
+
+// ---- App, overlay and key-capture commands ----
+
+/** Restart the app. Rejects while a dictation is in flight. */
+export function restartApp(): Promise<void> {
+	return invoke("restart_app");
+}
+
+export function startKeyCapture(): Promise<void> {
+	return invoke("start_key_capture");
+}
+
+export function stopKeyCapture(): Promise<void> {
+	return invoke("stop_key_capture");
+}
+
+export function overlayStartDrag(): Promise<void> {
+	return invoke("overlay_start_drag");
+}
+
+export function dismissOverlayError(revision: number): Promise<void> {
+	return invoke("dismiss_overlay_error", { revision });
+}
+
+/** Show a retained recording in Finder. Accepts only paths inside the app's recording directories. */
+export function revealRecordingAudio(path: string): Promise<void> {
+	return invoke("reveal_recording_audio", { path });
+}
+
+export function openTranscriptionHistory(): Promise<void> {
+	return invoke("open_transcription_history");
 }

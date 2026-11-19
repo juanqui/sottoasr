@@ -15,7 +15,7 @@
   .setting-description > span { color: var(--text-dim); font-size: 12px; line-height: 1.5; }
   input { position: absolute; right: 0; width: 38px; height: 24px; margin: 0; opacity: 0; }
   .toggle-track { flex: 0 0 38px; height: 24px; border-radius: 20px; background: var(--border-hover); pointer-events: none; transition: background 120ms; }
-  .toggle-track::after { content: ''; display: block; width: 18px; height: 18px; margin: 3px; border-radius: 50%; background: white; transition: transform 120ms; }
+  .toggle-track::after { content: ''; display: block; width: 18px; height: 18px; margin: 3px; border-radius: 50%; background: var(--on-accent); transition: transform 120ms; }
   input:checked + .toggle-track { background: var(--accent); }
   input:checked + .toggle-track::after { transform: translateX(14px); }
   input:focus-visible + .toggle-track { outline: 2px solid var(--accent); outline-offset: 3px; }

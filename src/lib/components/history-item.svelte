@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import { diffWords } from 'diff';
   import { formatRelativeTime, formatDuration, truncateText } from '../utils/format';
+  import { minuteNow } from '../utils/minute-clock';
   import { cleanupOutcome } from '../utils/cleanup-outcome';
   import CleanupSuggestion from './cleanup-suggestion.svelte';
   import type { Transcription } from '../utils/tauri';
@@ -21,7 +22,7 @@
 
   let copyFeedback = $state<'transcript' | 'original' | null>(null);
 
-  let relativeTime = $derived(formatRelativeTime(item.created_at));
+  let relativeTime = $derived(formatRelativeTime(item.created_at, minuteNow()));
   let durationText = $derived(formatDuration(item.duration_ms));
 
   let displayText = $derived(
@@ -42,6 +43,10 @@
 
   let outcome = $derived(cleanupOutcome(item.llm_cleanup_status));
   let fullDate = $derived(new Date(item.created_at).toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' }));
+  // Every row has the same buttons; the entry's time tells them apart for assistive technology.
+  let itemName = $derived(`transcription from ${fullDate}`);
+  let copyLabel = $derived(copyFeedback === 'transcript' ? 'Copied' : viewMode !== 'cleaned' || (expanded && suggestion) ? 'Copy transcript' : 'Copy');
+  let copyOriginalLabel = $derived(copyFeedback === 'original' ? 'Original copied' : 'Copy original');
   let cleanupExplanation = $derived(item.llm_cleanup_status ? outcome.detail : null);
 
   let disposed = false;
@@ -140,14 +145,16 @@
         class:copied={copyFeedback === 'transcript'}
         onclick={() => handleCopy()}
         type="button"
-      >{copyFeedback === 'transcript' ? 'Copied' : viewMode !== 'cleaned' || (expanded && suggestion) ? 'Copy transcript' : 'Copy'}</button>
+        aria-label={`${copyLabel}, ${itemName}`}
+      >{copyLabel}</button>
       {#if expanded && item.raw_text}
-        <button class="action-btn" type="button" class:copied={copyFeedback === 'original'} onclick={() => handleCopy(true)}>{copyFeedback === 'original' ? 'Original copied' : 'Copy original'}</button>
+        <button class="action-btn" type="button" class:copied={copyFeedback === 'original'} onclick={() => handleCopy(true)} aria-label={`${copyOriginalLabel}, ${itemName}`}>{copyOriginalLabel}</button>
       {/if}
       <button
         class="action-btn delete"
         onclick={handleDelete}
         type="button"
+        aria-label={`Delete ${itemName}`}
       >Delete</button>
     </div>
   </div>
@@ -172,9 +179,9 @@
   .expanded-content { padding:0 16px 14px; user-select:text; cursor:text; }
   .collapse-label { font-size:11px; color:var(--text-dim); }
 
-  .interrupted-badge { display:inline-block; margin-bottom:6px; font-size:10px; font-weight:600; color:#fcd34d; }
-  .capture-error { margin:0 0 8px; font-size:12px; line-height:1.5; color:#fcd34d; overflow-wrap:anywhere; }
-  .suggestion-badge { display:inline-block; margin:0 4px 6px; color:#fcd34d; font-size:10px; font-weight:600; }
+  .interrupted-badge { display:inline-block; margin-bottom:6px; font-size:10px; font-weight:600; color:var(--warning); }
+  .capture-error { margin:0 0 8px; font-size:12px; line-height:1.5; color:var(--warning); overflow-wrap:anywhere; }
+  .suggestion-badge { display:inline-block; margin:0 4px 6px; color:var(--warning); font-size:10px; font-weight:600; }
   .cleanup-explanation { margin:0; padding:0 16px 12px; color:var(--text-dim); font-size:11px; line-height:1.5; }
   .history-item {
     background: var(--card-bg);
@@ -208,8 +215,8 @@
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 10px;
-    background: rgba(239, 68, 68, 0.12);
-    color: rgba(248, 113, 113, 0.9);
+    background: var(--danger-bg);
+    color: var(--danger);
     letter-spacing: 0.4px;
     text-transform: uppercase;
     margin-bottom: 6px;
@@ -226,8 +233,8 @@
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 10px;
-    background: rgba(99, 102, 241, 0.15);
-    color: rgb(129, 140, 248);
+    background: var(--accent-bg);
+    color: var(--accent-text);
     letter-spacing: 0.4px;
     text-transform: uppercase;
     margin-bottom: 6px;
@@ -241,8 +248,8 @@
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 10px;
-    background: rgba(251, 191, 36, 0.13);
-    color: rgb(252, 211, 77);
+    background: var(--warning-bg);
+    color: var(--warning);
     letter-spacing: 0.4px;
     text-transform: uppercase;
     margin-bottom: 6px;
@@ -273,17 +280,17 @@
   }
 
   .diff-removed {
-    background: rgba(239, 68, 68, 0.18);
-    color: rgb(252, 165, 165);
+    background: var(--diff-removed-bg);
+    color: var(--danger);
     text-decoration: line-through;
-    text-decoration-color: rgba(252, 165, 165, 0.5);
+    text-decoration-color: currentColor;
     border-radius: 2px;
     padding: 0 1px;
   }
 
   .diff-added {
-    background: rgba(34, 197, 94, 0.18);
-    color: rgb(134, 239, 172);
+    background: var(--diff-added-bg);
+    color: var(--success);
     border-radius: 2px;
     padding: 0 1px;
   }
@@ -310,13 +317,13 @@
   }
 
   .legend-swatch.removed {
-    background: rgba(239, 68, 68, 0.25);
-    border: 1px solid rgba(252, 165, 165, 0.4);
+    background: var(--diff-removed-bg);
+    border: 1px solid var(--danger);
   }
 
   .legend-swatch.added {
-    background: rgba(34, 197, 94, 0.25);
-    border: 1px solid rgba(134, 239, 172, 0.4);
+    background: var(--diff-added-bg);
+    border: 1px solid var(--success);
   }
 
   /* ---- Meta row ---- */
@@ -359,18 +366,18 @@
   }
 
   .action-btn.active {
-    color: rgb(129, 140, 248);
-    border-color: rgba(129, 140, 248, 0.5);
-    background: rgba(99, 102, 241, 0.08);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    background: var(--accent-bg);
   }
 
   .action-btn.copied {
-    color: var(--accent);
+    color: var(--accent-text);
     border-color: var(--accent);
   }
 
   .action-btn.delete:hover {
-    color: #ef4444;
-    border-color: #ef4444;
+    color: var(--danger);
+    border-color: var(--danger);
   }
 </style>
