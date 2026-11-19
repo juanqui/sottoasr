@@ -21,13 +21,13 @@ Press a hotkey, speak, and text appears at your cursor. Speech recognition runs 
 - **Optional AI cleanup** -- remove clear fillers and accidental repeats locally with MiniCPM5 2B. The original stays in History. Off by default.
 - **Onboarding flow** -- guided first-launch setup with automatic model download and progress
 - **Dark and light appearance** -- follows the macOS setting
-- **Fully local** -- powered by FluidAudio (CoreML/Apple Neural Engine) with the Parakeet TDT v3 model
+- **Fully local** -- powered by FluidAudio (CoreML/Apple Neural Engine) with the Parakeet Ultra model
 
 ## Requirements
 
 - **macOS 14 Sonoma** or later (FluidAudio requires macOS 14+)
 - **Apple Silicon** (M1 or later) -- required for Neural Engine acceleration
-- About 500 MB of disk space for the speech model, which onboarding downloads automatically
+- About 630 MB of disk space for the speech model, which onboarding downloads automatically
 - Optional acoustic vocabulary: about 103 MB, prepared when you save your first words
 - Optional AI cleanup: about 1.4 GB for the cleanup model, plus its Python runtime. You do not need to install Python. If no native arm64 Python 3.11 to 3.14 is installed, SottoASR downloads its own copy.
 - Microphone permission
@@ -51,7 +51,9 @@ npm install
 cargo tauri dev
 ```
 
-On first launch, onboarding downloads the speech model (about 500 MB) and verifies each file. The model stays in `~/Library/Application Support/FluidAudio/Models/`. The setup time depends on your network and on CoreML compilation.
+On first launch, onboarding downloads the speech model, Parakeet Ultra (about 630 MB), and verifies each file. The model stays in `~/Library/Application Support/FluidAudio/Models/`. The setup time depends on your network and on CoreML compilation.
+
+An installation that used Parakeet TDT v3 keeps dictating with it while Parakeet Ultra downloads in the background, then switches automatically. Nothing deletes the old `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml` folders in that location; you can delete them by hand once Settings shows Parakeet Ultra.
 
 ### Build for Production
 
@@ -82,7 +84,7 @@ Hotkey pressed
     → (AI cleanup on) warm the resident cleanup model with fixed text
     → Disk worker writes a private WAV file and checkpoints it about once per second
 Stop
-  → Parakeet TDT v3 recognizes the full recording through CoreML
+  → Parakeet Ultra recognizes the full recording through CoreML
     → Optional acoustic vocabulary checks saved words against the audio
       → Exact replacements apply once
         → Optional cleanup processes bounded text windows in batches of up to 16
@@ -98,7 +100,9 @@ In **Settings → Vocabulary → Words you use**, add a correctly spelled name s
 
 Exact replacements match whole words without cascading, and protect URLs, email addresses, and backtick code. History retains the original ASR text for Raw/Diff views. [Vocabulary research](docs/research/2026-09-08-vocabulary-asr.md) documents how this differs from VoiceInk, which currently supplies vocabulary to AI enhancement.
 
-On this M4/32 GiB Mac, the same Parakeet weights produced identical text in four CoreML compute configurations. CPU+ANE had a 62.70 ms warm median on short synthetic clips, versus about 138 ms for CPU-only or a GPU encoder. These exclude capture, cleanup and paste. Newer ASR alternatives did not improve the tested accuracy/resource tradeoff. [Model measurements](benchmarks/asr/README.md) and [UI measurements](docs/research/2026-09-08-settings-performance.md) include reproduction steps and limits. No wattage was measured.
+The speech model is [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra), moondream's post-training of NVIDIA Parakeet TDT v3 with the same architecture (600M parameters) and the same 25 languages. On an Apple M2 Pro on 2026-11-19, it had a word error rate of 3.80% on the full LibriSpeech test-other set, against 4.12% for Parakeet TDT v3. In that run, Ultra had a higher peak memory (644 MiB against 487 MiB) and took 13% longer in total. On SottoASR's 88 synthetic clips, the two models were equal within noise. The [Parakeet Ultra research note](docs/research/2026-11-19-parakeet-ultra.md) gives the method and the limits.
+
+On 2026-09-08, on an M4/32 GiB Mac, the same Parakeet TDT v3 weights produced identical text in four CoreML compute configurations. CPU+ANE had a 62.70 ms warm median on short synthetic clips, versus about 138 ms for CPU-only or a GPU encoder. These exclude capture, cleanup and paste. [Model measurements](benchmarks/asr/README.md) and [UI measurements](docs/research/2026-09-08-settings-performance.md) include reproduction steps and limits. No wattage was measured.
 
 ### AI Cleanup
 

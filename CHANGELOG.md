@@ -4,7 +4,7 @@ All notable changes to SottoASR are documented in this file.
 
 ## [Unreleased]
 
-Remediation of the [November 2026 application review](docs/audit/2026-11-19-application-review.md).
+Parakeet Ultra is the new speech model, and the findings of the [November 2026 application review](https://github.com/juanqui/sottoasr/blob/main/docs/audit/2026-11-19-application-review.md) are fixed.
 
 ### Fixed
 - A saved setting can no longer leave you without hotkeys. SottoASR validates settings when you save and drops an empty replacement row. At launch it registers each shortcut on its own, so one bad value no longer disables the others.
@@ -27,6 +27,8 @@ Remediation of the [November 2026 application review](docs/audit/2026-11-19-appl
 - "Unsaved changes" no longer appears for an edit that changes nothing. Times in History refresh every minute.
 
 ### Changed
+- Parakeet Ultra is now the speech model. It is a post-training of Parakeet TDT v3 with the same 25 languages, and it makes fewer word errors on a standard test of read English (3.80% against 4.12%). An existing installation keeps working with Parakeet TDT v3 while Parakeet Ultra (about 630 MB) downloads in the background, then switches to it automatically. SottoASR does not delete the old model folders `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml` in `~/Library/Application Support/FluidAudio/Models/`. You can delete them by hand once Settings shows Parakeet Ultra.
+- Vocabulary assistance ("Words you use") corrects fewer spellings. FluidAudio 0.18.3 computes the audio features of the vocabulary model on the CPU, because the Neural Engine gave wrong features on some Macs. With these features, a saved word replaces text less often: in our test it corrected 2 of 24 recordings (4 before) and still changed no ordinary speech. Use an exact replacement for a spelling that it leaves alone. On long recordings the vocabulary step takes longer: about 2.4 seconds more for a 16-minute dictation on an M2 Pro.
 - Text appears sooner. If the target app is already in front, SottoASR no longer activates it again with a 150 ms wait. Activation no longer brings all windows of the app to the front. History is saved after the paste, not before it.
 - When "Restore clipboard" is on, SottoASR restores all of your clipboard after a paste, including images and files, not only text. Items larger than 64 MB are not restored. The transcript on the clipboard is marked as transient so that clipboard managers do not record it, and it stays on this Mac.
 - When you delete a history entry or clear history, SottoASR also deletes the audio kept for those entries. The confirmation says so. Entries that the 5,000-entry history limit removes also lose their audio, except interrupted entries.
@@ -62,6 +64,7 @@ Remediation of the [November 2026 application review](docs/audit/2026-11-19-appl
 - `rustls`, `rustls-webpki` and `webpki-root-certs` are updated. Six `zip` advisories are ignored in `src-tauri/.cargo/audit.toml` with a recorded reason (`zip` is built only for Windows). CI fails if `zip` is built for macOS.
 - PR CI checks the `asr-parakeet` build with `cargo check` and runs its resampler tests. The optional ONNX backend now resamples recordings to 16 kHz and reports their real duration. It downloads its model from a pinned Hugging Face commit and verifies the SHA-256 of each file.
 - cpal is updated from 0.15 to 0.16. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped, because the disconnect listener of the library held the stream. Version 0.16 holds it weakly.
+- FluidAudio is updated from 0.15.6 to 0.18.3. Two of the four SDK patches are no longer needed, because their fixes for vocabulary alignment and CTC output reads are now part of FluidAudio. The two remaining patches pin the model downloads to fixed commits.
 - A frontend test compares every command call with the registered commands and the capability files. `scripts/test_workflows.py` checks the action pins and the secret scopes of the workflows.
 - The unused `src/*.html` page copies, the unused recording store, five unused JavaScript plugin packages and `@types/diff` are removed.
 - `SECURITY.md` lists every network request the app makes.

@@ -358,7 +358,7 @@
       </div>
 
       <p class="note">
-        This downloads the Parakeet TDT v3 speech recognition model (~500 MB).
+        This downloads the Parakeet Ultra speech recognition model (about 630 MB).
         <br />First-time setup may take 1-2 minutes depending on your internet speed.
         <br />Models are cached locally for instant startup next time.
       </p>

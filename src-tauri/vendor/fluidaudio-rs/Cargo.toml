@@ -1,6 +1,6 @@
 [package]
 name = "fluidaudio-rs"
-version = "0.15.6"
+version = "0.18.3"
 edition = "2021"
 license = "MIT"
 description = "Sotto's minimal batch ASR bridge to pinned FluidAudio"

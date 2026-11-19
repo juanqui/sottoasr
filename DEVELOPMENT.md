@@ -59,7 +59,7 @@ npm install
 cargo tauri dev
 ```
 
-On first launch, onboarding downloads the speech model (about 500 MB) to `~/Library/Application Support/FluidAudio/Models/` and verifies it. This happens only once.
+On first launch, onboarding downloads the speech model, Parakeet Ultra (about 630 MB), to `~/Library/Application Support/FluidAudio/Models/` and verifies it. This happens only once. An installation that already has the verified Parakeet TDT v3 files skips onboarding and changes to Parakeet Ultra in the background (see [Speech Model Download and Upgrade](#speech-model-download-and-upgrade)).
 
 CAUTION: A development build uses the identifier `com.sottoasr.app`, the same as an installed SottoASR. Thus it uses the same settings, history, recordings and global shortcuts. Quit the installed app before you run `cargo tauri dev`.
 
@@ -256,7 +256,7 @@ python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-The sidecar tests need no model, network or MLX. The script tests include `scripts/test_workflows.py`, which checks that each workflow action is pinned to a commit SHA and that no secret is declared at workflow or job level.
+The sidecar tests need no model, network or MLX, unless the cleanup model is in the Hugging Face cache. Then three more tests load it, and they need the pinned runtime: run the sidecar tests with a Python that has `src-tauri/sidecar/requirements.lock` installed. The script tests include `scripts/test_workflows.py`, which checks that each workflow action is pinned to a commit SHA and that no secret is declared at workflow or job level.
 
 ### Configuration Checks
 
@@ -266,13 +266,14 @@ bash scripts/ci-checks.sh
 
 This script checks that the six version values match, that each window has a capability entry, that each command is registered, that each frontend `invoke` has a handler, that `CHANGELOG.md` has a section for the version, that `src/` holds no hardcoded version, and that the website badge matches. It needs `jq` and an installed `node_modules`.
 
-### Swift Regressions
+### Swift Bridge Probes
 
 ```bash
-python3 scripts/check-swift-regressions.py
+python3 scripts/check-asr-cache.py
+python3 scripts/check-vocabulary-cache.py
 ```
 
-This script tests the patched FluidAudio sources. It needs a previous debug `cargo build` or `cargo test`, because it uses the Swift build in `src-tauri/target/debug/build/`.
+These probes test the loaders of the FluidAudio bridge. They need no model and no network. They need a previous `cargo build` or `cargo test`, because they use the Swift build in `src-tauri/target/`. `check-asr-cache.py` checks that a failed load or download keeps every file, that model URLs use the pinned commits, and that the SDK does not pin those repositories itself. CI does not run these probes. Run them after you change the FluidAudio version or a file in `src-tauri/vendor/fluidaudio-rs/`.
 
 ### Dependency Audits
 
@@ -317,7 +318,9 @@ Note: `custom-protocol` is a Tauri feature that the app needs. Always include it
 
 ### Speech and Vocabulary Models
 
-The bridge downloads the models from Hugging Face at fixed commits. Two patches in `src-tauri/vendor/fluidaudio-rs/patches/` set these commits in the SDK. `model-manifest.json` holds the SHA-256 and size of each file that the bridge loads. `asr/integrity.rs` checks the files before CoreML loads them. `src-tauri/vendor/fluidaudio-rs/README.md` gives the full policy.
+The bridge uses FluidAudio 0.18.3 and downloads the models from Hugging Face at fixed commits. Two checksum-guarded patches in `src-tauri/vendor/fluidaudio-rs/patches/`, `model-registry-revision.patch` and `tree-lister-revision.patch`, make the SDK read these commits instead of `main`. The two earlier patches for vocabulary alignment and CTC tensor access are upstream in 0.18.3. `model-manifest.json` holds the SHA-256 and size of each file that the bridge loads. `asr/integrity.rs` checks the files before CoreML loads them. `src-tauri/vendor/fluidaudio-rs/README.md` gives the full policy.
+
+The manifest has three entries: `speech` (Parakeet Ultra), `previous_speech` (Parakeet TDT v3) and `vocabulary` (CTC 110M). The app never downloads `previous_speech` again. It only verifies and loads it for an installation that does not have Parakeet Ultra yet.
 
 To regenerate the manifest after you select a new commit, use this command:
 
@@ -380,9 +383,13 @@ open src-tauri/target/release/bundle/macos/SottoASR.app
 
 The development build and an installed SottoASR use the same data folder and the same global shortcuts. Quit the installed app before you start a development build or the interactive part of `scripts/pre-release-check.sh`.
 
-### Speech Model Download on First Launch
+### Speech Model Download and Upgrade
 
-At first launch, onboarding downloads the speech model (about 500 MB) and shows the progress. If model files are missing at a later launch, or a newly downloaded file failed verification, the download runs again. A dictation that stops while the model downloads or loads fails at once with "Speech model is still loading; your recording was kept." If loading failed, the message gives the load error and says that the recording was kept.
+At first launch, onboarding downloads Parakeet Ultra (about 630 MB), verifies each file against the bundled SHA-256 manifest and shows the progress. If model files are missing at a later launch, or a newly downloaded file failed verification, the download runs again. A dictation that stops while the model downloads or loads fails at once with "Speech model is still loading; your recording was kept." If loading failed, the message gives the load error and says that the recording was kept.
+
+An installation that already has the verified Parakeet TDT v3 files does not show onboarding. It starts and dictates with Parakeet TDT v3 as before. Parakeet Ultra then downloads in the background and is verified. When no dictation is in progress, the app replaces Parakeet TDT v3 with it in memory. Settings shows "Ready" and a notice during this time. If the download fails, for example offline, Parakeet TDT v3 stays in use and the next launch tries again.
+
+If CoreML cannot load the verified Parakeet Ultra files and Parakeet TDT v3 is on disk, the app uses Parakeet TDT v3 and Settings shows a notice. Nothing deletes the old folders `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml`. You can delete both by hand once Settings shows Parakeet Ultra. An older app version still uses its `parakeet-tdt-0.6b-v3` folder and ignores `parakeet-ultra`.
 
 ### Shortcut Recorder Key Listener
 

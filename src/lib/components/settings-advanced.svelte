@@ -78,7 +78,7 @@
 </section>
 <section class="setting-card">
   <h3>Local models</h3>
-  <p class="setting-hint">Speech recognition uses NVIDIA Parakeet v3. Recordings and transcripts stay on your Mac.</p>
+  <p class="setting-hint">Speech recognition uses Parakeet Ultra. Recordings and transcripts stay on your Mac.</p>
   <div class="model-details">
     <span class="field-label">AI cleanup</span>
     {#if cleanup.status}

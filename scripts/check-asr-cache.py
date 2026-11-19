@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Test the actual pinned-v3 loader's non-destructive cache failures offline.
+"""Test the bridge's speech-model loader for non-destructive cache failures, offline.
 
-Optional --model-dir and --audio clone the supplied model into private temporary
-storage for one real synthetic transcription. Never mutates the supplied cache.
+Optional --model-dir and --audio clone the supplied model folder (parakeet-ultra,
+or the previous parakeet-tdt-0.6b-v3) into private temporary storage for one real
+synthetic transcription. Never mutates the supplied cache.
 """
 import argparse
 import subprocess
@@ -48,7 +49,8 @@ with tempfile.TemporaryDirectory(prefix='sotto-asr-cache-probe-') as scratch:
     subprocess.run(command, check=True)
     run = [str(executable)]
     if args.model_dir:
-        clone = root / 'parakeet-tdt-0.6b-v3'
+        # The folder name selects the model version, so the clone keeps it.
+        clone = root / args.model_dir.resolve().name
         subprocess.run(['cp', '-cR', str(args.model_dir.resolve()), str(clone)], check=True)
         run.extend([str(clone), str(args.audio.resolve())])
     subprocess.run(run, check=True, timeout=120)

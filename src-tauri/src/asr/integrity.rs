@@ -42,6 +42,7 @@ pub struct Manifest {
 #[derive(serde::Deserialize)]
 struct Bundled {
     speech: Manifest,
+    previous_speech: Manifest,
     vocabulary: Manifest,
 }
 
@@ -50,8 +51,16 @@ static BUNDLED: LazyLock<Bundled> = LazyLock::new(|| {
         .expect("the bundled model manifest is valid; a unit test parses it")
 });
 
+/// The speech model this build downloads and prefers.
 pub fn speech() -> &'static Manifest {
     &BUNDLED.speech
+}
+
+/// The speech model earlier releases downloaded. It is never downloaded
+/// again: an installation that has it keeps dictating with it until `speech`
+/// is downloaded and verified.
+pub fn previous_speech() -> &'static Manifest {
+    &BUNDLED.previous_speech
 }
 
 pub fn vocabulary() -> &'static Manifest {
@@ -881,19 +890,26 @@ mod tests {
     #[test]
     fn bundled_manifest_matches_the_pinned_download_revisions() {
         let patch = include_str!("../../vendor/fluidaudio-rs/patches/model-registry-revision.patch");
-        for manifest in [speech(), vocabulary()] {
+        for manifest in [speech(), previous_speech(), vocabulary()] {
             assert_eq!(manifest.revision.len(), 40);
-            assert!(patch.contains(&format!("\"{}\": \"{}\"", manifest.repository, manifest.revision)),
-                "{} is not pinned to the manifest revision", manifest.repository);
             let mut paths: Vec<_> = manifest.files.iter().map(|file| file.path.as_str()).collect();
             paths.sort_unstable();
             paths.dedup();
             assert_eq!(paths.len(), manifest.files.len());
             assert!(manifest.files.iter().all(|file| file.size > 0 && file.sha256.len() == 64));
         }
-        assert_eq!(speech().directory, "parakeet-tdt-0.6b-v3");
+        for manifest in [speech(), vocabulary()] {
+            assert!(patch.contains(&format!("\"{}\": \"{}\"", manifest.repository, manifest.revision)),
+                "{} is not pinned to the manifest revision", manifest.repository);
+        }
+        // The previous model is only verified and loaded, never downloaded.
+        assert!(!patch.contains(&previous_speech().repository));
+        assert_eq!(speech().directory, "parakeet-ultra");
+        assert_eq!(previous_speech().directory, "parakeet-tdt-0.6b-v3");
         assert_eq!(vocabulary().directory, "parakeet-ctc-110m-coreml");
-        assert!(speech().files.iter().any(|file| file.path == "parakeet_vocab.json"));
+        for manifest in [speech(), previous_speech()] {
+            assert!(manifest.files.iter().any(|file| file.path == "parakeet_vocab.json"));
+        }
         assert!(vocabulary().files.iter().any(|file| file.path == "tokenizer.json"));
     }
 }

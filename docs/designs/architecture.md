@@ -34,13 +34,13 @@
 
 ## 1. Summary
 
-SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs NVIDIA Parakeet TDT v3 through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. Audio and transcript text never leave the Mac.
+SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs Parakeet Ultra, moondream's post-training of NVIDIA Parakeet TDT v3, through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. Audio and transcript text never leave the Mac.
 
 The application lives only in the macOS menu bar (no Dock icon, no main window). It has two dictation modes: **press-and-hold** (hold the hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop). A floating pill overlay with an audio waveform gives feedback during recording.
 
 After Stop, the recording goes through ASR, optional acoustic vocabulary, exact replacements and optional AI cleanup. Then SottoASR pastes or copies the text, and only after that saves it in History. A private WAV file on disk holds each recording until History saves it, so an interrupted dictation can be recovered.
 
-This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
+This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md) and the [change to Parakeet Ultra](../specs/2026-11-19-parakeet-ultra-default.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
 
 ---
 
@@ -132,7 +132,7 @@ flowchart TB
 |----------|--------|-----------|
 | Desktop framework | Tauri v2 (2.11) | Rust backend for audio/ASR performance, small bundle compared with Electron. Source: [Tauri docs](https://v2.tauri.app/) |
 | Frontend framework | Svelte 5 | Small runtime, compiled reactivity. Source: [Svelte docs](https://svelte.dev/) |
-| ASR engine (macOS) | FluidAudio 0.15.6 via the vendored bridge `src-tauri/vendor/fluidaudio-rs` | CoreML/Apple Neural Engine, Parakeet TDT v3 (25 languages). Models are pinned to fixed commits and verified by SHA-256. |
+| ASR engine (macOS) | FluidAudio 0.18.3 via the vendored bridge `src-tauri/vendor/fluidaudio-rs` | CoreML/Apple Neural Engine, Parakeet Ultra (600M parameters, 25 languages). Models are pinned to fixed commits and verified by SHA-256. |
 | ASR engine (cross-platform) | parakeet-rs 0.3 (optional) | ONNX Runtime CPU fallback via the `asr-parakeet` feature flag |
 | Audio capture | cpal 0.16 | Audio input in Rust. Version 0.16 holds a stream weakly in its disconnect listener. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped. |
 | Recording storage | Private WAV file per recording | A crash or a failed transcription keeps the audio for recovery |
@@ -168,7 +168,7 @@ flowchart TB
 | Desktop framework | `tauri` | 2.11 | Desktop app with Rust backend |
 | Frontend | `svelte` | 5.x | Reactive UI with minimal runtime |
 | Build tool | `vite` | 8.x | Multi-page frontend bundling |
-| ASR (default) | `fluidaudio-rs` (vendored) | FluidAudio 0.15.6 | Swift bridge to FluidAudio on CoreML |
+| ASR (default) | `fluidaudio-rs` (vendored) | FluidAudio 0.18.3 | Swift bridge to FluidAudio on CoreML |
 | ASR (optional) | `parakeet-rs` | 0.3 | Parakeet TDT inference via ONNX Runtime (`asr-parakeet`) |
 | Audio capture | `cpal` | 0.16 | Microphone input |
 | Resampling | `rubato` | 0.16 | Resample to 16 kHz, `asr-parakeet` only |
@@ -193,7 +193,7 @@ The cleanup sidecar runs `mlx` 0.32.2, `mlx-lm` 0.31.3, `transformers` 5.3.0 and
 
 - macOS 14 Sonoma or later (`minimumSystemVersion` 14.0)
 - Apple Silicon (M1 or later)
-- About 483 MB of disk for the speech model, about 103 MB for the optional vocabulary model, and about 1.4 GB for the optional cleanup model
+- About 632 MB of disk for the speech model, about 103 MB for the optional vocabulary model, and about 1.4 GB for the optional cleanup model. An installation that upgraded from Parakeet TDT v3 also keeps that model (483 MB) until the user deletes it.
 - Microphone permission (TCC — Transparency, Consent, and Control, Apple's privacy permissions framework)
 - Accessibility permission (TCC) for paste-at-cursor
 
@@ -265,7 +265,7 @@ flowchart LR
 3. Start the key capture thread for the shortcut recorder.
 4. Register the shortcuts one by one. If one fails, open Settings with the title "SottoASR — Review Keyboard Shortcuts".
 5. Create the hidden overlay panel.
-6. If the speech model is not available, open onboarding. Otherwise load ASR in the background.
+6. If neither the current nor the previous speech model is on disk, open onboarding. Otherwise load ASR in the background. If only the previous model is on disk, the current one then downloads in the background ([section 9](#9-asr-engine-integration)).
 7. If AI cleanup is on, prepare and warm the sidecar in the background. An inconclusive runtime check is tried again after about 16, 30 and 60 seconds.
 8. Start the update checker and the retention timer (now, then every 6 hours).
 9. Sync the login item, but only if the settings file loaded.
@@ -392,7 +392,7 @@ The model no longer has `model_path`, `language` or `max_history`. `persist_sett
 | `llm_cleanup_status` | Cleanup outcome (`Applied`, `Rejected`, `TimedOut`, `Unavailable` and more) |
 | `cleanup_suggestion`, `llm_applied` | Fields of earlier versions, still read |
 
-**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes` and `integrity_warning`. The warning is set when a speech model file that was already on disk differs from the manifest.
+**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning` and `notice`. The warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3.
 
 ---
 
@@ -510,14 +510,17 @@ A recording stops automatically after 20 minutes. The overlay shows a countdown 
 
 ### FluidAudio Bridge
 
-`src-tauri/vendor/fluidaudio-rs` is a small, ASR-only Swift bridge with a synchronous C interface. It uses FluidAudio 0.15.6, which SwiftPM fetches at a pinned commit. `build.rs` applies four checksum-guarded patches to the SDK. Two patches change vocabulary alignment and CTC tensor access. Two patches pin model downloads to fixed commits. [The bridge README](../../src-tauri/vendor/fluidaudio-rs/README.md) is the reference for the bridge.
+`src-tauri/vendor/fluidaudio-rs` is a small, ASR-only Swift bridge with a synchronous C interface. It uses FluidAudio 0.18.3, which SwiftPM fetches at a pinned commit. `build.rs` applies two checksum-guarded patches to the SDK, `model-registry-revision.patch` and `tree-lister-revision.patch`. They make model downloads read the pinned commits instead of `main`. The two earlier patches for vocabulary alignment and CTC tensor access are upstream in 0.18.3 (FluidAudio #961 and #1039). [The bridge README](../../src-tauri/vendor/fluidaudio-rs/README.md) is the reference for the bridge.
 
-| Model | Repository | Files |
-|---|---|---|
-| Speech (TDT v3, INT8) | `FluidInference/parakeet-tdt-0.6b-v3-coreml` | 21 files, 483 MB |
-| Vocabulary (CTC 110M) | `FluidInference/parakeet-ctc-110m-coreml` | 12 files, 103 MB |
+FluidAudio 0.18.3 has its own `ModelRegistry.revisionOverrides`, but the bridge does not use it. With a revision other than `main`, the SDK's `ModelCache` deletes local files that the remote listing does not contain, and whole bundles with one mismatching file. That would delete `.sotto-integrity.json` and the copies that a re-download keeps.
 
-The models are cached in `~/Library/Application Support/FluidAudio/Models/`.
+| Manifest entry | Model | Repository | Folder | Files |
+|---|---|---|---|---|
+| `speech` | Parakeet Ultra | `FluidInference/parakeet-ultra-coreml` | `parakeet-ultra` | 18 files, 632 MB |
+| `previous_speech` | Parakeet TDT v3 (INT8), kept only for existing installations | `FluidInference/parakeet-tdt-0.6b-v3-coreml` | `parakeet-tdt-0.6b-v3` | 21 files, 483 MB |
+| `vocabulary` | CTC 110M | `FluidInference/parakeet-ctc-110m-coreml` | `parakeet-ctc-110m-coreml` | 12 files, 103 MB |
+
+The models are cached in `~/Library/Application Support/FluidAudio/Models/`. The bridge takes the model version from the folder name: `parakeet-ultra` loads as Parakeet Ultra and `parakeet-tdt-0.6b-v3` as Parakeet TDT v3. Both use the same four bundles and the same compute units.
 
 ### Model Download and Verification
 
@@ -530,6 +533,20 @@ The models are cached in `~/Library/Application Support/FluidAudio/Models/`.
 - If the app quits during a re-download, the next preparation moves back every file whose place is empty.
 
 Download and verification run outside the engine lock. The lock covers only loading and compilation. During preparation, `init_asr` emits `model-download-progress` every 500 ms. The progress is the size of the cache folder against the manifest total.
+
+### Speech Model Selection and Upgrade
+
+Earlier versions used Parakeet TDT v3. `asr/model.rs` decides which verified speech model to load, and `FluidAudioEngine::load` reads the selected folder. A model is loadable when the manifest check finds no missing file and no fresh mismatch. Steps 1 and 2 use no network:
+
+1. Parakeet Ultra is loadable: load it.
+2. Otherwise Parakeet TDT v3 (`previous_speech`) is loadable: load it, and mark an upgrade as pending.
+3. Otherwise download and verify Parakeet Ultra with progress, as on a new installation, and load it.
+
+`is_model_available` is true when the files of either model are present, so an existing installation does not see onboarding again. The app never downloads Parakeet TDT v3 again. It only verifies and loads it.
+
+With an upgrade pending, `init_asr` starts the upgrade in the background and returns. The upgrade downloads and verifies Parakeet Ultra without progress events. Then it waits until the app is Idle, checking twice a second for at most 10 minutes, and reloads the engine with Parakeet Ultra. During the reload, a dictation that stops gets the "still loading" message and keeps its recording. While Parakeet TDT v3 serves, Settings shows "Ready" and the `notice`.
+
+Nothing deletes `parakeet-tdt-0.6b-v3/` or the older `parakeet-tdt-0.6b-v3-coreml/`. The first is the fallback when CoreML cannot load Parakeet Ultra. The user can delete both by hand once Settings shows Parakeet Ultra. An older app version still loads its `parakeet-tdt-0.6b-v3/` folder and ignores `parakeet-ultra/`. During the change the cache holds both speech models (483 MB and 632 MB), and peak resident memory rises by about 157 MiB (487 to 644 MiB in the LibriSpeech run).
 
 ### Transcription Flow
 
@@ -550,7 +567,7 @@ Saving a changed, non-empty vocabulary prepares the vocabulary model. Dictation 
 
 ### Performance Expectations
 
-On an M4 with 32 GiB, CPU+ANE had a 62.70 ms warm median on short synthetic clips. [Model measurements](../../benchmarks/asr/README.md) give the method and the limits.
+On 2026-11-19, on an M2 Pro with 32 GB and CoreML CPU + Neural Engine, Parakeet Ultra had a median time per clip of 59.1 ms and 56.6 ms on the two sets of synthetic clips (Parakeet TDT v3: 58.4 ms and 55.1 ms). On LibriSpeech test-other, its peak resident memory was 644 MiB (Parakeet TDT v3: 487 MiB), and its total decode time was 254 s (Parakeet TDT v3: 225 s). On 2026-09-08, on an M4 with 32 GiB, Parakeet TDT v3 with CPU+ANE had a 62.70 ms warm median on short synthetic clips. The [Parakeet Ultra research](../research/2026-11-19-parakeet-ultra.md) and the [model measurements](../../benchmarks/asr/README.md) give the method and the limits.
 
 ---
 
@@ -733,6 +750,12 @@ The History window (680 × 760) shows 50 entries per page, newest first, with a 
 | Freshly downloaded model file fails the manifest | Error. The files are kept and nothing loads. |
 | Existing model file differs from the manifest | Loads with a warning. Settings offers a confirmed re-download. |
 | Setup fails in onboarding | Onboarding shows the error text and **Try Again** retries in place |
+| Background Parakeet Ultra download fails (for example offline) | Parakeet TDT v3 stays in use. No error is shown. The next launch tries again. |
+| Background Parakeet Ultra file fails the manifest | Parakeet Ultra is not loadable, and Parakeet TDT v3 keeps serving. The next preparation fetches the file again. |
+| Verified Parakeet Ultra files that CoreML cannot load | Parakeet TDT v3 loads if it is on disk, and Settings shows the `notice`. On a new installation the load error is shown. |
+| App not Idle within 10 minutes after the background download | No reload. Parakeet Ultra loads at the next launch. |
+| Re-download or `init_asr` while the background upgrade runs | Refused by the preparation claim. The model in use is unaffected. |
+| Parakeet TDT v3 in use, and one of its files differs from the manifest | Loads with the warning. A confirmed re-download fetches Parakeet Ultra. |
 
 ### Paste Issues
 
@@ -824,10 +847,10 @@ sottoasr/
 | Sidecar | `python3 -m unittest discover -s src-tauri/sidecar -p 'test_*.py'` | Sidecar protocol and preparation, without a model or the network |
 | Scripts | `python3 -m unittest discover -s scripts -p 'test_*.py'` | Workflow pins and secret scopes, the release target check |
 | ONNX backend | `cargo test --no-default-features --features custom-protocol,asr-parakeet --lib audio::resample` | Resampler output length and tail at 48 kHz to 16 kHz |
-| Swift | `python3 scripts/check-swift-regressions.py` | Patched alignment and CTC tensor access |
+| Swift bridge (manual) | `python3 scripts/check-asr-cache.py`, `python3 scripts/check-vocabulary-cache.py` | Loaders keep every file after a failed load or download; model URLs use the pinned commits |
 | Configuration | `bash scripts/ci-checks.sh` | Versions, capabilities, command registration, changelog, website badge |
 
-PR CI (`.github/workflows/ci.yml`) runs all of these, `cargo clippy --all-targets -- -D warnings`, `cargo audit` with the `zip` check, `npm audit --omit=dev`, and an unsigned bundle build. `scripts/pre-release-check.sh` runs the same steps locally.
+PR CI (`.github/workflows/ci.yml`) runs all of these except the Swift bridge probes, and also `cargo clippy --all-targets -- -D warnings`, `cargo audit` with the `zip` check, `npm audit --omit=dev`, and an unsigned bundle build. `scripts/pre-release-check.sh` runs the same steps locally.
 
 ### Manual Testing Checklist
 
@@ -893,7 +916,7 @@ A development build shares the data folder and the global shortcuts of an instal
 | Recording latency | <50 ms | Time from hotkey press to audio capture start |
 | Transcription latency | <1.5s for 10s audio | Time from recording stop to text pasted, without cleanup |
 | Bundle size | <15 MB (without model) | Built .app size |
-| Speech model size | 483 MB | Parakeet TDT v3 INT8 CoreML bundles (`model-manifest.json`) |
+| Speech model size | 632 MB | Parakeet Ultra CoreML bundles (`model-manifest.json`) |
 
 The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front.
 

@@ -9,7 +9,8 @@
     {
       title: 'Speech Recognition',
       items: [
-        { name: 'NVIDIA Parakeet TDT v3', desc: 'ASR model, 600M params, 25 languages', license: 'CC-BY-4.0' },
+        { name: 'Moondream Parakeet Ultra', desc: 'ASR model, 600M params, 25 languages', license: 'CC-BY-4.0' },
+        { name: 'NVIDIA Parakeet TDT v3', desc: 'Base model of Parakeet Ultra', license: 'CC-BY-4.0' },
         { name: 'FluidAudio', desc: 'CoreML/ANE inference engine (Swift)', license: 'Apache-2.0' },
         { name: 'parakeet-rs', desc: 'ONNX Runtime Rust bindings', license: 'MIT' },
         { name: 'cpal', desc: 'Cross-platform audio capture', license: 'Apache-2.0' },

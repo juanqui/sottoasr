@@ -1,0 +1,4638 @@
+{
+  "date": "2026-11-19",
+  "host": "Apple M2 Pro, 32 GB RAM, macOS 26.7.3",
+  "swift_version": "6.4",
+  "sdk_version": "0.18.3",
+  "sdk_revision": "c8b41f98eae668794dd0083bbe028fe7e6585051",
+  "compute_units": "SDK defaults: CoreML CPU and Neural Engine",
+  "private_data_included": false,
+  "energy_measured": false,
+  "probe": "benchmarks/asr/model-probe (one process per model and fixture set, run under /usr/bin/time -l)",
+  "metric": "fixtures: benchmarks/asr/analyze.py (casefold, tokens [a-z]+ and [0-9]+, word edit distance); LibriSpeech: benchmarks/asr/score_librispeech.py (casefold, tokens [a-z']+ and [0-9]+)",
+  "notes": [
+    "Outputs are the text returned by the SDK. No SottoASR dictionary, vocabulary or cleanup step was applied.",
+    "median_ms and p95_ms are per-clip decode times after one warm-up clip. The long sets have one clip, so both equal its decode time.",
+    "peak_rss_bytes is the largest ru_maxrss the probe reported in that process.",
+    "The nemotron-unified-auto-int8 holdout process reported a 0.16 s load and 72 MiB peak RSS, which is not comparable with the other processes. The research note reports no peak RSS for that variant.",
+    "Per-utterance LibriSpeech outputs are not included, only aggregates and paired comparisons.",
+    "The bootstrap intervals use 2,000 resamples of utterances with random.seed(0). The two comparisons against v3 come from one run (v3,ultra,nemotron-unified-int8), the comparison against ultra from a second run (ultra,nemotron-unified-int8)."
+  ],
+  "models": {
+    "v3": {
+      "name": "Parakeet TDT v3",
+      "repository": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+      "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+      "cache_folder": "parakeet-tdt-0.6b-v3",
+      "loading": "APFS clone of the installed app cache (INT8 encoder), AsrModels.loadLocal, no download"
+    },
+    "ultra": {
+      "name": "Parakeet Ultra",
+      "repository": "FluidInference/parakeet-ultra-coreml",
+      "revision": "95eaa59a39d4394f047a4dc5cce480388a60d1b6",
+      "cache_folder": "parakeet-ultra",
+      "weights": "moondream/parakeet-ultra",
+      "loading": "AsrModels.downloadAndLoad into the experiment folder"
+    },
+    "nemotron-unified-int8": {
+      "name": "Nemotron Labs Unified ASR 0.6b",
+      "repository": "FluidInference/nemotron-labs-unified-asr-0.6b-coreml",
+      "encoder_precision": "int8",
+      "language": "en"
+    },
+    "nemotron-unified-fp16": {
+      "name": "Nemotron Labs Unified ASR 0.6b",
+      "repository": "FluidInference/nemotron-labs-unified-asr-0.6b-coreml",
+      "encoder_precision": "fp16",
+      "language": "en"
+    },
+    "nemotron-unified-auto-int8": {
+      "name": "Nemotron Labs Unified ASR 0.6b",
+      "repository": "FluidInference/nemotron-labs-unified-asr-0.6b-coreml",
+      "encoder_precision": "int8",
+      "language": "auto"
+    },
+    "nemotron35-ml-2240": {
+      "name": "Nemotron 3.5 ASR streaming multilingual",
+      "repository": "FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML",
+      "language": "en-US",
+      "chunk_ms": 2240
+    },
+    "nemotron-en-2240": {
+      "name": "Nemotron ASR Streaming EN",
+      "repository": "FluidInference/nemotron-speech-streaming-en-0.6b-coreml",
+      "chunk_ms": 2240
+    }
+  },
+  "fixture_sets": {
+    "dev": "benchmarks/asr/development-40.json synthesized by prepare.py: 40 clips, 2 voices",
+    "holdout": "benchmarks/asr/independent-24.json synthesized by prepare.py --independent: 48 clips, 2 voices",
+    "dev-pad": "the dev clips with 0.5 s of silence before and after",
+    "long-dev": "the 40 dev clips in one 149.7 s file, each clip followed by 0.6 s of silence",
+    "long-holdout": "the 48 holdout clips in one 172.5 s file, each clip followed by 0.6 s of silence"
+  },
+  "aggregate": {
+    "dev": {
+      "v3": {
+        "word_errors": 35,
+        "reference_words": 392,
+        "exact_clips": 20,
+        "median_ms": 58.376,
+        "p95_ms": 69.876,
+        "peak_rss_bytes": 524763136,
+        "negative_clips_wrong": 0
+      },
+      "ultra": {
+        "word_errors": 33,
+        "reference_words": 392,
+        "exact_clips": 19,
+        "median_ms": 59.148,
+        "p95_ms": 69.322,
+        "peak_rss_bytes": 695500800,
+        "negative_clips_wrong": 1
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 35,
+        "reference_words": 392,
+        "exact_clips": 19,
+        "median_ms": 67.686,
+        "p95_ms": 74.316,
+        "peak_rss_bytes": 704823296,
+        "negative_clips_wrong": 1
+      },
+      "nemotron-unified-fp16": {
+        "word_errors": 34,
+        "reference_words": 392,
+        "exact_clips": 20,
+        "median_ms": 63.059,
+        "p95_ms": 71.104,
+        "peak_rss_bytes": 1257766912,
+        "negative_clips_wrong": 0
+      },
+      "nemotron-unified-auto-int8": {
+        "word_errors": 35,
+        "reference_words": 392,
+        "exact_clips": 19,
+        "median_ms": 65.29,
+        "p95_ms": 73.282,
+        "peak_rss_bytes": 680525824,
+        "negative_clips_wrong": 1
+      },
+      "nemotron35-ml-2240": {
+        "word_errors": 63,
+        "reference_words": 392,
+        "exact_clips": 12,
+        "median_ms": 71.386,
+        "p95_ms": 85.802,
+        "peak_rss_bytes": 668499968,
+        "negative_clips_wrong": 6
+      },
+      "nemotron-en-2240": {
+        "word_errors": 54,
+        "reference_words": 392,
+        "exact_clips": 13,
+        "median_ms": 61.381,
+        "p95_ms": 74.124,
+        "peak_rss_bytes": 661225472,
+        "negative_clips_wrong": 6
+      }
+    },
+    "holdout": {
+      "v3": {
+        "word_errors": 27,
+        "reference_words": 436,
+        "exact_clips": 30,
+        "median_ms": 55.105,
+        "p95_ms": 59.66,
+        "peak_rss_bytes": 523321344,
+        "negative_clips_wrong": 5
+      },
+      "ultra": {
+        "word_errors": 25,
+        "reference_words": 436,
+        "exact_clips": 30,
+        "median_ms": 56.602,
+        "p95_ms": 66.149,
+        "peak_rss_bytes": 674217984,
+        "negative_clips_wrong": 5
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 24,
+        "reference_words": 436,
+        "exact_clips": 29,
+        "median_ms": 67.087,
+        "p95_ms": 73.508,
+        "peak_rss_bytes": 692289536,
+        "negative_clips_wrong": 3
+      },
+      "nemotron-unified-fp16": {
+        "word_errors": 24,
+        "reference_words": 436,
+        "exact_clips": 29,
+        "median_ms": 62.749,
+        "p95_ms": 65.956,
+        "peak_rss_bytes": 1255948288,
+        "negative_clips_wrong": 3
+      },
+      "nemotron-unified-auto-int8": {
+        "word_errors": 24,
+        "reference_words": 436,
+        "exact_clips": 29,
+        "median_ms": 64.781,
+        "p95_ms": 72.357,
+        "peak_rss_bytes": 75841536,
+        "negative_clips_wrong": 3
+      },
+      "nemotron35-ml-2240": {
+        "word_errors": 55,
+        "reference_words": 436,
+        "exact_clips": 22,
+        "median_ms": 76.814,
+        "p95_ms": 99.495,
+        "peak_rss_bytes": 639025152,
+        "negative_clips_wrong": 8
+      },
+      "nemotron-en-2240": {
+        "word_errors": 57,
+        "reference_words": 436,
+        "exact_clips": 17,
+        "median_ms": 58.769,
+        "p95_ms": 67.525,
+        "peak_rss_bytes": 648691712,
+        "negative_clips_wrong": 12
+      }
+    },
+    "dev-pad": {
+      "v3": {
+        "word_errors": 34,
+        "reference_words": 392,
+        "exact_clips": 20,
+        "median_ms": 69.786,
+        "p95_ms": 88.746,
+        "peak_rss_bytes": 523141120,
+        "negative_clips_wrong": 0
+      },
+      "ultra": {
+        "word_errors": 34,
+        "reference_words": 392,
+        "exact_clips": 18,
+        "median_ms": 55.314,
+        "p95_ms": 62.133,
+        "peak_rss_bytes": 676134912,
+        "negative_clips_wrong": 1
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 34,
+        "reference_words": 392,
+        "exact_clips": 20,
+        "median_ms": 66.922,
+        "p95_ms": 73.516,
+        "peak_rss_bytes": 681885696,
+        "negative_clips_wrong": 0
+      },
+      "nemotron35-ml-2240": {
+        "word_errors": 60,
+        "reference_words": 392,
+        "exact_clips": 14,
+        "median_ms": 80.869,
+        "p95_ms": 103.384,
+        "peak_rss_bytes": 641187840,
+        "negative_clips_wrong": 6
+      },
+      "nemotron-en-2240": {
+        "word_errors": 51,
+        "reference_words": 392,
+        "exact_clips": 18,
+        "median_ms": 63.195,
+        "p95_ms": 98.944,
+        "peak_rss_bytes": 666025984,
+        "negative_clips_wrong": 2
+      }
+    },
+    "long-dev": {
+      "v3": {
+        "word_errors": 43,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 545.401,
+        "p95_ms": 545.401,
+        "peak_rss_bytes": 527286272
+      },
+      "ultra": {
+        "word_errors": 42,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 533.384,
+        "p95_ms": 533.384,
+        "peak_rss_bytes": 673087488
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 32,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 1429.862,
+        "p95_ms": 1429.862,
+        "peak_rss_bytes": 680919040
+      },
+      "nemotron-unified-fp16": {
+        "word_errors": 32,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 1450.984,
+        "p95_ms": 1450.984,
+        "peak_rss_bytes": 1255276544
+      },
+      "nemotron35-ml-2240": {
+        "word_errors": 54,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 1448.399,
+        "p95_ms": 1448.399,
+        "peak_rss_bytes": 642613248
+      },
+      "nemotron-en-2240": {
+        "word_errors": 50,
+        "reference_words": 392,
+        "exact_clips": 0,
+        "median_ms": 2106.612,
+        "p95_ms": 2106.612,
+        "peak_rss_bytes": 671039488
+      }
+    },
+    "long-holdout": {
+      "v3": {
+        "word_errors": 22,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 526.033,
+        "p95_ms": 526.033,
+        "peak_rss_bytes": 524173312
+      },
+      "ultra": {
+        "word_errors": 25,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 541.604,
+        "p95_ms": 541.604,
+        "peak_rss_bytes": 676626432
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 27,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 1637.04,
+        "p95_ms": 1637.04,
+        "peak_rss_bytes": 679428096
+      },
+      "nemotron-unified-fp16": {
+        "word_errors": 27,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 1609.374,
+        "p95_ms": 1609.374,
+        "peak_rss_bytes": 1229635584
+      },
+      "nemotron35-ml-2240": {
+        "word_errors": 50,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 1936.194,
+        "p95_ms": 1936.194,
+        "peak_rss_bytes": 641073152
+      },
+      "nemotron-en-2240": {
+        "word_errors": 41,
+        "reference_words": 436,
+        "exact_clips": 0,
+        "median_ms": 2325.276,
+        "p95_ms": 2325.276,
+        "peak_rss_bytes": 664338432
+      }
+    }
+  },
+  "librispeech_test_other": {
+    "source": "https://www.openslr.org/resources/12/test-other.tar.gz",
+    "utterances": 2939,
+    "reference_words": 52343,
+    "models": {
+      "v3": {
+        "word_errors": 2156,
+        "reference_words": 52343,
+        "wer_percent": 4.12,
+        "exact_utterances": 1760,
+        "total_decode_seconds": 224.6,
+        "median_ms": 68.251,
+        "p95_ms": 151.808,
+        "outputs_ending_in_terminal_punctuation": 2550,
+        "peak_rss_bytes": 510672896
+      },
+      "ultra": {
+        "word_errors": 1990,
+        "reference_words": 52343,
+        "wer_percent": 3.8,
+        "exact_utterances": 1824,
+        "total_decode_seconds": 253.9,
+        "median_ms": 76.183,
+        "p95_ms": 170.595,
+        "outputs_ending_in_terminal_punctuation": 2658,
+        "peak_rss_bytes": 675545088
+      },
+      "nemotron-unified-int8": {
+        "word_errors": 1880,
+        "reference_words": 52343,
+        "wer_percent": 3.59,
+        "exact_utterances": 1833,
+        "total_decode_seconds": 370.8,
+        "median_ms": 101.492,
+        "p95_ms": 263.306,
+        "outputs_ending_in_terminal_punctuation": 1721,
+        "peak_rss_bytes": 674086912
+      }
+    },
+    "paired": [
+      {
+        "model": "ultra",
+        "baseline": "v3",
+        "utterances_better": 295,
+        "utterances_worse": 169,
+        "wer_difference_ci95_points": [
+          -0.45,
+          -0.19
+        ]
+      },
+      {
+        "model": "nemotron-unified-int8",
+        "baseline": "v3",
+        "utterances_better": 399,
+        "utterances_worse": 224,
+        "wer_difference_ci95_points": [
+          -0.68,
+          -0.38
+        ]
+      },
+      {
+        "model": "nemotron-unified-int8",
+        "baseline": "ultra",
+        "utterances_better": 321,
+        "utterances_worse": 253,
+        "wer_difference_ci95_points": [
+          -0.34,
+          -0.08
+        ]
+      }
+    ]
+  },
+  "clips": {
+    "dev": {
+      "v3": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.062088966369628906
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.07412803173065186
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06759405136108398
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quin 3.8 Flash next with the previous model.",
+          "seconds": 0.06624197959899902
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quin 3.8 Flash next with the previous model.",
+          "seconds": 0.05873405933380127
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using Fluid Audio.",
+          "seconds": 0.06624400615692139
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.05849897861480713
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostGur SQL and build the desktop app using Tori.",
+          "seconds": 0.06834793090820312
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06452000141143799
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.05305898189544678
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.0546259880065918
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.05362594127655029
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.052546024322509766
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.04875302314758301
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.05444204807281494
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06052696704864502
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07128703594207764
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06363499164581299
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.05809605121612549
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.06419897079467773
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.061521053314208984
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.05961799621582031
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.05619406700134277
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06801605224609375
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06974399089813232
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.06023609638214111
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.05533099174499512
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgreRSQL and build the desktop app using Torai.",
+          "seconds": 0.06987607479095459
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.054823994636535645
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.05020403861999512
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.050231099128723145
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.05567896366119385
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.05357098579406738
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.04809093475341797
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.0542069673538208
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.053961992263793945
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.05991804599761963
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.05385303497314453
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.057319045066833496
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.05825209617614746
+        }
+      ],
+      "ultra": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06678009033203125
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.0659949779510498
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06755995750427246
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn 3.8 Flash next with the previous model.",
+          "seconds": 0.06999993324279785
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn 3.8 Flash next with the previous model.",
+          "seconds": 0.07621502876281738
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.06932210922241211
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.0587390661239624
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tori.",
+          "seconds": 0.06473898887634277
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.05448198318481445
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06896495819091797
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.05318403244018555
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before launch.",
+          "seconds": 0.06204509735107422
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.060173988342285156
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.05161905288696289
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.05677902698516846
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.05512404441833496
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.06453895568847656
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.05901896953582764
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.05753493309020996
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.060653090476989746
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.0590289831161499
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.05907893180847168
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.053952932357788086
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash next with the previous model.",
+          "seconds": 0.05785799026489258
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash next with the previous model.",
+          "seconds": 0.05981910228729248
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.057350993156433105
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.05109000205993652
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgreSQL and build the desktop app using Torai.",
+          "seconds": 0.06904208660125732
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06042301654815674
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.056506991386413574
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.05921804904937744
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.05970609188079834
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.058779001235961914
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.053598999977111816
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.05308389663696289
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.055606961250305176
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.06830811500549316
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.054464101791381836
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.0607990026473999
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.062413930892944336
+        }
+      ],
+      "nemotron-unified-int8": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.06762897968292236
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.07066798210144043
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06653094291687012
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07402503490447998
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07263100147247314
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.07431602478027344
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.07032907009124756
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with Postgur SQL and build the desktop app using Tori.",
+          "seconds": 0.07743203639984131
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06795299053192139
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06758999824523926
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The queen visited the library and read a book",
+          "seconds": 0.06592798233032227
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.06807196140289307
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.06605696678161621
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.06143796443939209
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06531798839569092
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06469905376434326
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07306206226348877
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06774401664733887
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.068168044090271
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quinn with the old model.",
+          "seconds": 0.07250392436981201
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.06480002403259277
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.0642019510269165
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating quinn for local speech correction.",
+          "seconds": 0.06241202354431152
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.0699009895324707
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07158803939819336
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.07329201698303223
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06670105457305908
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Torai.",
+          "seconds": 0.07426297664642334
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06349194049835205
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06428098678588867
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The queen visited the library and read a book.",
+          "seconds": 0.06329596042633057
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.0660790205001831
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.06293201446533203
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.0629340410232544
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.06400096416473389
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeete sat near the window and the queen smiled",
+          "seconds": 0.06273007392883301
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07356202602386475
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.0681389570236206
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.07192504405975342
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.07537901401519775
+        }
+      ],
+      "nemotron-unified-fp16": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.06123697757720947
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.061239004135131836
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06383800506591797
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06420004367828369
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06578004360198975
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.06764101982116699
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.0629730224609375
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with Postgur SQL and build the desktop app using Tori.",
+          "seconds": 0.07647502422332764
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06261599063873291
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06231701374053955
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The queen visited the library and read a book",
+          "seconds": 0.06237006187438965
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.06303095817565918
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.06296789646148682
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.06209397315979004
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06522798538208008
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06308698654174805
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07430899143218994
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.0628809928894043
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.06775999069213867
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quinn with the old model.",
+          "seconds": 0.06972706317901611
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.06292402744293213
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.06298398971557617
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06334495544433594
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06572592258453369
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06827700138092041
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.06806004047393799
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.0698310136795044
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Torai.",
+          "seconds": 0.07110404968261719
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.0624539852142334
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.0608210563659668
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The queen visited the library and read a book.",
+          "seconds": 0.061535000801086426
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.06188404560089111
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.06280803680419922
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.05917096138000488
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.06483399868011475
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled",
+          "seconds": 0.060539960861206055
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.0702439546585083
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06251800060272217
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.07065904140472412
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.0666888952255249
+        }
+      ],
+      "nemotron-unified-auto-int8": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.07625198364257812
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.07328200340270996
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06841802597045898
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06726992130279541
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06638598442077637
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.06861996650695801
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06312799453735352
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with Postgur SQL and build the desktop app using Tori.",
+          "seconds": 0.07023108005523682
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.0612640380859375
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06301701068878174
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The queen visited the library and read a book",
+          "seconds": 0.05908608436584473
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.06092500686645508
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.06102299690246582
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.06044507026672363
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06430995464324951
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06208205223083496
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07230591773986816
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06679701805114746
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.06622707843780518
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quinn with the old model.",
+          "seconds": 0.06773996353149414
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.06455790996551514
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.06159508228302002
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating quinn for local speech correction.",
+          "seconds": 0.06203508377075195
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07065200805664062
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07037806510925293
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.07035195827484131
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06639695167541504
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Tori.",
+          "seconds": 0.0732569694519043
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.08265507221221924
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06408095359802246
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The queen visited the library and read a book.",
+          "seconds": 0.06155800819396973
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.06405198574066162
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.06424009799957275
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.060812950134277344
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.06366503238677979
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeete sat near the window and the queen smiled",
+          "seconds": 0.06232595443725586
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07315599918365479
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06442999839782715
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.06602299213409424
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.06877601146697998
+        }
+      ],
+      "nemotron35-ml-2240": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.08268702030181885
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07287299633026123
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.06890594959259033
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.07258200645446777
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.07395398616790771
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeed runs inside Soto ASR using fluid audio",
+          "seconds": 0.07064509391784668
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "ML and MLX support local inference on the Mac",
+          "seconds": 0.06580102443695068
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with post GL and build the desktop app using Tory",
+          "seconds": 0.06942200660705566
+        },
+        {
+          "id": "samantha_claude",
+          "text": "helped me review the code before lunch",
+          "seconds": 0.06496596336364746
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.06989800930023193
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.06625401973724365
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Twin helped me review the code before lunch",
+          "seconds": 0.06922900676727295
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.08187997341156006
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.04236006736755371
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside to sink and close the window",
+          "seconds": 0.11201202869415283
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "Paraget sat near the window and the queen smiled",
+          "seconds": 0.07126295566558838
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.0764080286026001
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.07065296173095703
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Twin asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.07089793682098389
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen and compare Quen with the old model",
+          "seconds": 0.07053005695343018
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.0689009428024292
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.07018208503723145
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07150804996490479
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.07317399978637695
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.07345402240753174
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA parakeed runs inside Soto ASR using fluid audio",
+          "seconds": 0.07267999649047852
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Score ML and MLX support local inference on the Mac",
+          "seconds": 0.07338809967041016
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Cuba needs with post GRSQL and build the desktop app using Torai",
+          "seconds": 0.09403002262115479
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Sword helped me review the code before lunch",
+          "seconds": 0.06926488876342773
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.06860494613647461
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.07099592685699463
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.07181310653686523
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.06955206394195557
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.07730603218078613
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.08317506313323975
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parapeid sat near the window and the queen smiled",
+          "seconds": 0.07874596118927002
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.08580207824707031
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.06941592693328857
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the queen would test the Quen model in the cloud",
+          "seconds": 0.07780897617340088
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen and compare Quen with the old model",
+          "seconds": 0.08403599262237549
+        }
+      ],
+      "nemotron-en-2240": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07412397861480713
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07094395160675049
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.06279993057250977
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.061856985092163086
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.0643160343170166
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia parakeet runs inside Soto ASR using fluid audio",
+          "seconds": 0.06080806255340576
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "ML and MLX support local inference on the MAC",
+          "seconds": 0.06090497970581055
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Tor",
+          "seconds": 0.06356990337371826
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06077897548675537
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "Cloud covered the sun while we walked outside",
+          "seconds": 0.06023597717285156
+        },
+        {
+          "id": "samantha_queen",
+          "text": "Queen visited the library and read a book",
+          "seconds": 0.06419193744659424
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.07762598991394043
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.0578160285949707
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.03352391719818115
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06504106521606445
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "Parakeet sat near the window and the queen smiled",
+          "seconds": 0.06063508987426758
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.06358504295349121
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Not remove the final sentence or change the number thirty eight",
+          "seconds": 0.058151960372924805
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.0637969970703125
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quinn, then restart Quinn and compare Quinn with the old model",
+          "seconds": 0.06463897228240967
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.05834496021270752
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.05802500247955322
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinfor local speech correction",
+          "seconds": 0.05889105796813965
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.060667991638183594
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.06536495685577393
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia parakeet runs inside Soto ASR using fluid audio",
+          "seconds": 0.0604020357131958
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "ML and MLX support local inference on the Mac",
+          "seconds": 0.05996406078338623
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Tori",
+          "seconds": 0.08847403526306152
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Lord helped me review the code before lunch",
+          "seconds": 0.05656099319458008
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.05926501750946045
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.05856204032897949
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Helped me review the code before lunch",
+          "seconds": 0.055352091789245605
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.057573914527893066
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.06018805503845215
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06206703186035156
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled",
+          "seconds": 0.06688594818115234
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.07350099086761475
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.06682395935058594
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "When asked when the queen would test the Quen model in the cloud",
+          "seconds": 0.06860101222991943
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen then restart Quen and compare Quen with the old model",
+          "seconds": 0.06735396385192871
+        }
+      ]
+    },
+    "holdout": {
+      "v3": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.050930023193359375
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.05344498157501221
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.054051995277404785
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.055078983306884766
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice.",
+          "seconds": 0.055130958557128906
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.05548501014709473
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.054103970527648926
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.05159604549407959
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons.",
+          "seconds": 0.0589139461517334
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.05564403533935547
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The Queen and Queen both appeared in the photograph.",
+          "seconds": 0.05665898323059082
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.05443704128265381
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop.",
+          "seconds": 0.05444300174713135
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksum.",
+          "seconds": 0.05668604373931885
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses mini CPM for short editing tasks.",
+          "seconds": 0.05478799343109131
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.051805973052978516
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed.",
+          "seconds": 0.05529499053955078
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.05282104015350342
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.05633890628814697
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.05808401107788086
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece, Quinn is the model we tested.",
+          "seconds": 0.060339927673339844
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.05672502517700195
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRARN package test twice before lunch.",
+          "seconds": 0.055938005447387695
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use quint 3.8 flash next and key build identifier 72.",
+          "seconds": 0.05966007709503174
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.05495190620422363
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.055058956146240234
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.05529189109802246
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.05280506610870361
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinnath to practice.",
+          "seconds": 0.0546269416809082
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.051287055015563965
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.05639791488647461
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.05431103706359863
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Jem alives near the river and teaches piano lessons.",
+          "seconds": 0.05819499492645264
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is eight dollars per delivery.",
+          "seconds": 0.04968607425689697
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The Queen and Queen both appeared in the photograph.",
+          "seconds": 0.05761098861694336
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.05347597599029541
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop.",
+          "seconds": 0.054118990898132324
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from CRAN after checking its checksum.",
+          "seconds": 0.05652308464050293
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses mini CPM for short editing tasks.",
+          "seconds": 0.056648969650268555
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.05854809284210205
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed.",
+          "seconds": 0.06328201293945312
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.05569899082183838
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.05557394027709961
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.05460703372955322
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece, Quen is the model we tested.",
+          "seconds": 0.0550459623336792
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.0541839599609375
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the cran package tests twice before lunch.",
+          "seconds": 0.05255699157714844
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.062358975410461426
+        }
+      ],
+      "ultra": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.050567030906677246
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.05571389198303223
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.05590808391571045
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.05534696578979492
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice.",
+          "seconds": 0.06614899635314941
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06259393692016602
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.056063055992126465
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.07631206512451172
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Jem ar lives near the river and teaches piano lessons.",
+          "seconds": 0.05986893177032471
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.05358004570007324
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The Queen and Queen both appeared in the photograph.",
+          "seconds": 0.05811798572540283
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.05486702919006348
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop.",
+          "seconds": 0.0672140121459961
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksum.",
+          "seconds": 0.06043398380279541
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses Mini CPM for short editing tasks.",
+          "seconds": 0.05921196937561035
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.05849909782409668
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed.",
+          "seconds": 0.06063103675842285
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.055039048194885254
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.05617201328277588
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.08598601818084717
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece, Quen is the model we tested.",
+          "seconds": 0.06418502330780029
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.05875396728515625
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRAN package tests twice before launch.",
+          "seconds": 0.05719196796417236
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quint 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.06288790702819824
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.05607295036315918
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.05651998519897461
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.05539202690124512
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.052767038345336914
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quynath to practice.",
+          "seconds": 0.05438196659088135
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.05872905254364014
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.05931198596954346
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.056684017181396484
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Jem arrives near the river and teaches piano lessons.",
+          "seconds": 0.0548250675201416
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.055357933044433594
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The Queen and Queen both appeared in the photograph.",
+          "seconds": 0.05637204647064209
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.053398966789245605
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop.",
+          "seconds": 0.05651199817657471
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from CRAN after checking its checksum.",
+          "seconds": 0.056416988372802734
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses Mini CPM for short editing tasks.",
+          "seconds": 0.06254303455352783
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.058367013931274414
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed.",
+          "seconds": 0.05993795394897461
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.05834197998046875
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.05274999141693115
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.054103970527648926
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece, Quen is the model we tested.",
+          "seconds": 0.052947998046875
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.059718966484069824
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the CRAN package tests twice before lunch.",
+          "seconds": 0.05641007423400879
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.059306979179382324
+        }
+      ],
+      "nemotron-unified-int8": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The queen visited the hospital on Wednesday.",
+          "seconds": 0.06187093257904053
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team",
+          "seconds": 0.060790061950683594
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley",
+          "seconds": 0.0646200180053711
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.0638500452041626
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice.",
+          "seconds": 0.0655510425567627
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06527400016784668
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.07184505462646484
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.07229399681091309
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons",
+          "seconds": 0.06836104393005371
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.06132495403289795
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.06448197364807129
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.0654529333114624
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop.",
+          "seconds": 0.06513500213623047
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksom",
+          "seconds": 0.06824600696563721
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks.",
+          "seconds": 0.0725710391998291
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use SATO ASR to dictate notes while reviewing code",
+          "seconds": 0.0715489387512207
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed",
+          "seconds": 0.07635605335235596
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.0720909833908081
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The GEMA model should preserve the final invoice number",
+          "seconds": 0.06546103954315186
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes",
+          "seconds": 0.0636059045791626
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece, Quinn is the model we tested.",
+          "seconds": 0.07255196571350098
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.07272696495056152
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRAN package tests twice before lunch",
+          "seconds": 0.06758701801300049
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quent3.8 flash next and keep build identifier 72",
+          "seconds": 0.0727919340133667
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.06951391696929932
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.06648004055023193
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.06481993198394775
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.06577897071838379
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinnuth to practice.",
+          "seconds": 0.0664290189743042
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06608700752258301
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.06658709049224854
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.06475698947906494
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons.",
+          "seconds": 0.06454408168792725
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.05947697162628174
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.0703500509262085
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.0655050277709961
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop.",
+          "seconds": 0.07608997821807861
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from CRAN after checking its checksum",
+          "seconds": 0.07128298282623291
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks",
+          "seconds": 0.0750800371170044
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.07102298736572266
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed.",
+          "seconds": 0.07350802421569824
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.06877100467681885
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.06651699542999268
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.06789600849151611
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece. Quen is the model we tested",
+          "seconds": 0.07173299789428711
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file",
+          "seconds": 0.07342493534088135
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the cran package tests twice before lunch.",
+          "seconds": 0.0649639368057251
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.07263493537902832
+        }
+      ],
+      "nemotron-unified-fp16": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The queen visited the hospital on Wednesday.",
+          "seconds": 0.06938493251800537
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team",
+          "seconds": 0.06299006938934326
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley",
+          "seconds": 0.061749935150146484
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.06096601486206055
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice.",
+          "seconds": 0.06329107284545898
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.061659932136535645
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.06278300285339355
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.061437010765075684
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons",
+          "seconds": 0.06007707118988037
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.05939900875091553
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.06052100658416748
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.06493997573852539
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop.",
+          "seconds": 0.06219899654388428
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksom",
+          "seconds": 0.06379199028015137
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks.",
+          "seconds": 0.06466901302337646
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use SATO ASR to dictate notes while reviewing code",
+          "seconds": 0.06494104862213135
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed",
+          "seconds": 0.0635380744934082
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.06149005889892578
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The GEMA model should preserve the final invoice number",
+          "seconds": 0.060600996017456055
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes",
+          "seconds": 0.061486005783081055
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece, Quinn is the model we tested.",
+          "seconds": 0.06273400783538818
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.06381309032440186
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRAN package tests twice before lunch",
+          "seconds": 0.060592055320739746
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quent3.8 flash next and keep build identifier 72",
+          "seconds": 0.0659559965133667
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.060539960861206055
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.06416201591491699
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.06104302406311035
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.06457805633544922
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinnoth to practice.",
+          "seconds": 0.06464505195617676
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06276309490203857
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.06138300895690918
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.05969405174255371
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons.",
+          "seconds": 0.06106698513031006
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.05753791332244873
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.06145596504211426
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.061592936515808105
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop.",
+          "seconds": 0.06233096122741699
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from CRAN after checking its checksum",
+          "seconds": 0.06276309490203857
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks",
+          "seconds": 0.06485795974731445
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.06452596187591553
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed.",
+          "seconds": 0.06460702419281006
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.062458038330078125
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.06083405017852783
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.06344497203826904
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece. Quen is the model we tested",
+          "seconds": 0.06840801239013672
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file",
+          "seconds": 0.0655660629272461
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the cran package tests twice before lunch.",
+          "seconds": 0.06483006477355957
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.06652402877807617
+        }
+      ],
+      "nemotron-unified-auto-int8": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The queen visited the hospital on Wednesday.",
+          "seconds": 0.05979204177856445
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team",
+          "seconds": 0.06179404258728027
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley",
+          "seconds": 0.06306302547454834
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.06571102142333984
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice.",
+          "seconds": 0.06402194499969482
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06360995769500732
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.06387102603912354
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.06146097183227539
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons",
+          "seconds": 0.06226301193237305
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.061946988105773926
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.06561398506164551
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.06525397300720215
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop.",
+          "seconds": 0.06098198890686035
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksom",
+          "seconds": 0.06535601615905762
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks.",
+          "seconds": 0.06594491004943848
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use SATO ASR to dictate notes while reviewing code",
+          "seconds": 0.06592309474945068
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed",
+          "seconds": 0.06675100326538086
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.0684729814529419
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The GEMA model should preserve the final invoice number",
+          "seconds": 0.06313002109527588
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes",
+          "seconds": 0.06975603103637695
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece, Quinn is the model we tested.",
+          "seconds": 0.06585395336151123
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file.",
+          "seconds": 0.06592905521392822
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRAN package tests twice before lunch",
+          "seconds": 0.06467902660369873
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quent3.8 flash next and keep build identifier 72",
+          "seconds": 0.08094501495361328
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday.",
+          "seconds": 0.0723569393157959
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team.",
+          "seconds": 0.07384598255157471
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley.",
+          "seconds": 0.07128298282623291
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground.",
+          "seconds": 0.0634990930557251
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinnuth to practice.",
+          "seconds": 0.0649939775466919
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration.",
+          "seconds": 0.06705498695373535
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container.",
+          "seconds": 0.06318008899688721
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse.",
+          "seconds": 0.06260395050048828
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons.",
+          "seconds": 0.061833977699279785
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is $8 per delivery.",
+          "seconds": 0.061019062995910645
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The queen and queen both appeared in the photograph",
+          "seconds": 0.06257796287536621
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon.",
+          "seconds": 0.06467998027801514
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quenn with Claude on the same laptop.",
+          "seconds": 0.06341910362243652
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from CRAN after checking its checksum",
+          "seconds": 0.06527996063232422
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses mini-CPM for short editing tasks",
+          "seconds": 0.06923294067382812
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "I use Soto ASR to dictate notes while reviewing code.",
+          "seconds": 0.066864013671875
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Kubernetes restarte the container after the readiness check failed.",
+          "seconds": 0.06835305690765381
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size.",
+          "seconds": 0.06322896480560303
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number.",
+          "seconds": 0.0632469654083252
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Quinn answered the technical question while Quinn took notes.",
+          "seconds": 0.06370103359222412
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece. Quen is the model we tested",
+          "seconds": 0.0634770393371582
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "A cloud blocked the sun while Claude processed the local file",
+          "seconds": 0.06527101993560791
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the Cran package tests twice before lunch.",
+          "seconds": 0.06488204002380371
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.07353103160858154
+        }
+      ],
+      "nemotron35-ml-2240": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday",
+          "seconds": 0.07453799247741699
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Twin sent the revised budget to the finance team",
+          "seconds": 0.08514595031738281
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "A dark cloud covered the western side of the valley",
+          "seconds": 0.09159696102142334
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "The children ran toward the empty playground",
+          "seconds": 0.08961808681488037
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn after practice",
+          "seconds": 0.08345198631286621
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration",
+          "seconds": 0.08619105815887451
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container",
+          "seconds": 0.09005999565124512
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse",
+          "seconds": 0.0850679874420166
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Demo lives near the river and teaches piano lessons",
+          "seconds": 0.09349608421325684
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "Minimum charge is eight dollars per delivery",
+          "seconds": 0.09161508083343506
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "The Queen and Quinn both appeared in the photograph",
+          "seconds": 0.09183800220489502
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon",
+          "seconds": 0.07351601123809814
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quen with Claude on the same laptop",
+          "seconds": 0.06752705574035645
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from Cran after checking its checksom",
+          "seconds": 0.06838202476501465
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Our local assistant uses many CPM for short editing tasks",
+          "seconds": 0.07275497913360596
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "Use Auto ASR to dictate notes while reviewing code",
+          "seconds": 0.0698699951171875
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed",
+          "seconds": 0.06899094581604004
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size",
+          "seconds": 0.07292306423187256
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "The Gemma model should preserve the final invoice number",
+          "seconds": 0.07283902168273926
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "When answered the technical question while Quinn took notes",
+          "seconds": 0.0768270492553711
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "The Queen is a chess piece. Quinn is the model we tested",
+          "seconds": 0.07612597942352295
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "The cloud blocked the sun while cloud processed the local file",
+          "seconds": 0.07859992980957031
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the cran package tests twice before lunch",
+          "seconds": 0.07597696781158447
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quin three point eight flash next and key t build identifier seventy two",
+          "seconds": 0.0824439525604248
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday",
+          "seconds": 0.09859597682952881
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Twin sent the revised budget to the finance team",
+          "seconds": 0.12087297439575195
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "Dark cloud covered the western side of the valley",
+          "seconds": 0.08381998538970947
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground",
+          "seconds": 0.08741104602813721
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinn of to practice",
+          "seconds": 0.09272110462188721
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration",
+          "seconds": 0.09598803520202637
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container",
+          "seconds": 0.10084402561187744
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse",
+          "seconds": 0.09156203269958496
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Gem ar lives near the river and teaches piano lessons",
+          "seconds": 0.09949493408203125
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is eight dollars per delivery",
+          "seconds": 0.07679998874664307
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The Queen and Quinn both appeared in the photograph",
+          "seconds": 0.07173991203308105
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon",
+          "seconds": 0.06558799743652344
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop",
+          "seconds": 0.0660409927368164
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from Granaft to checking its checksum",
+          "seconds": 0.06692302227020264
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses many CPM for short editing tasks",
+          "seconds": 0.06996393203735352
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "to dictate notes while reviewing code",
+          "seconds": 0.06413006782531738
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Uba needs restarted the container after the readiness check failed",
+          "seconds": 0.06590402126312256
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the mistral model before changing the batch size",
+          "seconds": 0.11221599578857422
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number",
+          "seconds": 0.06848609447479248
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "Wenn answered the technical question while Quinn took notes",
+          "seconds": 0.06957697868347168
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The queen is a chess piece. Quen is the model we tested",
+          "seconds": 0.06755292415618896
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "The cloud block the sun while cloud processed a local file",
+          "seconds": 0.06979405879974365
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the Cran package test twice before lunch",
+          "seconds": 0.06463301181793213
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen three point eight flash next and keep build identifier seventy two",
+          "seconds": 0.08498001098632812
+        }
+      ],
+      "nemotron-en-2240": [
+        {
+          "id": "samantha_ordinary_01",
+          "text": "Queen visited the hospital on Wednesday",
+          "seconds": 0.057456016540527344
+        },
+        {
+          "id": "samantha_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team",
+          "seconds": 0.060961008071899414
+        },
+        {
+          "id": "samantha_ordinary_03",
+          "text": "Dark cloud covered the western side of the valley",
+          "seconds": 0.06040298938751221
+        },
+        {
+          "id": "samantha_ordinary_04",
+          "text": "Children ran toward the empty playground",
+          "seconds": 0.06275999546051025
+        },
+        {
+          "id": "samantha_ordinary_05",
+          "text": "Coach asked Claude to call Quinn after practice",
+          "seconds": 0.06538498401641846
+        },
+        {
+          "id": "samantha_ordinary_06",
+          "text": "Please clean the screen before the next demonstration",
+          "seconds": 0.056900978088378906
+        },
+        {
+          "id": "samantha_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container",
+          "seconds": 0.05884897708892822
+        },
+        {
+          "id": "samantha_ordinary_08",
+          "text": "Crane moved a steel beam above the warehouse",
+          "seconds": 0.0676490068435669
+        },
+        {
+          "id": "samantha_ordinary_09",
+          "text": "Demo lives near the river and teaches piano lessons",
+          "seconds": 0.06020498275756836
+        },
+        {
+          "id": "samantha_ordinary_10",
+          "text": "Minimum charge is eight dollars per delivery",
+          "seconds": 0.05683588981628418
+        },
+        {
+          "id": "samantha_ordinary_11",
+          "text": "Queen and Queen both appeared in the photograph",
+          "seconds": 0.06329309940338135
+        },
+        {
+          "id": "samantha_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon",
+          "seconds": 0.06271803379058838
+        },
+        {
+          "id": "samantha_target_01",
+          "text": "We compared Quinn with Claude on the same laptop",
+          "seconds": 0.06459903717041016
+        },
+        {
+          "id": "samantha_target_02",
+          "text": "Install the package from CRAN after checking its checksum",
+          "seconds": 0.0587620735168457
+        },
+        {
+          "id": "samantha_target_03",
+          "text": "Local assistant uses mini CPM for short editing tasks",
+          "seconds": 0.057222962379455566
+        },
+        {
+          "id": "samantha_target_04",
+          "text": "I use Sato ASR to dictate notes while reviewing code",
+          "seconds": 0.05740189552307129
+        },
+        {
+          "id": "samantha_target_05",
+          "text": "Kubernetes restarted the container after the readiness check failed",
+          "seconds": 0.059054017066955566
+        },
+        {
+          "id": "samantha_target_06",
+          "text": "Try the Mistral model before changing the batch size",
+          "seconds": 0.07176399230957031
+        },
+        {
+          "id": "samantha_target_07",
+          "text": "Gemma model should preserve the final invoice number",
+          "seconds": 0.060639023780822754
+        },
+        {
+          "id": "samantha_target_08",
+          "text": "When answered the technical question while Quinn took notes",
+          "seconds": 0.060170888900756836
+        },
+        {
+          "id": "samantha_target_09",
+          "text": "Queen is a chess piece. Queen is the model we tested",
+          "seconds": 0.06014597415924072
+        },
+        {
+          "id": "samantha_target_10",
+          "text": "Cloud blocked the sun while Claude processed the local file",
+          "seconds": 0.06264305114746094
+        },
+        {
+          "id": "samantha_target_11",
+          "text": "We ran the CRAN package tests twice before launch",
+          "seconds": 0.06644296646118164
+        },
+        {
+          "id": "samantha_target_12",
+          "text": "Use Quent three point eight flash next and keep build identifier seventy two",
+          "seconds": 0.06604492664337158
+        },
+        {
+          "id": "daniel_ordinary_01",
+          "text": "The Queen visited the hospital on Wednesday",
+          "seconds": 0.05748605728149414
+        },
+        {
+          "id": "daniel_ordinary_02",
+          "text": "Quinn sent the revised budget to the finance team",
+          "seconds": 0.05650496482849121
+        },
+        {
+          "id": "daniel_ordinary_03",
+          "text": "Dark cloud covered the western side of the valley",
+          "seconds": 0.0561140775680542
+        },
+        {
+          "id": "daniel_ordinary_04",
+          "text": "The children ran toward the empty playground",
+          "seconds": 0.06752502918243408
+        },
+        {
+          "id": "daniel_ordinary_05",
+          "text": "Our coach asked Claude to call Quinoff to practice",
+          "seconds": 0.06128501892089844
+        },
+        {
+          "id": "daniel_ordinary_06",
+          "text": "Please clean the screen before the next demonstration",
+          "seconds": 0.05780899524688721
+        },
+        {
+          "id": "daniel_ordinary_07",
+          "text": "We stored the cranberries in a sealed glass container",
+          "seconds": 0.05786693096160889
+        },
+        {
+          "id": "daniel_ordinary_08",
+          "text": "The crane moved a steel beam above the warehouse",
+          "seconds": 0.05669605731964111
+        },
+        {
+          "id": "daniel_ordinary_09",
+          "text": "Gemma lives near the river and teaches piano lessons",
+          "seconds": 0.05912494659423828
+        },
+        {
+          "id": "daniel_ordinary_10",
+          "text": "The minimum charge is eight dollars per delivery",
+          "seconds": 0.05607795715332031
+        },
+        {
+          "id": "daniel_ordinary_11",
+          "text": "The Queen and Queen both appeared in the photograph",
+          "seconds": 0.05636298656463623
+        },
+        {
+          "id": "daniel_ordinary_12",
+          "text": "We ran outside because the cloud looked like a dragon",
+          "seconds": 0.05875194072723389
+        },
+        {
+          "id": "daniel_target_01",
+          "text": "We compared Quen with Claude on the same laptop",
+          "seconds": 0.05736994743347168
+        },
+        {
+          "id": "daniel_target_02",
+          "text": "Install the package from Cranaft to checking its checksum",
+          "seconds": 0.05716705322265625
+        },
+        {
+          "id": "daniel_target_03",
+          "text": "Our local assistant uses mini CPM for short editing tasks",
+          "seconds": 0.0573580265045166
+        },
+        {
+          "id": "daniel_target_04",
+          "text": "Use Auto ASR to dictate notes while reviewing code",
+          "seconds": 0.05699896812438965
+        },
+        {
+          "id": "daniel_target_05",
+          "text": "Cuban needs restarted the container after the readiness check failed",
+          "seconds": 0.059107065200805664
+        },
+        {
+          "id": "daniel_target_06",
+          "text": "Try the Mistral model before changing the batch size",
+          "seconds": 0.05655789375305176
+        },
+        {
+          "id": "daniel_target_07",
+          "text": "The Gemma model should preserve the final invoice number",
+          "seconds": 0.05613601207733154
+        },
+        {
+          "id": "daniel_target_08",
+          "text": "When answered the technical question while Quinn took notes",
+          "seconds": 0.05707991123199463
+        },
+        {
+          "id": "daniel_target_09",
+          "text": "The Queen is a chess piece. Queen is the model we tested",
+          "seconds": 0.058776021003723145
+        },
+        {
+          "id": "daniel_target_10",
+          "text": "Cloud block the sun while Claude processed the local file",
+          "seconds": 0.058415889739990234
+        },
+        {
+          "id": "daniel_target_11",
+          "text": "We ran the grand package test twice before lunch",
+          "seconds": 0.05498993396759033
+        },
+        {
+          "id": "daniel_target_12",
+          "text": "Use Quen three point eight flash next and keep build identifier seventy two",
+          "seconds": 0.08444499969482422
+        }
+      ]
+    },
+    "dev-pad": {
+      "v3": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06803500652313232
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06928598880767822
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.07104694843292236
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn 3.8 Flash next with the previous model.",
+          "seconds": 0.07515192031860352
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn 3.8 Flash next with the previous model.",
+          "seconds": 0.07195901870727539
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using Fluid Audio.",
+          "seconds": 0.07621192932128906
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06763303279876709
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostGur SQL and build the desktop app using Tori.",
+          "seconds": 0.0792609453201294
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06876695156097412
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06683099269866943
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.06657302379608154
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.068337082862854
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.08874404430389404
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.07838404178619385
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.0851750373840332
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.10958504676818848
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07635903358459473
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06595301628112793
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.07061195373535156
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.0887460708618164
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.0690159797668457
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.07100701332092285
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.07311797142028809
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.08869099617004395
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07278096675872803
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using Fluid Audio.",
+          "seconds": 0.09793293476104736
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.0674140453338623
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Torai.",
+          "seconds": 0.07620096206665039
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06714200973510742
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.06523096561431885
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.06454002857208252
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.0637059211730957
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.06620597839355469
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.060763001441955566
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.06626403331756592
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06778192520141602
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07561600208282471
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06542003154754639
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.06879496574401855
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.07028603553771973
+        }
+      ],
+      "ultra": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.05742001533508301
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.05514705181121826
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.05685102939605713
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quentin 3.8 Flash next with the previous model.",
+          "seconds": 0.05834794044494629
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quentin 3.8 Flash next with the previous model.",
+          "seconds": 0.05754899978637695
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using Fluid Audio.",
+          "seconds": 0.05770409107208252
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.05304098129272461
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tori.",
+          "seconds": 0.06572389602661133
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before launch.",
+          "seconds": 0.05208897590637207
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.05270397663116455
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.051277995109558105
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before launch.",
+          "seconds": 0.05348098278045654
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.05479300022125244
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.055624961853027344
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.05886101722717285
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.05700504779815674
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.06268393993377686
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06148695945739746
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.05695390701293945
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.055480003356933594
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.05514192581176758
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction.",
+          "seconds": 0.053941965103149414
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.05506598949432373
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quentin 3.8 Flash Next with the previous model.",
+          "seconds": 0.05753898620605469
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quentin 3.8 Flash Next with the previous model.",
+          "seconds": 0.05579400062561035
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.05710792541503906
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.05245101451873779
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgreSQL and build the desktop app using Torai.",
+          "seconds": 0.062132954597473145
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.052314043045043945
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.051632046699523926
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book.",
+          "seconds": 0.049852967262268066
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch.",
+          "seconds": 0.052317023277282715
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.050398945808410645
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.05090808868408203
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.05511200428009033
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.05725395679473877
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.06206202507019043
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.051129937171936035
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quen model in the cloud.",
+          "seconds": 0.0539630651473999
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.0565340518951416
+        }
+      ],
+      "nemotron-unified-int8": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06393194198608398
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06724298000335693
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction.",
+          "seconds": 0.06354594230651855
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn 3.8 Flash Next with the previous model.",
+          "seconds": 0.06967306137084961
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn 3.8 Flash Next with the previous model.",
+          "seconds": 0.06972205638885498
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio.",
+          "seconds": 0.0729750394821167
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06539404392242432
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with Postgre SQL and build the desktop app using Tori.",
+          "seconds": 0.07341599464416504
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06560802459716797
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside.",
+          "seconds": 0.0642390251159668
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The queen visited the library and read a book.",
+          "seconds": 0.0634760856628418
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.06292510032653809
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.0645519495010376
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.06211197376251221
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window.",
+          "seconds": 0.06796598434448242
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled",
+          "seconds": 0.06451892852783203
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope.",
+          "seconds": 0.07502901554107666
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number 38",
+          "seconds": 0.06841695308685303
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.06851804256439209
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quinn with the old model.",
+          "seconds": 0.06944501399993896
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.06464803218841553
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.06449604034423828
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating quinn for local speech correction.",
+          "seconds": 0.06316792964935303
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.06727397441864014
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen 3.8 Flash Next with the previous model.",
+          "seconds": 0.07348001003265381
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA Parakeet runs inside Soto ASR using fluid audio",
+          "seconds": 0.07336103916168213
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac.",
+          "seconds": 0.06741297245025635
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Kubernetes with PostgresQL and build the desktop app using Torai.",
+          "seconds": 0.07695388793945312
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch.",
+          "seconds": 0.06660091876983643
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.0680609941482544
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The queen visited the library and read a book.",
+          "seconds": 0.06415891647338867
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.06284904479980469
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project?",
+          "seconds": 0.06535899639129639
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home.",
+          "seconds": 0.06372702121734619
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06530189514160156
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled.",
+          "seconds": 0.06352591514587402
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.0735158920288086
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number 38.",
+          "seconds": 0.06785094738006592
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud.",
+          "seconds": 0.07206499576568604
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen, then restart Quen, and compare Quen with the old model",
+          "seconds": 0.07024002075195312
+        }
+      ],
+      "nemotron35-ml-2240": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07311797142028809
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07082009315490723
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.0711050033569336
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.08954095840454102
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.08842206001281738
+        },
+        {
+          "id": "samantha_names",
+          "text": "NVIDIA Parakeed runs inside Soto ASR using fluid audio",
+          "seconds": 0.08904504776000977
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac",
+          "seconds": 0.0698850154876709
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with postGRSQL and build the desktop app using Tory",
+          "seconds": 0.08779704570770264
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06927490234375
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.07248497009277344
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.06704401969909668
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before launch",
+          "seconds": 0.06662499904632568
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.07784199714660645
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.08126211166381836
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.08436501026153564
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parageet sat near the window and the queen smiled",
+          "seconds": 0.08096802234649658
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.10045599937438965
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.08179807662963867
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.07940006256103516
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quinn, then restart Quen and compare Quinn with the old model",
+          "seconds": 0.09657502174377441
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.10338401794433594
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.08376491069793701
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quin for local speech correction",
+          "seconds": 0.07744503021240234
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.10358798503875732
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.09927403926849365
+        },
+        {
+          "id": "daniel_names",
+          "text": "NVIDIA parakeed runs inside Soto ASR using fluid audio",
+          "seconds": 0.10139203071594238
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac",
+          "seconds": 0.08046090602874756
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Cuba needs with post GRSQL and build the desktop app using Torai",
+          "seconds": 0.1043250560760498
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.07829105854034424
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.08077001571655273
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The queen visited the library and reader book",
+          "seconds": 0.07484495639801025
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.07722795009613037
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.08100497722625732
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.07762694358825684
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.07807803153991699
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The paragleid sat near the window and the queen smiled",
+          "seconds": 0.0755230188369751
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.09769999980926514
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.09302794933319092
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.07724106311798096
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen then restart Quen and compare Quen with the old model",
+          "seconds": 0.0922919511795044
+        }
+      ],
+      "nemotron-en-2240": [
+        {
+          "id": "samantha_qwen_name",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.05934000015258789
+        },
+        {
+          "id": "samantha_qwen_kwen",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.0611569881439209
+        },
+        {
+          "id": "samantha_qwen_kwin",
+          "text": "We are evaluating Quinn for local speech correction",
+          "seconds": 0.06128895282745361
+        },
+        {
+          "id": "samantha_version",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.08749103546142578
+        },
+        {
+          "id": "samantha_version_kwen",
+          "text": "Please compare Quinn three point eight flash next with the previous model",
+          "seconds": 0.09106099605560303
+        },
+        {
+          "id": "samantha_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio",
+          "seconds": 0.10146403312683105
+        },
+        {
+          "id": "samantha_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac",
+          "seconds": 0.06179702281951904
+        },
+        {
+          "id": "samantha_software",
+          "text": "Deploy Kubernetes with PostgreSQL and build the desktop app using Tori",
+          "seconds": 0.09138107299804688
+        },
+        {
+          "id": "samantha_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06243002414703369
+        },
+        {
+          "id": "samantha_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.06320703029632568
+        },
+        {
+          "id": "samantha_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.05903899669647217
+        },
+        {
+          "id": "samantha_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.05936706066131592
+        },
+        {
+          "id": "samantha_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.058915019035339355
+        },
+        {
+          "id": "samantha_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.059316039085388184
+        },
+        {
+          "id": "samantha_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06638097763061523
+        },
+        {
+          "id": "samantha_nouns",
+          "text": "The parakeet sat near the window and the queen smiled",
+          "seconds": 0.060890913009643555
+        },
+        {
+          "id": "samantha_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.10812592506408691
+        },
+        {
+          "id": "samantha_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.06232810020446777
+        },
+        {
+          "id": "samantha_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.06581997871398926
+        },
+        {
+          "id": "samantha_repeat",
+          "text": "Use Quinn, then restart Quinn and compare Quinn with the old model",
+          "seconds": 0.09647202491760254
+        },
+        {
+          "id": "daniel_qwen_name",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.06380605697631836
+        },
+        {
+          "id": "daniel_qwen_kwen",
+          "text": "We are evaluating Quen for local speech correction",
+          "seconds": 0.06452000141143799
+        },
+        {
+          "id": "daniel_qwen_kwin",
+          "text": "We are evaluating Quinfor local speech correction",
+          "seconds": 0.06951498985290527
+        },
+        {
+          "id": "daniel_version",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.09894406795501709
+        },
+        {
+          "id": "daniel_version_kwen",
+          "text": "Please compare Quen three point eight flash next with the previous model",
+          "seconds": 0.09117305278778076
+        },
+        {
+          "id": "daniel_names",
+          "text": "Nvidia Parakeet runs inside Soto ASR using fluid audio",
+          "seconds": 0.09588503837585449
+        },
+        {
+          "id": "daniel_frameworks",
+          "text": "Core ML and MLX support local inference on the Mac",
+          "seconds": 0.05976307392120361
+        },
+        {
+          "id": "daniel_software",
+          "text": "Deploy Cuber needs with PostgresQL and build the desktop app using Tori",
+          "seconds": 0.09345507621765137
+        },
+        {
+          "id": "daniel_claude",
+          "text": "Claude helped me review the code before lunch",
+          "seconds": 0.06106400489807129
+        },
+        {
+          "id": "daniel_cloud",
+          "text": "The cloud covered the sun while we walked outside",
+          "seconds": 0.06271100044250488
+        },
+        {
+          "id": "daniel_queen",
+          "text": "The Queen visited the library and read a book",
+          "seconds": 0.06341898441314697
+        },
+        {
+          "id": "daniel_quinn",
+          "text": "Quinn helped me review the code before lunch",
+          "seconds": 0.05954897403717041
+        },
+        {
+          "id": "daniel_when",
+          "text": "When can we review the code and finish the project",
+          "seconds": 0.0608060359954834
+        },
+        {
+          "id": "daniel_ran",
+          "text": "I ran around the park and then walked home",
+          "seconds": 0.060656070709228516
+        },
+        {
+          "id": "daniel_sink",
+          "text": "Please leave the cups beside the sink and close the window",
+          "seconds": 0.06318390369415283
+        },
+        {
+          "id": "daniel_nouns",
+          "text": "The parakeet sat near the window and the queen smiled",
+          "seconds": 0.0615689754486084
+        },
+        {
+          "id": "daniel_ordinary",
+          "text": "Please keep the blue notebook beside the window and remember the silver telescope",
+          "seconds": 0.09010100364685059
+        },
+        {
+          "id": "daniel_negation",
+          "text": "Do not remove the final sentence or change the number thirty eight",
+          "seconds": 0.09670400619506836
+        },
+        {
+          "id": "daniel_mixed",
+          "text": "Quinn asked when the Queen would test the Quinn model in the cloud",
+          "seconds": 0.06260693073272705
+        },
+        {
+          "id": "daniel_repeat",
+          "text": "Use Quen then restart Quen and compare Quen with the old model",
+          "seconds": 0.08636105060577393
+        }
+      ]
+    },
+    "long-dev": {
+      "v3": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating Quinn for local speech correction. We are evaluating Quinn for local speech correction. We are evaluating Quinn for local speech correction. Please compare Quinn 3.8 flashNext with the previous model. Please compare Quin 3.8 FlashNext with the previous model. Nvidia Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostGur SQL and build the desktop app using Tori. Cloud helped me review the code before launch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model. We are evaluating Quen for local speech correctly. We are evaluating Quenfor local speech correction. We are evaluating Quin4 local speech correction. Please compare Quen 3.8 flash next with the previous model. Please compare Quen 3.8 flash next with the previous model. Nvidia Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostgresQL and build the desktop app using Torai. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The Queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.5454009771347046
+        }
+      ],
+      "ultra": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating Quinn for local speech correction. We are evaluating Quinn for local speech correction. We are evaluating Quinn for local speech correction. Please compare Quinn 3.8 flash next with the previous model. Please compare Quinn 3.8 Flashnext with the previous model. Nvidia Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostGur SQL and build the desktop app using Tori. Cloud helped me review the code before launch. The cloud covered the sun while we walked outside. Queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model. We are evaluating Quen for local speech correctly. We are evaluating Quen4 local speech correction. We are evaluating Quin4 local speech correction. Please compare Quen 3.8 flash next with the previous model. Please compare Quentin 3.8 flash next with the previous model. Nvidia Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostgreSQL and build the desktop app using Torai. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The Queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 0.5333839654922485
+        }
+      ],
+      "nemotron-unified-int8": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating quinn for local speech correction. We are evaluating Quinn for local speech correction. We are evaluating quinn for local speech correction. Please compare Quinn 3.8 flash next with the previous model. Please compare Quinn 3.8 Flash Next with the previous model. NVIDIA Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with Postgre SQL and build the desktop app using Tori. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model. We are evaluating Quen for local speech correction. We are evaluating Quen for local speech correction. We are evaluating quinn for local speech correction. Please compare Quen 3.8 flash next with the previous model. Please compare Quen 3.8 flash next with the previous model. NVIDIA Parakeet runs inside Soto ASR using Fluid Audio. CoreML and MLX support local inference on the Mac. Deploy Kubernetes with PostgresQL and build the desktop app using Torai. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window, and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 1.4298620223999023
+        }
+      ],
+      "nemotron-unified-fp16": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating quinn for local speech correction. We are evaluating Quinn for local speech correction. We are evaluating quinn for local speech correction. Please compare Quinn 3.8 flash next with the previous model. Please compare Quinn 3.8 Flash Next with the previous model. NVIDIA Parakeet runs inside Soto ASR using Fluid Audio. Core ML and MLX support local inference on the Mac. Deploy Kubernetes with Postgur SQL and build the desktop app using Tori. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the Queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model. We are evaluating Quen for local speech correction. We are evaluating Quen for local speech correction. We are evaluating quinn for local speech correction. Please compare Quen 3.8 flash next with the previous model. Please compare Quen 3.8 flash next with the previous model. NVIDIA Parakeet runs inside Soto ASR using Fluid Audio. CoreML and MLX support local inference on the Mac. Deploy Kubernetes with PostgresQL and build the desktop app using Torai. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window, and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number 38. Quinn asked when the queen would test the Quen model in the cloud. Use Quen, then restart Quen, and compare Quen with the old model.",
+          "seconds": 1.450984001159668
+        }
+      ],
+      "nemotron35-ml-2240": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating Quin for local speech correction. We are evaluating Quin for local speech correction. We are evaluating Quin for Local Speech Correction. Please compare Quinn three point eight flash next with the previous model. Please compare Quin three point eight flash next with the previous model. Nvidia Parakeed runs inside Soto ASR using fluid audio, core ML and MLX support local inference on the Mac. Deploy Kubernetes with post GRSQL and build the desktop app using Tory. Claude helped me review the code before launch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number thirty eight. Quinn asked when the queen would test the Quinn model in the cloud. Use Quen, then restart Quen and compare Quen with the old model. We are evaluating Quen for local speech correction. We are evaluating Quen for local speech correction. We are evaluating Quin for local speech correction. Please compare Quin three point eight flash next with the previous model. Please compare Quen three point eight flash next with the previous model. NVIDIA parakeed runs inside Soto ASR using fluid audio core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostgresQL and build the desktop app using Torai. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The paraquede sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number thirty eight. Quinn asked when the queen would test the Quen model in the cloud. Use Quen, then restart Quen and compare Quen with the old model",
+          "seconds": 1.4483990669250488
+        }
+      ],
+      "nemotron-en-2240": [
+        {
+          "id": "long_dev",
+          "text": "We are evaluating Quin for local speech correction. We are evaluating Quin for local speech correction. We are evaluating Quin for local speech correction. Please compare Quinn three point eight flash next with the previous model. Please compare Quin three point eight flash next with the previous model. Nvidia Parakeet runs inside Soto ASR using fluid audio core ML and MLX support local inference on the Mac. Deploy Kubernetes with PostgreSQL and build the desktop app using Tori. Claude helped me review the code before launch. The cloud covered the sun while we walked outside. The Queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number thirty eight. Quinn asked when the queen would test the Quinn model in the cloud. Use Quinn, then restart Quinn and compare Quinn with the old model. We are evaluating Quen for local speech correction. We are evaluating Quen for local speech correction. We are evaluating Quen for local speech correction. Please compare Quen three point eight flash next with the previous model. Please compare Quen three point eight flash next with the previous model. Nvidia Parakeet runs inside Soto ASR using fluid audio core ML and MLX support local inference on the Mac deploy Kubernetes with Postgresql and build the desktop app using Tori. Claude helped me review the code before lunch. The cloud covered the sun while we walked outside. The Queen visited the library and read a book. Quinn helped me review the code before lunch. When can we review the code and finish the project? I ran around the park and then walked home. Please leave the cups beside the sink and close the window. The parakeet sat near the window and the queen smiled. Please keep the blue notebook beside the window and remember the silver telescope. Do not remove the final sentence or change the number thirty eight. Queen asked when the queen would test the Quinn model in the cloud use Quen, then restart Quen and compare Quen with the old model",
+          "seconds": 2.1066120862960815
+        }
+      ]
+    },
+    "long-holdout": {
+      "v3": [
+        {
+          "id": "long_holdout",
+          "text": "The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Gemma lives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Installed the package from CRAN after checking its checksum. Our local assistant uses mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the CRAN package tests twice before lunch. Use Quinn 3.8 flash next and keep build identifier 72. The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn up to practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Gem alives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from CRAN after checking its checksum. Our local assistant uses mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the Crane package tests twice before lunch. Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.5260329246520996
+        }
+      ],
+      "ultra": [
+        {
+          "id": "long_holdout",
+          "text": "The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem arrives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Cloud on the same laptop. Installed the package from CRAN after checking its checksum. Our local assistant uses Mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the CRAN package tests twice before lunch. Use Quinn 3.8 flash next and keep build identifier 72. The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn up to practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem arrives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from CRAN after checking its checksum. Our local assistant uses Mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quen answered the technical question while Quinn took notes. The Queen is a chess piece, Quen is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the Crane package tests twice before lunch. Use Quen 3.8 flash next and keep build identifier 72.",
+          "seconds": 0.5416040420532227
+        }
+      ],
+      "nemotron-unified-int8": [
+        {
+          "id": "long_holdout",
+          "text": "The queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem alives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from CRAN after checking its checksom. Our local assistant uses Mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the CRAN package tests twice before lunch. Use Quint 3.8 flash next and keep build identifier 72. The Queen visited the hospital on Wednesday. Quint sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinnut to practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem arrives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from Cran after checking its checks sum, our local assistant uses mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quen is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the Cran package test twice before lunch. Use Quen 3.8 flash next and keep build identifier 72",
+          "seconds": 1.6370400190353394
+        }
+      ],
+      "nemotron-unified-fp16": [
+        {
+          "id": "long_holdout",
+          "text": "The queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem alives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from CRAN after checking its checksom. Our local assistant uses Mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the CRAN package tests twice before lunch. Use Quint 3.8 flash next and keep build identifier 72. The Queen visited the hospital on Wednesday. Quint sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinnut to practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Jem arrives near the river and teaches piano lessons. The minimum charge is $8 per delivery. The Queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop. Install the package from Cran after checking its checks sum, our local assistant uses mini CPM for short editing tasks. I use Soto ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the mistral model before changing the batch size. The gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece, Quen is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the Cran package test twice before lunch. Use Quen 3.8 flash next and keep build identifier 72",
+          "seconds": 1.6093740463256836
+        }
+      ],
+      "nemotron35-ml-2240": [
+        {
+          "id": "long_holdout",
+          "text": "The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice, please clean the screen before the next demonstration we stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse gem alives near the river and teaches piano lessons. The minimum charge is eight dollars per delivery. The queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop, installed the package from Cran after checking its checksom. Our local assistant uses Mini CPM for short editing tasks. I use SATO ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The queen is a chess piece. Quinn is the model we tested a cloud blocked the sun while cloud processed the local file. We ran the cran package tests twice before launch. Use Quint three point eight flash next NK build identifier seventy two the queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinnuff to practice. Please clean the screen before the next demonstration we stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Gem alives near the river and teaches piano lessons. The minimum charge is eight dollars per delivery. The queen and Quinn both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quen with Claude on the same laptop install the package from Kran off to checking its checksum. Our local assistant uses mini CPM for short editing tasks. I use SOTOASR to dictate notes while reviewing code Kuba needs restarted the container after the readiness check failed. Try the mistral model before changing the batch size. The gemer model should preserve the final invoice number. Quen answered the technical question while Quinn took notes. The queen is a chess piece. Quinn is the model we tested a cloud block the sun while Cloud processed the local file. We ran the Cran package test twice before lunch. Use Quen three point eight flash next and keep build identifier seventy two",
+          "seconds": 1.9361939430236816
+        }
+      ],
+      "nemotron-en-2240": [
+        {
+          "id": "long_holdout",
+          "text": "Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinn after practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Gemma lives near the river and teaches piano lessons. The minimum charge is eight dollars per delivery. The queen and queen both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quinn with Claude on the same laptop, installed the package from Quan after checking its checksum. Our local assistant uses mini CPM for short editing tasks. I use SATO ASR to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quinn answered the technical question while Quinn took notes. The Queen is a chess piece. Quinn is the model we tested. A cloud blocked the sun while Claude processed the local file. We ran the Cran package tests twice before lunch used Quinn three point eight flash next and keep build identifier seventy two. The Queen visited the hospital on Wednesday. Quinn sent the revised budget to the finance team. A dark cloud covered the western side of the valley. The children ran toward the empty playground. Our coach asked Claude to call Quinnuft to practice. Please clean the screen before the next demonstration. We stored the cranberries in a sealed glass container. The crane moved a steel beam above the warehouse. Gemma lives near the river and teaches piano lessons. The minimum charge is eight dollars per delivery. The queen and queen both appeared in the photograph. We ran outside because the cloud looked like a dragon. We compared Quen with Claude on the same laptop install the package from Quan after checking its checksum. Our local assistant uses mini Cpm for short editing tasks. I use Soto Asr to dictate notes while reviewing code. Kubernetes restarted the container after the readiness check failed. Try the Mistral model before changing the batch size. The Gemma model should preserve the final invoice number. Quen answered the technical question while Quinn took notes. The Queen is a chess piece. Quinn is the model we tested a cloud blocked the sun while Claude processed the local file. We ran the Cran package test twice before lunch used Quen three point eight flash next and keep build identifier seventy two",
+          "seconds": 2.325276017189026
+        }
+      ]
+    }
+  }
+}

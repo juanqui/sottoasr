@@ -5,8 +5,8 @@
  import Foundation
  import OSLog
  
-@@ -79,6 +80,20 @@
-         return repoPath
+@@ -106,6 +107,22 @@ public enum ModelRegistry {
+         return defaultRevision
      }
  
 +    // MARK: - Pinned Revisions
@@ -14,24 +14,26 @@
 +    /// Commits used instead of `main`, keyed by upstream repository path. The
 +    /// application verifies the files it loads against a manifest of these commits.
 +    static let pinnedRevisions: [String: String] = [
-+        "FluidInference/parakeet-tdt-0.6b-v3-coreml": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
++        "FluidInference/parakeet-ultra-coreml": "95eaa59a39d4394f047a4dc5cce480388a60d1b6",
 +        "FluidInference/parakeet-ctc-110m-coreml": "accdafd8cf8a2ff1cabe3c11e54416b405d409aa",
 +    ]
 +
-+    /// The revision to read from `repoPath`: its pinned commit, otherwise `main`.
-+    static func revision(for repoPath: String) -> String {
-+        pinnedRevisions[repoPath] ?? "main"
++    /// The commit to read from `repoPath` in place of the mutable `main`. The
++    /// repository's own revision stays `main`, so the cache keeps every file it
++    /// finds: a pinned SDK revision would delete files it does not list.
++    static func pinned(_ revision: String, for repoPath: String) -> String {
++        revision == "main" ? pinnedRevisions[repoPath] ?? revision : revision
 +    }
 +
      // MARK: - URL Construction
  
      /// Construct API URL for listing model repository contents
-@@ -92,7 +107,7 @@
- 
-     /// Construct download URL for a model file
-     public static func resolveModel(_ repoPath: String, _ filePath: String) throws -> URL {
--        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/main/\(filePath)"
-+        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/\(revision(for: repoPath))/\(filePath)"
+@@ -123,7 +140,7 @@ public enum ModelRegistry {
+         _ filePath: String,
+         revision: String = "main"
+     ) throws -> URL {
+-        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/\(revision)/\(filePath)"
++        let urlString = "\(baseURL)/\(mapRepoPath(repoPath))/resolve/\(pinned(revision, for: repoPath))/\(filePath)"
          guard let url = URL(string: urlString) else {
              throw Error.invalidURL(urlString)
          }

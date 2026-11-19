@@ -11,7 +11,7 @@ SottoASR is a local, privacy-first speech-to-text application for macOS. The use
 | App framework | Tauri v2 (2.11) | Native app shell, system tray, IPC |
 | Backend | Rust | Audio capture, the dictation pipeline, clipboard and paste, hotkeys, history |
 | Frontend | Svelte 5 + TypeScript | Recording overlay, history, settings, onboarding, about and update windows |
-| ASR engine (default) | FluidAudio via the vendored bridge `src-tauri/vendor/fluidaudio-rs` (Swift) | Parakeet TDT v3 on CoreML and the Apple Neural Engine (macOS) |
+| ASR engine (default) | FluidAudio via the vendored bridge `src-tauri/vendor/fluidaudio-rs` (Swift) | Parakeet Ultra on CoreML and the Apple Neural Engine (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via the `asr-parakeet` feature |
 | Transcript cleanup (optional) | Python sidecar `src-tauri/sidecar/llm_cleanup.py` with MLX and mlx-lm | Runs the stock `openbmb/MiniCPM5-2B-MLX` model, pinned by revision |
 | Audio capture | cpal 0.16 | Microphone input |
@@ -21,7 +21,7 @@ SottoASR is a local, privacy-first speech-to-text application for macOS. The use
 
 - **Menu bar / tray app only.** No Dock icon. No main window by default. The app lives in the macOS menu bar.
 - **Floating overlay window** appears during recording to show visual feedback (waveform, status). It is a non-activating NSPanel, so it does not take focus from the app that receives the text.
-- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet TDT v3) → optional acoustic vocabulary → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
+- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet Ultra) → optional acoustic vocabulary → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
 - **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for ASR and starts the Python sidecar for cleanup.
 
 ## Package Managers

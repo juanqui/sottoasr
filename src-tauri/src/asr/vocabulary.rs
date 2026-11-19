@@ -81,13 +81,15 @@ pub fn apply_candidates(base: &str, terms: &[String], candidates: &[Candidate]) 
 mod tests {
     use super::*;
 
-    #[test]
-    fn frozen_policy_matches_all_independent_synthetic_evidence() {
+    /// Runs the frozen policy over recorded candidate evidence: every output
+    /// is the approved one and no ordinary clip changes. Returns how many
+    /// target clips changed.
+    fn target_changes(evidence: &str) -> usize {
         #[derive(serde::Deserialize)]
         struct Fixture { terms: Vec<String>, cases: Vec<Case> }
         #[derive(serde::Deserialize)]
         struct Case { id: String, kind: String, base: String, approved_output: String, candidates: Vec<Candidate> }
-        let fixture: Fixture = serde_json::from_str(include_str!("../../../benchmarks/asr/vocabulary-holdout-evidence.json")).unwrap();
+        let fixture: Fixture = serde_json::from_str(evidence).unwrap();
         assert_eq!(fixture.cases.len(), 48);
         let mut target_changes = 0;
         for case in fixture.cases {
@@ -99,7 +101,17 @@ mod tests {
                 target_changes += usize::from(output != case.base);
             }
         }
-        assert_eq!(target_changes, 4);
+        target_changes
+    }
+
+    #[test]
+    fn frozen_policy_matches_all_independent_synthetic_evidence() {
+        // Parakeet TDT v3 with FluidAudio 0.15.6, September 2026.
+        assert_eq!(target_changes(include_str!("../../../benchmarks/asr/vocabulary-holdout-evidence.json")), 4);
+        // Parakeet Ultra with FluidAudio 0.18.3, whose CTC features come from
+        // the CPU: the spoken words score higher than in September, so the
+        // policy accepts fewer spelling variants. No ordinary clip changes.
+        assert_eq!(target_changes(include_str!("../../../benchmarks/asr/vocabulary-holdout-evidence-2026-11-19.json")), 2);
     }
 
     #[test]

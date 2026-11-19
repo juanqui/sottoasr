@@ -3197,6 +3197,12 @@ huggingface_hub
 MACHINE LEARNING MODELS (downloaded at runtime)
 ==============================================================================
 
+Moondream Parakeet Ultra (0.6B)
+  License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
+  Author: moondream (post-trained from NVIDIA Parakeet TDT v3)
+  URL: https://huggingface.co/moondream/parakeet-ultra
+  CoreML conversion: https://huggingface.co/FluidInference/parakeet-ultra-coreml
+
 NVIDIA Parakeet TDT v3 (0.6B)
   License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
   Copyright: NVIDIA Corporation

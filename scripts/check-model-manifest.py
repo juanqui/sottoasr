@@ -22,11 +22,20 @@ MANIFEST = REPO / 'src-tauri/vendor/fluidaudio-rs/model-manifest.json'
 HUB = 'https://huggingface.co'
 
 # Files the bridge loads: every file inside these CoreML bundles, plus these files.
+# `previous_speech` is never downloaded again: an installation that has it keeps
+# dictating with it until `speech` is downloaded and verified.
+SPEECH_BUNDLES = ['Preprocessor.mlmodelc', 'Encoder.mlmodelc', 'Decoder.mlmodelc', 'JointDecisionv3.mlmodelc']
 MODELS = {
     'speech': {
+        'repository': 'FluidInference/parakeet-ultra-coreml',
+        'directory': 'parakeet-ultra',
+        'bundles': SPEECH_BUNDLES,
+        'files': ['parakeet_vocab.json'],
+    },
+    'previous_speech': {
         'repository': 'FluidInference/parakeet-tdt-0.6b-v3-coreml',
         'directory': 'parakeet-tdt-0.6b-v3',
-        'bundles': ['Preprocessor.mlmodelc', 'Encoder.mlmodelc', 'Decoder.mlmodelc', 'JointDecisionv3.mlmodelc'],
+        'bundles': SPEECH_BUNDLES,
         'files': ['parakeet_vocab.json'],
     },
     'vocabulary': {

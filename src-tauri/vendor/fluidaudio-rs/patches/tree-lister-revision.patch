@@ -5,13 +5,11 @@
  import Foundation
  
  /// A file discovered in a HuggingFace repository tree listing.
-@@ -53,7 +54,8 @@
+@@ -67,6 +68,7 @@ enum HFTreeLister {
          fetch: Fetch
      ) async throws -> [RemoteFile] {
          var files: [RemoteFile] = []
--        let apiPath = path.isEmpty ? "tree/main" : "tree/main/\(path)"
-+        let revision = ModelRegistry.revision(for: repoRemotePath)
-+        let apiPath = path.isEmpty ? "tree/\(revision)" : "tree/\(revision)/\(path)"
++        let revision = ModelRegistry.pinned(revision, for: repoRemotePath)
+         let apiPath = path.isEmpty ? "tree/\(revision)" : "tree/\(revision)/\(path)"
          var pageURL: URL? = try ModelRegistry.apiModels(repoRemotePath, apiPath)
          // Guards the walk against a server echoing a cursor it already served
-         // (the old one-request-per-directory walkers could not loop).

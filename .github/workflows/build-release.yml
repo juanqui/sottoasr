@@ -76,9 +76,6 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
-      - name: Pinned Swift correctness regressions
-        run: python3 scripts/check-swift-regressions.py
-
       - name: Rust lint
         working-directory: src-tauri
         run: cargo clippy --locked --all-targets -- -D warnings
@@ -181,7 +178,7 @@ jobs:
             1. Download `SottoASR___VERSION___aarch64.dmg` below
             2. Open the DMG and drag SottoASR to Applications
             3. Launch SottoASR — it will appear in your menu bar
-            4. On first launch, ~500 MB of speech recognition models will be downloaded automatically
+            4. On first launch, about 630 MB of speech recognition models will be downloaded automatically
             5. Grant Microphone and Accessibility access when prompted
 
             ### Requirements

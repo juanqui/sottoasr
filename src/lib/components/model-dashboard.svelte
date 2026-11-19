@@ -99,8 +99,9 @@
 <section class="model-dashboard" aria-label="Local model status">
   <article class="model-card" aria-label="Speech recognition model">
     <div class="card-heading"><h2>Speech recognition</h2><span class="model-state {speech.tone}"><i></i>{speech.label}</span></div>
-    <p class="model-name">{asr?.name || 'Parakeet TDT v3'}</p>
+    <p class="model-name">{asr?.name || 'Parakeet Ultra'}</p>
     <p class="model-detail" role="status">{speech.detail}</p>
+    {#if asr?.notice}<p class="model-detail" role="status">{asr.notice}</p>{/if}
     {#if redownloading && redownloadProgress}<DownloadProgressBar progress={redownloadProgress} label="Model file download" />{/if}
     {#if asr && !asr.loaded && !asr.initializing}<button type="button" onclick={retryAsr} disabled={retrying || redownloading}>Load speech recognition</button>{/if}
     {#if asr?.integrity_warning && !redownloading}

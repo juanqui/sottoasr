@@ -1,10 +1,13 @@
 //! FluidAudio ASR backend — macOS only.
 //!
-//! Uses pinned Parakeet TDT v3 with CoreML's CPU/Neural Engine configuration.
-//! Reproducible local accuracy and performance evidence lives in benchmarks/asr.
+//! Uses Parakeet Ultra with CoreML's CPU/Neural Engine configuration. An
+//! installation that still has only Parakeet TDT v3 uses it until Ultra is
+//! downloaded and verified. Reproducible local accuracy and performance
+//! evidence lives in benchmarks/asr.
 //!
-//! `model::prepare_speech_model` downloads missing files at the pinned
-//! revision and verifies them before `init()` loads them. Models are cached at:
+//! `model::prepare_speech_model` chooses the model, downloads missing files
+//! at the pinned revision and verifies them before `init()` loads them.
+//! Models are cached at:
 //!   ~/Library/Application Support/FluidAudio/Models/
 //!
 //! Reference: https://github.com/FluidInference/fluidaudio-rs
@@ -26,11 +29,12 @@ impl FluidAudioEngine {
         }
     }
 
-    /// Loads the verified files; `replace` loads them again over a loaded model.
+    /// Loads the verified files of the selected speech model; `replace` loads
+    /// them over a loaded model.
     fn load(&mut self, replace: bool) -> Result<(), String> {
-        let directory = super::model::fluidaudio_model_dir()
+        let (directory, name) = super::model::selected_speech_model()
             .ok_or("Could not find your Application Support folder.")?;
-        log::info!("Loading FluidAudio ASR models from {}", directory.display());
+        log::info!("Loading {name} from {}", directory.display());
 
         // Create the FluidAudio bridge
         if self.audio.is_none() {
@@ -53,7 +57,7 @@ impl FluidAudioEngine {
             return Err("ASR initialization completed but ASR is not available".into());
         }
 
-        log::info!("FluidAudio 0.15.6 ready (Parakeet TDT v3, CoreML/ANE)");
+        log::info!("FluidAudio 0.18.3 ready ({name}, CoreML/ANE)");
         self.ready = true;
         Ok(())
     }

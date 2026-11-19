@@ -1,16 +1,17 @@
 # Synthetic ASR vocabulary experiments
 
-- **Version:** 1.1
-- **Date:** 2026-09-08
+- **Version:** 1.2
+- **Date:** 2026-11-19
 - **Status:** Implemented
 
-These fixtures contain only locally synthesized speech. No personal audio, history, model weights, or credentials are included. The [research note](../../docs/research/2026-09-08-vocabulary-asr.md) explains the decision and measurement limits.
+These fixtures contain only locally synthesized speech. No personal audio, history, model weights, or credentials are included. The [research note](../../docs/research/2026-09-08-vocabulary-asr.md) explains the decision and measurement limits. The [November 2026 model comparison](#november-2026-model-comparison) reuses the same fixtures.
 
 ## Table of Contents
 
 1. [Evidence](#evidence)
 2. [Reproduction](#reproduction)
 3. [Results and limits](#results-and-limits)
+4. [November 2026 model comparison](#november-2026-model-comparison)
 
 ## Evidence
 
@@ -27,6 +28,8 @@ All runs used an Apple M4 (4 performance + 6 efficiency CPU cores), 32 GiB RAM. 
 ## Reproduction
 
 Run from the repository root. Use a new directory under `/tmp/experiments/`; preparation refuses to overwrite an existing directory. `say` must have the local Samantha and Daniel voices available.
+
+The September probes (`vocabulary_probe.swift`, `unified_probe.swift`, `compute_probe.swift`, built by `build_probes.py`) were written for FluidAudio 0.15.6 and reproduce at tag `v0.11.1`. The application now pins 0.18.3, so check out that tag before running the commands in this section.
 
 ```bash
 python3 benchmarks/asr/prepare.py /tmp/experiments/sotto-asr-reproduction
@@ -96,3 +99,55 @@ python3 scripts/check-asr-cache.py --model-dir /tmp/experiments/sotto-asr-reprod
 ```
 
 The probe creates its own disposable clone. Its three fault cases preserve an existing sentinel, all model directories, and vocabulary bytes. The verified synthetic result was “Please keep the blue notebook beside the window and remember the silver telescope.” It is a functional equivalence check, not an additional timed performance claim.
+
+## November 2026 model comparison
+
+On 2026-11-19, Parakeet TDT v3, Parakeet Ultra and three Nemotron speech models were compared on an Apple M2 Pro (32 GB, macOS 26.7.3) with FluidAudio 0.18.3. Ultra became the default speech model. The [research note](../../docs/research/2026-11-19-parakeet-ultra.md) explains the decision, the method and the limits.
+
+| Artifact | Purpose |
+|---|---|
+| `model-probe/` | SwiftPM probe on FluidAudio 0.18.3. Loads one model, warms up on one clip, then writes one JSON line per clip |
+| `score_models.py` | Scores fixture sets with the metric of `analyze.py`, one table per set |
+| `score_librispeech.py` | Paired corpus WER on LibriSpeech test-other, with a bootstrap interval for each model against the first |
+| `measurements-2026-11-19.json` | Model revisions, aggregates, LibriSpeech comparisons, and per-clip outputs of the fixture sets |
+| `vocabulary-holdout-evidence-2026-11-19.json` | Candidate ranges, scores and approved outputs of the 48 holdout clips with Parakeet Ultra and FluidAudio 0.18.3, for the Rust policy's regression test. Recorded through the application's bridge with a temporary example program, which is not in the repository |
+
+The fixtures are the September sets (`development-40.json`, `independent-24.json`), a padded copy of dev-40, and both sets concatenated into one long file each. LibriSpeech audio and per-utterance LibriSpeech outputs are not included.
+
+| Model | LibriSpeech test-other errors (WER) | Fixture errors, 828 words | Long-recording errors, 828 words |
+|---|---:|---:|---:|
+| Parakeet TDT v3 | 2,156 (4.12%) | 62 | 65 |
+| Parakeet Ultra | 1,990 (3.80%) | 58 | 67 |
+| Nemotron Unified int8 (`en`) | 1,880 (3.59%) | 59 | 59 |
+| Nemotron 3.5 streaming multilingual | not measured | 118 | 104 |
+| Nemotron Streaming EN | not measured | 111 | 91 |
+
+Against v3, Ultra was better on 295 LibriSpeech utterances and worse on 169. The 95% interval for the WER difference is −0.45 to −0.19 points. Peak resident memory rose from 487 to 644 MiB. The research note has the full tables, including timings, punctuation and the controls.
+
+With vocabulary on, the unchanged policy now changes 2 of the 24 target clips (4 in September) and still changes none of the 24 ordinary clips. Word errors go from 25 to 22 in 436 words. The reason is the SDK, not the model: FluidAudio 0.18.3 runs the CTC mel spectrogram on the CPU, and the spoken words then score higher (for "mini CPM", −5.2 against −5.8 for "MiniCPM"; with the mel spectrogram on the Neural Engine, as in 0.15.6, −11.0 against −10.3). The vocabulary step on a 16-minute recording took 5.6 s, against 3.3 s with the patched 0.15.6. Section 12 of the [specification](../../docs/specs/2026-11-19-parakeet-ultra-default.md) has these measurements.
+
+Reproduce from the repository root. Section 7 of the research note has the full commands, including the Python steps that derive `dev-pad`, `long-dev`, `long-holdout` and `libri/manifest.json`. `--scratch-path` keeps the build output out of the repository.
+
+```bash
+E=/tmp/experiments/sotto-asr-models
+python3 benchmarks/asr/prepare.py "$E/dev"
+python3 benchmarks/asr/prepare.py "$E/holdout" --independent
+# Derive dev-pad, long-dev, long-holdout and libri/ here: research note, section 7.
+mkdir -p "$E/Models"
+cp -cR "$HOME/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3" "$E/Models/"
+(cd benchmarks/asr/model-probe && swift build -c release --scratch-path "$E/probe-build")
+P="$(cd benchmarks/asr/model-probe && swift build -c release --scratch-path "$E/probe-build" --show-bin-path)/probe"
+for set in dev holdout dev-pad long-dev long-holdout; do
+  for m in v3 ultra nemotron-unified-int8 nemotron-unified-fp16 nemotron-unified-auto-int8 nemotron35-ml-2240 nemotron-en-2240; do
+    /usr/bin/time -l "$P" "$E" "$E/$set" "$m" > "$E/$set-$m.log" 2> "$E/$set-$m.err"
+  done
+done
+for m in v3 ultra nemotron-unified-int8; do
+  /usr/bin/time -l "$P" "$E" "$E/libri" "$m" > "$E/libri-$m.log" 2> "$E/libri-$m.err"
+done
+python3 benchmarks/asr/score_models.py "$E" dev,holdout,dev-pad,long-dev,long-holdout v3,ultra,nemotron-unified-int8,nemotron-unified-fp16,nemotron-unified-auto-int8,nemotron35-ml-2240,nemotron-en-2240
+python3 benchmarks/asr/score_librispeech.py "$E" v3,ultra,nemotron-unified-int8
+python3 benchmarks/asr/score_librispeech.py "$E" ultra,nemotron-unified-int8
+```
+
+The probe loads v3 only from the clone; the other models download into `$E/Models`. Ultra downloads from the repository's `main` branch, whose head was the commit the application pins (`95eaa59a39d4394f047a4dc5cce480388a60d1b6`) at the time of the run.

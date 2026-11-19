@@ -1,7 +1,7 @@
-FluidAudio 0.15.6
+FluidAudio 0.18.3
 https://github.com/FluidInference/FluidAudio
 
-Modified by SottoASR contributors: iterative vocabulary alignment, typed CTC tensor access, and explicit input silence padding. See patches/ for the exact changes.
+Modified by SottoASR contributors: model downloads read pinned commits instead of the main branch. See patches/ for the exact changes.
 
                                  Apache License
                            Version 2.0, January 2004

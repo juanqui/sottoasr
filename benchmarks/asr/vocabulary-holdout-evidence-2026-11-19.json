@@ -1,0 +1,716 @@
+{
+  "description": "Independent 24-sentence, two-voice synthetic holdout, recorded on 2026-11-19 through the application bridge with Parakeet Ultra (FluidInference/parakeet-ultra-coreml@95eaa59a39d4394f047a4dc5cce480388a60d1b6), CTC 110M (FluidInference/parakeet-ctc-110m-coreml@accdafd8cf8a2ff1cabe3c11e54416b405d409aa) and FluidAudio 0.18.3 on an Apple M2 Pro. Approved outputs are those of the unchanged policy in src-tauri/src/asr/vocabulary.rs. No private audio.",
+  "source_sha256": "79b2062c486d086c15ecaea55b7ec6d1773e42992da21ea3c343feb7987d8687",
+  "terms": [
+    "Qwen",
+    "Claude",
+    "CRAN",
+    "MiniCPM",
+    "SottoASR",
+    "Kubernetes",
+    "Mistral",
+    "Gemma"
+  ],
+  "cases": [
+    {
+      "id": "samantha_ordinary_01",
+      "kind": "ordinary",
+      "expected": "The queen visited the hospital on Wednesday.",
+      "base": "The Queen visited the hospital on Wednesday.",
+      "approved_output": "The Queen visited the hospital on Wednesday.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -1.8104612827301023,
+          "vocabulary_score": -5.437252044677734
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_02",
+      "kind": "ordinary",
+      "expected": "Quinn sent the revised budget to the finance team.",
+      "base": "Quinn sent the revised budget to the finance team.",
+      "approved_output": "Quinn sent the revised budget to the finance team.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_ordinary_03",
+      "kind": "ordinary",
+      "expected": "A dark cloud covered the western side of the valley.",
+      "base": "A dark cloud covered the western side of the valley.",
+      "approved_output": "A dark cloud covered the western side of the valley.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 7,
+          "end": 12,
+          "similarity": 0.6666666269302368,
+          "original_score": -8.410171508789062,
+          "vocabulary_score": -11.430230140686035
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_04",
+      "kind": "ordinary",
+      "expected": "The children ran toward the empty playground.",
+      "base": "The children ran toward the empty playground.",
+      "approved_output": "The children ran toward the empty playground.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 13,
+          "end": 16,
+          "similarity": 0.75,
+          "original_score": -8.995748519897461,
+          "vocabulary_score": -10.742318153381348
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_05",
+      "kind": "ordinary",
+      "expected": "Our coach asked Claude to call Quinn after practice.",
+      "base": "Our coach asked Claude to call Quinn after practice.",
+      "approved_output": "Our coach asked Claude to call Quinn after practice.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_ordinary_06",
+      "kind": "ordinary",
+      "expected": "Please clean the screen before the next demonstration.",
+      "base": "Please clean the screen before the next demonstration.",
+      "approved_output": "Please clean the screen before the next demonstration.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 7,
+          "end": 12,
+          "similarity": 0.6000000238418579,
+          "original_score": -3.419795036315918,
+          "vocabulary_score": -8.339716911315918
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_07",
+      "kind": "ordinary",
+      "expected": "We stored the cranberries in a sealed glass container.",
+      "base": "We stored the cranberries in a sealed glass container.",
+      "approved_output": "We stored the cranberries in a sealed glass container.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_ordinary_08",
+      "kind": "ordinary",
+      "expected": "The crane moved a steel beam above the warehouse.",
+      "base": "The crane moved a steel beam above the warehouse.",
+      "approved_output": "The crane moved a steel beam above the warehouse.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.800000011920929,
+          "original_score": -0.4399183690547943,
+          "vocabulary_score": -0.4118196070194245
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_09",
+      "kind": "ordinary",
+      "expected": "Gemma lives near the river and teaches piano lessons.",
+      "base": "Jem ar lives near the river and teaches piano lessons.",
+      "approved_output": "Jem ar lives near the river and teaches piano lessons.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_ordinary_10",
+      "kind": "ordinary",
+      "expected": "The minimum charge is eight dollars per delivery.",
+      "base": "The minimum charge is $8 per delivery.",
+      "approved_output": "The minimum charge is $8 per delivery.",
+      "candidates": [
+        {
+          "term": "MiniCPM",
+          "start": 4,
+          "end": 11,
+          "similarity": 0.7142857313156128,
+          "original_score": -3.0488107204437256,
+          "vocabulary_score": -10.789518356323242
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_11",
+      "kind": "ordinary",
+      "expected": "The queen and Quinn both appeared in the photograph.",
+      "base": "The Queen and Queen both appeared in the photograph.",
+      "approved_output": "The Queen and Queen both appeared in the photograph.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -4.007974624633789,
+          "vocabulary_score": -8.416831970214844
+        },
+        {
+          "term": "Qwen",
+          "start": 14,
+          "end": 19,
+          "similarity": 0.6000000238418579,
+          "original_score": -2.5466561317443848,
+          "vocabulary_score": -7.697321414947511
+        }
+      ]
+    },
+    {
+      "id": "samantha_ordinary_12",
+      "kind": "ordinary",
+      "expected": "We ran outside because the cloud looked like a dragon.",
+      "base": "We ran outside because the cloud looked like a dragon.",
+      "approved_output": "We ran outside because the cloud looked like a dragon.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 27,
+          "end": 32,
+          "similarity": 0.6666666269302368,
+          "original_score": -0.04721847549080849,
+          "vocabulary_score": -6.853059768676758
+        },
+        {
+          "term": "CRAN",
+          "start": 3,
+          "end": 6,
+          "similarity": 0.75,
+          "original_score": -1.3935071229934692,
+          "vocabulary_score": -6.58271598815918
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_01",
+      "kind": "target",
+      "expected": "We compared Qwen with Claude on the same laptop.",
+      "base": "We compared Quinn with Claude on the same laptop.",
+      "approved_output": "We compared Quinn with Claude on the same laptop.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_02",
+      "kind": "target",
+      "expected": "Install the package from CRAN after checking its checksum.",
+      "base": "Install the package from CRAN after checking its checksum.",
+      "approved_output": "Install the package from CRAN after checking its checksum.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_03",
+      "kind": "target",
+      "expected": "Our local assistant uses MiniCPM for short editing tasks.",
+      "base": "Our local assistant uses Mini CPM for short editing tasks.",
+      "approved_output": "Our local assistant uses Mini CPM for short editing tasks.",
+      "candidates": [
+        {
+          "term": "MiniCPM",
+          "start": 25,
+          "end": 33,
+          "similarity": 1,
+          "original_score": -5.236405372619629,
+          "vocabulary_score": -5.821873188018799
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_04",
+      "kind": "target",
+      "expected": "I use SottoASR to dictate notes while reviewing code.",
+      "base": "I use Soto ASR to dictate notes while reviewing code.",
+      "approved_output": "I use Soto ASR to dictate notes while reviewing code.",
+      "candidates": [
+        {
+          "term": "SottoASR",
+          "start": 2,
+          "end": 14,
+          "similarity": 0.6000000238418579,
+          "original_score": -3.4426300525665283,
+          "vocabulary_score": -4.278198719024658
+        },
+        {
+          "term": "SottoASR",
+          "start": 6,
+          "end": 14,
+          "similarity": 0.875,
+          "original_score": -4.094775676727295,
+          "vocabulary_score": -4.278198719024658
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_05",
+      "kind": "target",
+      "expected": "Kubernetes restarted the container after the readiness check failed.",
+      "base": "Kubernetes restarted the container after the readiness check failed.",
+      "approved_output": "Kubernetes restarted the container after the readiness check failed.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_06",
+      "kind": "target",
+      "expected": "Try the Mistral model before changing the batch size.",
+      "base": "Try the Mistral model before changing the batch size.",
+      "approved_output": "Try the Mistral model before changing the batch size.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_07",
+      "kind": "target",
+      "expected": "The Gemma model should preserve the final invoice number.",
+      "base": "The Gemma model should preserve the final invoice number.",
+      "approved_output": "The Gemma model should preserve the final invoice number.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_08",
+      "kind": "target",
+      "expected": "Qwen answered the technical question while Quinn took notes.",
+      "base": "Quinn answered the technical question while Quinn took notes.",
+      "approved_output": "Quinn answered the technical question while Quinn took notes.",
+      "candidates": []
+    },
+    {
+      "id": "samantha_target_09",
+      "kind": "target",
+      "expected": "The queen is a chess piece; Qwen is the model we tested.",
+      "base": "The Queen is a chess piece, Quen is the model we tested.",
+      "approved_output": "The Queen is a chess piece, Qwen is the model we tested.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -3.2419614791870117,
+          "vocabulary_score": -6.289813995361328
+        },
+        {
+          "term": "Qwen",
+          "start": 28,
+          "end": 32,
+          "similarity": 0.75,
+          "original_score": -5.008550643920898,
+          "vocabulary_score": -4.664551734924316
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_10",
+      "kind": "target",
+      "expected": "A cloud blocked the sun while Claude processed the local file.",
+      "base": "A cloud blocked the sun while Claude processed the local file.",
+      "approved_output": "A cloud blocked the sun while Claude processed the local file.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 2,
+          "end": 7,
+          "similarity": 0.6666666269302368,
+          "original_score": -4.398219585418701,
+          "vocabulary_score": -9.36159896850586
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_11",
+      "kind": "target",
+      "expected": "We ran the CRAN package tests twice before lunch.",
+      "base": "We ran the CRAN package tests twice before launch.",
+      "approved_output": "We ran the CRAN package tests twice before launch.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 3,
+          "end": 6,
+          "similarity": 0.75,
+          "original_score": -9.799779891967773,
+          "vocabulary_score": -8.99855899810791
+        }
+      ]
+    },
+    {
+      "id": "samantha_target_12",
+      "kind": "target",
+      "expected": "Use Qwen three point eight Flash Next and keep build identifier seventy two.",
+      "base": "Use Quint 3.8 flash next and keep build identifier 72.",
+      "approved_output": "Use Quint 3.8 flash next and keep build identifier 72.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_ordinary_01",
+      "kind": "ordinary",
+      "expected": "The queen visited the hospital on Wednesday.",
+      "base": "The Queen visited the hospital on Wednesday.",
+      "approved_output": "The Queen visited the hospital on Wednesday.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -1.5391217470169067,
+          "vocabulary_score": -4.7240142822265625
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_02",
+      "kind": "ordinary",
+      "expected": "Quinn sent the revised budget to the finance team.",
+      "base": "Quinn sent the revised budget to the finance team.",
+      "approved_output": "Quinn sent the revised budget to the finance team.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_ordinary_03",
+      "kind": "ordinary",
+      "expected": "A dark cloud covered the western side of the valley.",
+      "base": "A dark cloud covered the western side of the valley.",
+      "approved_output": "A dark cloud covered the western side of the valley.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 7,
+          "end": 12,
+          "similarity": 0.6666666269302368,
+          "original_score": -0.1389445662498474,
+          "vocabulary_score": -9.294118881225586
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_04",
+      "kind": "ordinary",
+      "expected": "The children ran toward the empty playground.",
+      "base": "The children ran toward the empty playground.",
+      "approved_output": "The children ran toward the empty playground.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 13,
+          "end": 16,
+          "similarity": 0.75,
+          "original_score": -5.9320454597473145,
+          "vocabulary_score": -8.385091781616211
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_05",
+      "kind": "ordinary",
+      "expected": "Our coach asked Claude to call Quinn after practice.",
+      "base": "Our coach asked Claude to call Quynath to practice.",
+      "approved_output": "Our coach asked Claude to call Quynath to practice.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_ordinary_06",
+      "kind": "ordinary",
+      "expected": "Please clean the screen before the next demonstration.",
+      "base": "Please clean the screen before the next demonstration.",
+      "approved_output": "Please clean the screen before the next demonstration.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 7,
+          "end": 12,
+          "similarity": 0.6000000238418579,
+          "original_score": -0.11380331218242644,
+          "vocabulary_score": -4.352084636688232
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_07",
+      "kind": "ordinary",
+      "expected": "We stored the cranberries in a sealed glass container.",
+      "base": "We stored the cranberries in a sealed glass container.",
+      "approved_output": "We stored the cranberries in a sealed glass container.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_ordinary_08",
+      "kind": "ordinary",
+      "expected": "The crane moved a steel beam above the warehouse.",
+      "base": "The crane moved a steel beam above the warehouse.",
+      "approved_output": "The crane moved a steel beam above the warehouse.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.800000011920929,
+          "original_score": -2.3299338817596436,
+          "vocabulary_score": -2.0818374156951904
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_09",
+      "kind": "ordinary",
+      "expected": "Gemma lives near the river and teaches piano lessons.",
+      "base": "Jem arrives near the river and teaches piano lessons.",
+      "approved_output": "Jem arrives near the river and teaches piano lessons.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_ordinary_10",
+      "kind": "ordinary",
+      "expected": "The minimum charge is eight dollars per delivery.",
+      "base": "The minimum charge is $8 per delivery.",
+      "approved_output": "The minimum charge is $8 per delivery.",
+      "candidates": [
+        {
+          "term": "MiniCPM",
+          "start": 4,
+          "end": 11,
+          "similarity": 0.7142857313156128,
+          "original_score": -3.786855697631836,
+          "vocabulary_score": -9.096345901489258
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_11",
+      "kind": "ordinary",
+      "expected": "The queen and Quinn both appeared in the photograph.",
+      "base": "The Queen and Queen both appeared in the photograph.",
+      "approved_output": "The Queen and Queen both appeared in the photograph.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -4.062104225158691,
+          "vocabulary_score": -8.618005752563477
+        },
+        {
+          "term": "Qwen",
+          "start": 14,
+          "end": 19,
+          "similarity": 0.6000000238418579,
+          "original_score": -2.3336009979248047,
+          "vocabulary_score": -5.035048484802246
+        }
+      ]
+    },
+    {
+      "id": "daniel_ordinary_12",
+      "kind": "ordinary",
+      "expected": "We ran outside because the cloud looked like a dragon.",
+      "base": "We ran outside because the cloud looked like a dragon.",
+      "approved_output": "We ran outside because the cloud looked like a dragon.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 27,
+          "end": 32,
+          "similarity": 0.6666666269302368,
+          "original_score": -0.5384863615036011,
+          "vocabulary_score": -5.861384391784668
+        },
+        {
+          "term": "CRAN",
+          "start": 3,
+          "end": 6,
+          "similarity": 0.75,
+          "original_score": -0.1221725270152092,
+          "vocabulary_score": -5.011075973510742
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_01",
+      "kind": "target",
+      "expected": "We compared Qwen with Claude on the same laptop.",
+      "base": "We compared Quen with Claude on the same laptop.",
+      "approved_output": "We compared Quen with Claude on the same laptop.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 12,
+          "end": 16,
+          "similarity": 0.75,
+          "original_score": -3.5702860355377197,
+          "vocabulary_score": -7.1301116943359375
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_02",
+      "kind": "target",
+      "expected": "Install the package from CRAN after checking its checksum.",
+      "base": "Install the package from CRAN after checking its checksum.",
+      "approved_output": "Install the package from CRAN after checking its checksum.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_target_03",
+      "kind": "target",
+      "expected": "Our local assistant uses MiniCPM for short editing tasks.",
+      "base": "Our local assistant uses Mini CPM for short editing tasks.",
+      "approved_output": "Our local assistant uses Mini CPM for short editing tasks.",
+      "candidates": [
+        {
+          "term": "MiniCPM",
+          "start": 25,
+          "end": 33,
+          "similarity": 1,
+          "original_score": -5.058107852935791,
+          "vocabulary_score": -5.314748287200928
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_04",
+      "kind": "target",
+      "expected": "I use SottoASR to dictate notes while reviewing code.",
+      "base": "I use Soto ASR to dictate notes while reviewing code.",
+      "approved_output": "I use SottoASR to dictate notes while reviewing code.",
+      "candidates": [
+        {
+          "term": "SottoASR",
+          "start": 2,
+          "end": 14,
+          "similarity": 0.6000000238418579,
+          "original_score": -3.865590810775757,
+          "vocabulary_score": -4.183807849884033
+        },
+        {
+          "term": "SottoASR",
+          "start": 6,
+          "end": 14,
+          "similarity": 0.875,
+          "original_score": -4.310022354125977,
+          "vocabulary_score": -4.183807849884033
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_05",
+      "kind": "target",
+      "expected": "Kubernetes restarted the container after the readiness check failed.",
+      "base": "Kubernetes restarted the container after the readiness check failed.",
+      "approved_output": "Kubernetes restarted the container after the readiness check failed.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_target_06",
+      "kind": "target",
+      "expected": "Try the Mistral model before changing the batch size.",
+      "base": "Try the Mistral model before changing the batch size.",
+      "approved_output": "Try the Mistral model before changing the batch size.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_target_07",
+      "kind": "target",
+      "expected": "The Gemma model should preserve the final invoice number.",
+      "base": "The Gemma model should preserve the final invoice number.",
+      "approved_output": "The Gemma model should preserve the final invoice number.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_target_08",
+      "kind": "target",
+      "expected": "Qwen answered the technical question while Quinn took notes.",
+      "base": "Quinn answered the technical question while Quinn took notes.",
+      "approved_output": "Quinn answered the technical question while Quinn took notes.",
+      "candidates": []
+    },
+    {
+      "id": "daniel_target_09",
+      "kind": "target",
+      "expected": "The queen is a chess piece; Qwen is the model we tested.",
+      "base": "The Queen is a chess piece, Quen is the model we tested.",
+      "approved_output": "The Queen is a chess piece, Quen is the model we tested.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 9,
+          "similarity": 0.6000000238418579,
+          "original_score": -1.4055193662643433,
+          "vocabulary_score": -4.719411373138428
+        },
+        {
+          "term": "Qwen",
+          "start": 28,
+          "end": 32,
+          "similarity": 0.75,
+          "original_score": -3.6575179100036626,
+          "vocabulary_score": -4.094385623931885
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_10",
+      "kind": "target",
+      "expected": "A cloud blocked the sun while Claude processed the local file.",
+      "base": "A cloud blocked the sun while Claude processed the local file.",
+      "approved_output": "A cloud blocked the sun while Claude processed the local file.",
+      "candidates": [
+        {
+          "term": "Claude",
+          "start": 2,
+          "end": 7,
+          "similarity": 0.6666666269302368,
+          "original_score": -9.04975414276123,
+          "vocabulary_score": -8.5198392868042
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_11",
+      "kind": "target",
+      "expected": "We ran the CRAN package tests twice before lunch.",
+      "base": "We ran the CRAN package tests twice before lunch.",
+      "approved_output": "We ran the CRAN package tests twice before lunch.",
+      "candidates": [
+        {
+          "term": "CRAN",
+          "start": 3,
+          "end": 6,
+          "similarity": 0.75,
+          "original_score": -9.31828784942627,
+          "vocabulary_score": -9.487930297851562
+        }
+      ]
+    },
+    {
+      "id": "daniel_target_12",
+      "kind": "target",
+      "expected": "Use Qwen three point eight Flash Next and keep build identifier seventy two.",
+      "base": "Use Quen 3.8 flash next and keep build identifier 72.",
+      "approved_output": "Use Quen 3.8 flash next and keep build identifier 72.",
+      "candidates": [
+        {
+          "term": "Qwen",
+          "start": 4,
+          "end": 8,
+          "similarity": 0.75,
+          "original_score": -5.749120712280273,
+          "vocabulary_score": -6.140017986297607
+        }
+      ]
+    }
+  ]
+}

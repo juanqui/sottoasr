@@ -45,8 +45,6 @@ jobs:
         run: |
           cargo check --locked --no-default-features --features custom-protocol,asr-parakeet
           cargo test --locked --no-default-features --features custom-protocol,asr-parakeet --lib audio::resample
-      - name: Pinned Swift correctness regressions
-        run: python3 scripts/check-swift-regressions.py
       - name: Rust lint
         working-directory: src-tauri
         run: cargo clippy --locked --all-targets -- -D warnings

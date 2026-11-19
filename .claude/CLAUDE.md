@@ -32,7 +32,7 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 - Accessibility permission is tied to code signature — must remove and re-add after each rebuild
 - `tccutil reset Accessibility com.sottoasr.app` resets the TCC entry
 - Always launch via `open SottoASR.app`, never the raw binary (LSUIElement/TCC require the .app bundle)
-- FluidAudio models (~500 MB) are cached at `~/Library/Application Support/FluidAudio/Models/`
+- FluidAudio models (Parakeet Ultra, about 630 MB) are cached at `~/Library/Application Support/FluidAudio/Models/`
 - Logs at `~/Library/Logs/com.sottoasr.app/SottoASR.log`
 
 ## Rules

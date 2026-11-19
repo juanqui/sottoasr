@@ -72,3 +72,11 @@ it('re-downloads model files that fail verification only after confirmation, wit
   finish();
   await vi.waitFor(()=>expect(target.textContent).toContain('Model files replaced'));
 });
+it('stays ready and says why while an earlier speech model serves', async () => {
+  vi.mocked(getModelStatus).mockResolvedValue({downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'Parakeet v3',size_bytes:null,notice:'Parakeet Ultra is downloading in the background (632 MB).'});
+  await render();
+  const card = target.querySelector('[aria-label="Speech recognition model"]')!;
+  await vi.waitFor(()=>expect(card.textContent).toContain('downloading in the background'));
+  expect(card.querySelector('.model-state.ready')).not.toBeNull();
+  expect(card.textContent).toContain('ready to transcribe');
+});

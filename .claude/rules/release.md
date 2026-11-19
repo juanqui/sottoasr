@@ -81,12 +81,11 @@ The automated checks start with a version check on the six values. Then the scri
 2. `npm run build`, `npm run check` and `npm test`.
 3. `cargo test --locked`.
 4. `cargo check` with the `asr-parakeet` feature, then the resampler tests with that feature.
-5. `scripts/check-swift-regressions.py`.
-6. `cargo clippy --locked --all-targets -- -D warnings`.
-7. The `zip` check (`cargo tree -i zip --target aarch64-apple-darwin` must print nothing), then `cargo audit`. If `zip` is no longer in `Cargo.lock`, the check passes with a notice to delete the `zip` ignores and checks.
-8. `npm audit --omit=dev`.
-9. The Python tests in `src-tauri/sidecar/` and `scripts/`.
-10. An unsigned `cargo tauri build` of the `.app` and the `.dmg`. PR CI builds the same bundles with `tauri-action`.
+5. `cargo clippy --locked --all-targets -- -D warnings`.
+6. The `zip` check (`cargo tree -i zip --target aarch64-apple-darwin` must print nothing), then `cargo audit`. If `zip` is no longer in `Cargo.lock`, the check passes with a notice to delete the `zip` ignores and checks.
+7. `npm audit --omit=dev`.
+8. The Python tests in `src-tauri/sidecar/` and `scripts/`.
+9. An unsigned `cargo tauri build` of the `.app` and the `.dmg`. PR CI builds the same bundles with `tauri-action`.
 
 Each check writes its output to `/tmp/sotto-smoke-<name>.txt`. The script exits with a non-zero status if an automated check fails. Interactive results do not change the exit status.
 

@@ -1275,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "fluidaudio-rs"
-version = "0.15.6"
+version = "0.18.3"
 dependencies = [
  "serde_json",
 ]

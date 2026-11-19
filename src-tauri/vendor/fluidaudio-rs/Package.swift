@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.library(name: "FluidAudioBridge", type: .static, targets: ["FluidAudioBridge"])],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.6")
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.3")
     ],
     targets: [.target(
         name: "FluidAudioBridge",

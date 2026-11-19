@@ -20,6 +20,69 @@ struct Mismatches {
 static MISMATCHES: std::sync::Mutex<Mismatches> =
     std::sync::Mutex::new(Mismatches { speech: false, vocabulary: false });
 
+/// A speech model the bridge can load.
+#[cfg(feature = "asr-fluidaudio")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SpeechModel {
+    /// The model this build downloads: Parakeet Ultra.
+    Current,
+    /// The model earlier releases downloaded: Parakeet TDT v3. It is never
+    /// downloaded again, and nothing deletes it.
+    Previous,
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+impl SpeechModel {
+    fn manifest(self) -> &'static integrity::Manifest {
+        match self {
+            Self::Current => integrity::speech(),
+            Self::Previous => integrity::previous_speech(),
+        }
+    }
+
+    /// The SDK's cache folder: `Repo.folderName`, which differs from the
+    /// remote repository slug. The older `parakeet-tdt-0.6b-v3-coreml` folder
+    /// is not a cache of this SDK and is left untouched.
+    fn directory(self) -> Option<PathBuf> {
+        dirs::data_dir().map(|dir| dir.join("FluidAudio/Models").join(&self.manifest().directory))
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Current => "Parakeet Ultra",
+            Self::Previous => "Parakeet TDT v3",
+        }
+    }
+}
+
+/// The model preparation chose. The engine reads it when it loads, and
+/// Settings when it describes the model.
+#[cfg(feature = "asr-fluidaudio")]
+#[derive(Debug, PartialEq, Eq)]
+struct Selection {
+    model: SpeechModel,
+    /// The previous model serves only until the current one is on disk.
+    upgrade_pending: bool,
+    /// Why the previous model serves although the current one is on disk.
+    load_failure: Option<String>,
+    /// Whether the current model's files differed from the manifest when the
+    /// background upgrade verified them; applied when the engine switches.
+    upgraded_mismatch: bool,
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+static SELECTION: std::sync::Mutex<Selection> = std::sync::Mutex::new(Selection {
+    model: SpeechModel::Current,
+    upgrade_pending: false,
+    load_failure: None,
+    upgraded_mismatch: false,
+});
+
+#[cfg(feature = "asr-fluidaudio")]
+fn selection() -> std::sync::MutexGuard<'static, Selection> {
+    SELECTION.lock().unwrap_or_else(|error| error.into_inner())
+}
+
 /// Every dictation with vocabulary terms reads the vocabulary folder (the SDK
 /// loads `tokenizer.json` from disk for each rescoring). Code that moves,
 /// deletes or downloads files there holds this exclusively; dictation only
@@ -44,11 +107,11 @@ pub struct DownloadProgress {
     pub total_bytes: u64,
 }
 
-/// SDK 0.15.6 uses `Repo.folderName`, which differs from the remote repo slug.
-/// The legacy `-coreml` directory is left untouched; it is not this SDK's cache.
+/// The folder and the name of the speech model the engine loads.
 #[cfg(feature = "asr-fluidaudio")]
-pub(crate) fn fluidaudio_model_dir() -> Option<PathBuf> {
-    dirs::data_dir().map(|dir| dir.join("FluidAudio/Models").join(&integrity::speech().directory))
+pub(crate) fn selected_speech_model() -> Option<(PathBuf, &'static str)> {
+    let model = selection().model;
+    Some((model.directory()?, model.name()))
 }
 
 #[cfg(feature = "asr-fluidaudio")]
@@ -56,27 +119,206 @@ pub(crate) fn vocabulary_model_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|dir| dir.join("FluidAudio/Models").join(&integrity::vocabulary().directory))
 }
 
-/// Downloads missing speech model files at the pinned revision and verifies
-/// them against the manifest. Never takes the engine lock; loading follows.
+/// Which speech model loads, and whether its files differ from the manifest.
+#[cfg(feature = "asr-fluidaudio")]
+#[derive(Debug, PartialEq, Eq)]
+struct Choice {
+    model: SpeechModel,
+    upgrade_pending: bool,
+    mismatch: bool,
+}
+
+/// Chooses the speech model to load. The current model wins when its files
+/// can load. An installation that has only the previous model keeps it, so an
+/// update never stops dictation or opens onboarding while the current model
+/// downloads; that follows in the background. Only an installation with
+/// neither downloads here.
+#[cfg(feature = "asr-fluidaudio")]
+fn choose(
+    current: (&integrity::Manifest, &std::path::Path),
+    previous: (&integrity::Manifest, &std::path::Path),
+    download: impl FnOnce() -> Result<(), String>,
+    hash: &integrity::Hasher<'_>,
+) -> Result<Choice, String> {
+    if let Some(mismatch) = loadable(current, hash) {
+        return Ok(Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch });
+    }
+    if let Some(mismatch) = loadable(previous, hash) {
+        return Ok(Choice { model: SpeechModel::Previous, upgrade_pending: true, mismatch });
+    }
+    let report = current.0.prepare(current.1, download, hash)?;
+    require_loadable(&report)?;
+    Ok(Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch: report.has_mismatch() })
+}
+
+/// Checks a model's files without downloading or deleting any. `Some` when
+/// they can load, with whether a file that was already in use differs.
+#[cfg(feature = "asr-fluidaudio")]
+fn loadable(model: (&integrity::Manifest, &std::path::Path), hash: &integrity::Hasher<'_>) -> Option<bool> {
+    match model.0.check(model.1, hash) {
+        Ok(report) => (!report.blocks_loading()).then(|| report.has_mismatch()),
+        Err(error) => {
+            log::warn!("Could not check {}: {error}", model.1.display());
+            None
+        }
+    }
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+fn require_loadable(report: &integrity::Report) -> Result<(), String> {
+    if !report.blocks_loading() {
+        return Ok(());
+    }
+    Err(if report.missing.is_empty() {
+        "The downloaded speech model failed verification, so it was not loaded. Try again to download it again."
+    } else {
+        "The speech model download is incomplete. Check your internet connection and try again."
+    }.into())
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+fn select(choice: Choice) {
+    log::info!("Speech model: {}{}", choice.model.name(),
+        if choice.upgrade_pending { "; the current model follows in the background" } else { "" });
+    *selection() = Selection {
+        model: choice.model,
+        upgrade_pending: choice.upgrade_pending,
+        load_failure: None,
+        upgraded_mismatch: false,
+    };
+    set_speech_mismatch(choice.mismatch);
+}
+
+/// Chooses the speech model to load and verifies it against the manifest.
+/// Downloads, at the pinned revision, only when no speech model is on disk.
+/// Never takes the engine lock; loading follows.
 pub fn prepare_speech_model() -> Result<(), String> {
     #[cfg(feature = "asr-fluidaudio")]
     {
-        let directory = fluidaudio_model_dir().ok_or(NO_DATA_DIRECTORY)?;
-        let report = integrity::speech().prepare(&directory, || download_speech_model(&directory),
-            &fluidaudio_rs::sha256_file)?;
-        set_speech_mismatch(report.has_mismatch());
-        if report.blocks_loading() {
-            return Err(if report.missing.is_empty() {
-                "The downloaded speech model failed verification, so it was not loaded. Try again to download it again."
-            } else {
-                "The speech model download is incomplete. Check your internet connection and try again."
-            }.into());
-        }
+        let current = SpeechModel::Current.directory().ok_or(NO_DATA_DIRECTORY)?;
+        let previous = SpeechModel::Previous.directory().ok_or(NO_DATA_DIRECTORY)?;
+        select(choose(
+            (integrity::speech(), &current),
+            (integrity::previous_speech(), &previous),
+            || download_speech_model(&current),
+            &fluidaudio_rs::sha256_file,
+        )?);
         Ok(())
     }
 
     #[cfg(not(feature = "asr-fluidaudio"))]
     { Ok(()) }
+}
+
+/// Whether the previous speech model serves only because the current one is
+/// not on disk yet.
+pub fn upgrade_pending() -> bool {
+    #[cfg(feature = "asr-fluidaudio")]
+    { selection().upgrade_pending }
+
+    #[cfg(not(feature = "asr-fluidaudio"))]
+    { false }
+}
+
+/// Downloads and verifies the current speech model while the previous one
+/// serves dictation. The selection stays as it is until
+/// `use_current_speech_model`, so Settings names the model that is loaded.
+pub fn prepare_current_speech_model() -> Result<(), String> {
+    #[cfg(feature = "asr-fluidaudio")]
+    {
+        let directory = SpeechModel::Current.directory().ok_or(NO_DATA_DIRECTORY)?;
+        let report = integrity::speech().prepare(&directory, || download_speech_model(&directory),
+            &fluidaudio_rs::sha256_file)?;
+        require_loadable(&report)?;
+        selection().upgraded_mismatch = report.has_mismatch();
+        Ok(())
+    }
+
+    #[cfg(not(feature = "asr-fluidaudio"))]
+    { Ok(()) }
+}
+
+/// Makes the current speech model the one the engine loads next.
+pub fn use_current_speech_model() {
+    #[cfg(feature = "asr-fluidaudio")]
+    {
+        let mismatch = selection().upgraded_mismatch;
+        select(Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch });
+    }
+}
+
+/// After the current speech model failed to load: selects the previous one
+/// when its files can load, so a model that verifies but does not load never
+/// stops dictation. Returns whether the engine should load again.
+pub fn fall_back_to_previous_speech_model(error: &str) -> bool {
+    #[cfg(feature = "asr-fluidaudio")]
+    {
+        let Some(directory) = SpeechModel::Previous.directory() else { return false };
+        let mut selection = selection();
+        let Some(mismatch) = fall_back(&mut selection, (integrity::previous_speech(), &directory),
+            &fluidaudio_rs::sha256_file, error) else { return false };
+        drop(selection);
+        log::warn!("{} could not be loaded ({error}); using {}",
+            SpeechModel::Current.name(), SpeechModel::Previous.name());
+        set_speech_mismatch(mismatch);
+        true
+    }
+
+    #[cfg(not(feature = "asr-fluidaudio"))]
+    {
+        let _ = error;
+        false
+    }
+}
+
+/// `Some` when the selection moved to the previous model, with whether that
+/// model's files differ from the manifest.
+#[cfg(feature = "asr-fluidaudio")]
+fn fall_back(
+    selection: &mut Selection,
+    previous: (&integrity::Manifest, &std::path::Path),
+    hash: &integrity::Hasher<'_>,
+    error: &str,
+) -> Option<bool> {
+    if selection.model != SpeechModel::Current {
+        return None;
+    }
+    let mismatch = loadable(previous, hash)?;
+    *selection = Selection {
+        model: SpeechModel::Previous,
+        upgrade_pending: false,
+        load_failure: Some(error.to_owned()),
+        upgraded_mismatch: false,
+    };
+    Some(mismatch)
+}
+
+/// What Settings says about the speech model beyond its name. `upgrading` is
+/// true while the current model downloads behind the previous one.
+pub fn speech_notice(upgrading: bool) -> Option<String> {
+    #[cfg(feature = "asr-fluidaudio")]
+    {
+        let selection = selection();
+        let (current, previous) = (SpeechModel::Current.name(), SpeechModel::Previous.name());
+        if let Some(error) = &selection.load_failure {
+            return Some(format!("{current} could not be loaded, so SottoASR is using {previous}. ({error})"));
+        }
+        if !selection.upgrade_pending {
+            return None;
+        }
+        let megabytes = integrity::speech().total_bytes() / 1_000_000;
+        Some(if upgrading {
+            format!("{current} is downloading in the background ({megabytes} MB). SottoASR switches to it automatically.")
+        } else {
+            format!("{current} ({megabytes} MB) is not in use yet. SottoASR switches to it at its next start and uses {previous} until then.")
+        })
+    }
+
+    #[cfg(not(feature = "asr-fluidaudio"))]
+    {
+        let _ = upgrading;
+        None
+    }
 }
 
 /// User-confirmed re-download of the model files that fail the manifest: the
@@ -85,10 +327,15 @@ pub fn prepare_speech_model() -> Result<(), String> {
 pub fn replace_failing_models() -> Result<Replacement, String> {
     #[cfg(feature = "asr-fluidaudio")]
     {
-        let speech_directory = fluidaudio_model_dir().ok_or(NO_DATA_DIRECTORY)?;
+        let speech_directory = SpeechModel::Current.directory().ok_or(NO_DATA_DIRECTORY)?;
         let speech = integrity::speech().replace_failing(&speech_directory, "speech model",
             || download_speech_model(&speech_directory), &fluidaudio_rs::sha256_file)?;
-        set_speech_mismatch(false);
+        if speech {
+            // The caller reloads the engine, which now loads the verified current model.
+            select(Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch: false });
+        } else if selection().model == SpeechModel::Current {
+            set_speech_mismatch(false);
+        }
 
         let vocabulary_directory = vocabulary_model_dir().ok_or(NO_DATA_DIRECTORY)?;
         let manifest = integrity::vocabulary();
@@ -118,11 +365,12 @@ pub fn replace_failing_models() -> Result<Replacement, String> {
     { Err("Re-download is available only for the CoreML speech model.".into()) }
 }
 
-/// Manifest bytes present in the speech model cache, for download progress.
+/// Manifest bytes of the current speech model present in its cache, for
+/// download progress.
 #[cfg(feature = "asr-fluidaudio")]
 pub fn speech_download_progress() -> Option<DownloadProgress> {
     let manifest = integrity::speech();
-    let directory = fluidaudio_model_dir()?;
+    let directory = SpeechModel::Current.directory()?;
     Some(DownloadProgress {
         downloaded_bytes: manifest.downloaded_bytes(&directory),
         total_bytes: manifest.total_bytes(),
@@ -161,7 +409,7 @@ fn integrity_warning() -> Option<String> {
 
 #[cfg(feature = "asr-fluidaudio")]
 fn fluidaudio_artifacts_available(directory: &std::path::Path) -> bool {
-    // Match AsrModels.modelsExist(version: .v3, encoderPrecision: .int8).
+    // Match AsrModels.modelsExist for both speech models: they share these names.
     // Actual CoreML loading remains the authority for model validity.
     ["Preprocessor.mlmodelc", "Encoder.mlmodelc", "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"]
         .iter()
@@ -182,11 +430,26 @@ pub fn backend_name() -> &'static str {
     { "none" }
 }
 
-/// Check if models are available for the current backend.
+/// The speech model Settings describes and whether its files are on disk:
+/// the selected one, or before a preparation chose, whichever is present.
+#[cfg(feature = "asr-fluidaudio")]
+fn shown_speech_model(selected: SpeechModel, available: impl Fn(SpeechModel) -> bool) -> (SpeechModel, bool) {
+    [selected, SpeechModel::Current, SpeechModel::Previous].into_iter()
+        .find(|model| available(*model))
+        .map_or((selected, false), |model| (model, true))
+}
+
+#[cfg(feature = "asr-fluidaudio")]
+fn speech_model_on_disk(model: SpeechModel) -> bool {
+    model.directory().is_some_and(|directory| fluidaudio_artifacts_available(&directory))
+}
+
+/// Check if models are available for the current backend. For FluidAudio
+/// the previous speech model counts: an update must not open onboarding.
 pub fn is_model_available() -> bool {
     #[cfg(feature = "asr-fluidaudio")]
     {
-        fluidaudio_model_dir().is_some_and(|dir| fluidaudio_artifacts_available(&dir))
+        shown_speech_model(selection().model, speech_model_on_disk).1
     }
 
     #[cfg(all(feature = "asr-parakeet", not(feature = "asr-fluidaudio")))]
@@ -202,20 +465,18 @@ pub fn is_model_available() -> bool {
 pub fn get_model_status() -> ModelStatus {
     #[cfg(feature = "asr-fluidaudio")]
     {
-        let available = is_model_available();
+        let selected = selection().model;
+        let (model, available) = shown_speech_model(selected, speech_model_on_disk);
         ModelStatus {
             downloaded: available,
             loaded: false,
             initializing: false,
             error: None,
-            path: if available {
-                fluidaudio_model_dir().map(|dir| dir.to_string_lossy().into_owned())
-            } else {
-                None
-            },
-            name: "parakeet-tdt-0.6b-v3 (CoreML)".to_string(),
+            path: model.directory().filter(|_| available).map(|dir| dir.to_string_lossy().into_owned()),
+            name: format!("{} (CoreML)", model.name()),
             size_bytes: None, // FluidAudio manages this
             integrity_warning: integrity_warning(),
+            notice: None,
         }
     }
 
@@ -235,6 +496,7 @@ pub fn get_model_status() -> ModelStatus {
             name: "none".to_string(),
             size_bytes: None,
             integrity_warning: None,
+            notice: None,
         }
     }
 }
@@ -251,16 +513,114 @@ mod tests {
     }
 
     #[test]
-    fn readiness_uses_current_sdk_folder_and_preserves_legacy_artifacts() {
+    fn readiness_uses_the_sdk_folders_and_preserves_legacy_artifacts() {
         let temporary = tempfile::tempdir().unwrap();
         let legacy = temporary.path().join("parakeet-tdt-0.6b-v3-coreml");
-        let current = temporary.path().join("parakeet-tdt-0.6b-v3");
+        let current = temporary.path().join("parakeet-ultra");
         populate(&legacy);
         assert!(!fluidaudio_artifacts_available(&current));
         populate(&current);
         assert!(fluidaudio_artifacts_available(&current));
         assert!(fluidaudio_artifacts_available(&legacy));
-        assert_eq!(fluidaudio_model_dir().unwrap().file_name().unwrap(), "parakeet-tdt-0.6b-v3");
+        assert_eq!(SpeechModel::Current.directory().unwrap().file_name().unwrap(), "parakeet-ultra");
+        assert_eq!(SpeechModel::Previous.directory().unwrap().file_name().unwrap(), "parakeet-tdt-0.6b-v3");
+    }
+
+    const GOOD: &str = "good";
+    const FILE: &str = "Encoder.mlmodelc/weights/weight.bin";
+
+    /// A one-file manifest whose "hash" is the file's text.
+    fn manifest(name: &str) -> integrity::Manifest {
+        integrity::Manifest {
+            repository: format!("test/{name}"),
+            revision: "0".repeat(40),
+            directory: name.into(),
+            files: vec![integrity::ModelFile { path: FILE.into(), size: GOOD.len() as u64, sha256: GOOD.into() }],
+        }
+    }
+
+    fn text(path: &std::path::Path) -> Result<String, String> {
+        std::fs::read_to_string(path).map_err(|error| error.to_string())
+    }
+
+    fn put(directory: &std::path::Path, contents: &str) {
+        let path = directory.join(FILE);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn never() -> Result<(), String> {
+        panic!("nothing may download while a speech model is on disk")
+    }
+
+    #[test]
+    fn an_update_keeps_the_previous_model_and_downloads_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        let (current, previous) = (root.path().join("current"), root.path().join("previous"));
+        put(&previous, GOOD);
+        let choice = choose((&manifest("current"), &current), (&manifest("previous"), &previous), never, &text).unwrap();
+        assert_eq!(choice, Choice { model: SpeechModel::Previous, upgrade_pending: true, mismatch: false });
+        assert!(!current.exists(), "choosing must not create the current model's folder");
+
+        // Once the current model is on disk it wins, and nothing is pending.
+        put(&current, GOOD);
+        let choice = choose((&manifest("current"), &current), (&manifest("previous"), &previous), never, &text).unwrap();
+        assert_eq!(choice, Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch: false });
+    }
+
+    #[test]
+    fn a_new_installation_downloads_the_current_model() {
+        let root = tempfile::tempdir().unwrap();
+        let (current, previous) = (root.path().join("current"), root.path().join("previous"));
+        let choice = choose((&manifest("current"), &current), (&manifest("previous"), &previous),
+            || { put(&current, GOOD); Ok(()) }, &text).unwrap();
+        assert_eq!(choice, Choice { model: SpeechModel::Current, upgrade_pending: false, mismatch: false });
+
+        let offline = root.path().join("offline");
+        let error = choose((&manifest("current"), &offline), (&manifest("previous"), &previous),
+            || Err("No connection.".into()), &text).unwrap_err();
+        assert_eq!(error, "No connection.");
+    }
+
+    #[test]
+    fn a_rejected_download_of_the_current_model_leaves_the_previous_one_serving() {
+        let root = tempfile::tempdir().unwrap();
+        let (current, previous) = (root.path().join("current"), root.path().join("previous"));
+        put(&previous, GOOD);
+        // A download that wrote a wrong file: fresh, so it must never load.
+        let report = manifest("current").prepare(&current, || { put(&current, "evil"); Ok(()) }, &text).unwrap();
+        assert!(report.blocks_loading());
+        let choice = choose((&manifest("current"), &current), (&manifest("previous"), &previous), never, &text).unwrap();
+        assert_eq!(choice, Choice { model: SpeechModel::Previous, upgrade_pending: true, mismatch: false });
+    }
+
+    #[test]
+    fn a_failed_load_falls_back_only_from_the_current_model_to_a_loadable_previous_one() {
+        let root = tempfile::tempdir().unwrap();
+        let previous = root.path().join("previous");
+        let selected = |model| Selection { model, upgrade_pending: false, load_failure: None, upgraded_mismatch: false };
+
+        let mut selection = selected(SpeechModel::Current);
+        assert_eq!(fall_back(&mut selection, (&manifest("previous"), &previous), &text, "CoreML error"), None);
+        assert_eq!(selection, selected(SpeechModel::Current), "no previous model on disk");
+
+        put(&previous, GOOD);
+        assert_eq!(fall_back(&mut selection, (&manifest("previous"), &previous), &text, "CoreML error"), Some(false));
+        assert_eq!(selection.model, SpeechModel::Previous);
+        assert!(!selection.upgrade_pending, "the current model is on disk; downloading again would not help");
+        assert_eq!(selection.load_failure.as_deref(), Some("CoreML error"));
+
+        assert_eq!(fall_back(&mut selection, (&manifest("previous"), &previous), &text, "again"), None,
+            "the previous model has no fallback");
+    }
+
+    #[test]
+    fn an_installation_with_only_the_previous_model_counts_as_downloaded() {
+        let only_previous = |model| model == SpeechModel::Previous;
+        assert_eq!(shown_speech_model(SpeechModel::Current, only_previous), (SpeechModel::Previous, true));
+        assert_eq!(shown_speech_model(SpeechModel::Current, |_| true), (SpeechModel::Current, true));
+        assert_eq!(shown_speech_model(SpeechModel::Previous, |_| true), (SpeechModel::Previous, true));
+        assert_eq!(shown_speech_model(SpeechModel::Current, |_| false), (SpeechModel::Current, false));
     }
 
     #[test]
@@ -335,6 +695,7 @@ fn get_parakeet_model_status() -> ModelStatus {
             None
         },
         integrity_warning: None,
+        notice: None,
     }
 }
 

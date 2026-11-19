@@ -62,7 +62,7 @@ private final class AsrBridge {
 
     func initialize(at directory: URL) throws {
         try waitForAsync {
-            let models = try await AsrCache.load(at: directory)
+            let models = try AsrCache.load(at: directory)
             let manager = AsrManager()
             try await manager.loadModels(models)
             self.manager = manager

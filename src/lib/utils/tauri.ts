@@ -99,6 +99,8 @@ export interface ModelStatus {
 	size_bytes: number | null;
 	/** Set when the cached speech model differs from the files this build was qualified with. */
 	integrity_warning?: string | null;
+	/** Set while an earlier speech model serves: the newer one is downloading, or could not be loaded. */
+	notice?: string | null;
 }
 
 // ---- Recording commands ----
@@ -277,7 +279,7 @@ export function downloadModel(): Promise<void> {
 	return invoke("download_model");
 }
 
-/** Replace speech-model files that fail verification. Downloads about 460 MB. */
+/** Replace speech-model files that fail verification. Downloads up to about 630 MB. */
 export function redownloadSpeechModel(): Promise<void> {
 	return invoke("redownload_speech_model");
 }

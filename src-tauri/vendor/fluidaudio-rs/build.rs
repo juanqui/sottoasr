@@ -61,8 +61,6 @@ fn main() {
     println!("cargo:rerun-if-changed=swift/");
     println!("cargo:rerun-if-changed=Package.swift");
     println!("cargo:rerun-if-changed=Package.resolved");
-    println!("cargo:rerun-if-changed=patches/alignment-stack.patch");
-    println!("cargo:rerun-if-changed=patches/ctc-tensor-access.patch");
     println!("cargo:rerun-if-changed=patches/model-registry-revision.patch");
     println!("cargo:rerun-if-changed=patches/tree-lister-revision.patch");
 
@@ -86,27 +84,17 @@ fn main() {
         "Pinned Swift dependency resolution failed"
     );
     let checkout = build.join("checkouts/FluidAudio");
-    apply_pinned_patch(&checkout,
-        "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/Rescorer/VocabularyRescorer+Utilities.swift",
-        &manifest.join("patches/alignment-stack.patch"),
-        "9fcef3028b4457637a0fea5c2787ddaadc2ca9cba62ebeef1bef33422060ad95",
-        "7d42688ee320561397b17c735d246e0600f508d486c11781178de5e15b19118f");
-    apply_pinned_patch(&checkout,
-        "Sources/FluidAudio/ASR/Parakeet/SlidingWindow/CustomVocabulary/WordSpotting/CtcKeywordSpotter+Inference.swift",
-        &manifest.join("patches/ctc-tensor-access.patch"),
-        "0384a92498312bc7dc842a0158130287c5423a5f9f51220878f47d64a51314a0",
-        "ba8a620a88bd32ca617d77282f65478a6ea6a5758876ebd8884a1033b3dd2123");
     // Model downloads read the commits recorded in README.md, never `main`.
     apply_pinned_patch(&checkout,
         "Sources/FluidAudio/ModelRegistry.swift",
         &manifest.join("patches/model-registry-revision.patch"),
-        "4c760c5cbb06ffbea4aa7b3c994c9633bc813a6ff1d0000072fcfa63e7de032d",
-        "5831c4f5d533817d4090277480eec3847355fa0bb5866d23b9da1392cde3f186");
+        "8d8d217cd42b79c943f2df5831cf11323533dbbe4032550e50c3ee328e696edd",
+        "3c280a4c459bd2dad605f8a0e0c38320f0caa2caf6216a8eb1f96a2d8b7c3e99");
     apply_pinned_patch(&checkout,
         "Sources/FluidAudio/Shared/Download/HFTreeLister.swift",
         &manifest.join("patches/tree-lister-revision.patch"),
-        "141f537187465004c7b805aad8b05ee61c08b5df017175df6140f3ff78533c31",
-        "dd137b9b4e77009c2eb0d8117f181e65931a342ac1371329c335894ee1d5e1d4");
+        "0ac831657c565eb62184169beeb5d0e4fe8cf4c472478b4f9deb37ac1f924a49",
+        "ecfb8cbf62dd1b67d8cee76efa117a8d10221e6e06e50b3e34e51a1446fe27f7");
     let status = Command::new("swift")
         .args(["build", "-c", "release", "--arch", arch, "--build-path"])
         .arg(&build)

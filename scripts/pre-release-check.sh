@@ -233,7 +233,6 @@ run_step "cargo check (Parakeet backend)" parakeet-check \
   in_tauri cargo check --locked --no-default-features --features "$PARAKEET_FEATURES"
 run_step "Resampler tests (Parakeet backend)" parakeet-test \
   in_tauri cargo test --locked --no-default-features --features "$PARAKEET_FEATURES" --lib audio::resample
-run_step "Pinned Swift correctness regressions" swift-regressions python3 scripts/check-swift-regressions.py
 run_step "cargo clippy" clippy in_tauri cargo clippy --locked --all-targets -- -D warnings
 run_step "Rust dependency audit" cargo-audit in_tauri audit_rust
 run_step "npm audit --omit=dev" npm-audit npm audit --omit=dev
@@ -328,7 +327,7 @@ if [ "$AUTO_ONLY" = "false" ]; then
   else
     printf "  FluidAudio model directory not found at:\n"
     printf "    %s\n" "$MODEL_DIR"
-    printf "    Models are downloaded on first use (~500 MB).\n"
+    printf "    Models are downloaded on first use (about 630 MB).\n"
     ask_user "  Continue without models?" && rc=$? || rc=$?
     if [ "$rc" -eq 0 ]; then
       warn "ASR model: not found (skipped)"

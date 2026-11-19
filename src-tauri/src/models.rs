@@ -292,6 +292,10 @@ pub struct ModelStatus {
     /// with. Dictation still works; Settings offers a re-download.
     #[serde(default)]
     pub integrity_warning: Option<String>,
+    /// An earlier speech model is serving: the newer one is downloading, or
+    /// could not be loaded.
+    #[serde(default)]
+    pub notice: Option<String>,
 }
 
 #[cfg(test)]

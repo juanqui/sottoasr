@@ -33,6 +33,12 @@ in the root of this repository.
 MACHINE LEARNING MODELS (downloaded at runtime)
 ------------------------------------------------
 
+Moondream Parakeet Ultra (0.6B) - Speech Recognition Model
+  License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
+  Published by moondream, post-trained from NVIDIA Parakeet TDT v3
+  https://huggingface.co/moondream/parakeet-ultra
+  CoreML conversion: https://huggingface.co/FluidInference/parakeet-ultra-coreml
+
 NVIDIA Parakeet TDT v3 (0.6B) - Speech Recognition Model
   License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
   Copyright (c) NVIDIA Corporation
@@ -146,7 +152,7 @@ Additional license types used by dependencies include:
   BSL-1.0 ............. 2 packages (Boost Software License)
   ISC ................. 3 packages
   Zlib ............... 20 packages
-  CC-BY-4.0 ........... 1 model (requires attribution; see above)
+  CC-BY-4.0 ........... 2 models (require attribution; see above)
 
 Note on MPL-2.0: The Mozilla Public License 2.0 is a weak/file-level
 copyleft license. Per Section 3.3, MPL-2.0 code may be combined into a
