@@ -674,6 +674,8 @@ If the state is not Idle, `begin_exit` refuses the exit and a dialog "Finish dic
 
 The update checker runs 15 s after launch and then every 4 hours, if `auto_check_updates` is on and the settings file loaded. Each check has a 30 s timeout. The update window ignores check events unless it is checking itself, and it moves to the ready state on `update-installed`.
 
+**Restart.** "Restart Now" calls `restart_app`. On macOS it starts a small shell helper in its own process group and then exits the app in the normal way. The helper waits until the app's process has ended (at most 60 s), then starts the bundle with `/usr/bin/open -n` (`relaunch.rs`). Thus LaunchServices starts the new copy as Finder does. Tauri's own restart starts the executable in the bundle as a child of the exiting process. After an update replaced the bundle, macOS refused that child on 2026-11-19 ("Security policy would not allow process" in the system log), so the app closed and did not come back. A child that does start has the old process as its responsible process, and then lacks its Accessibility and Input Monitoring grants. Tauri's restart remains only for a binary outside an `.app` bundle, such as a development build.
+
 ---
 
 ## 13. Transcription History
@@ -816,7 +818,7 @@ sottoasr/
 │   │   ├── llm/                    # Cleanup sidecar, download, planner, validation
 │   │   ├── commands/               # IPC handlers
 │   │   ├── tray/, updater/         # Menu bar and updates
-│   │   └── state.rs, models.rs, persistence.rs, dictionary.rs, process.rs
+│   │   └── state.rs, models.rs, persistence.rs, dictionary.rs, process.rs, relaunch.rs
 │   ├── sidecar/                    # llm_cleanup.py, requirements.in, requirements.lock
 │   ├── vendor/fluidaudio-rs/       # Swift bridge, patches, model-manifest.json
 │   ├── capabilities/               # default.json, history.json, settings-close.json

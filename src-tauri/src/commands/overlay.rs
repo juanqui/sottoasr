@@ -135,9 +135,28 @@ pub fn clear_overlay(app: &AppHandle, generation: u64, revision: Option<u64>) ->
 
 /// Check before requesting a restart: Tauri records restart intent before its
 /// ExitRequested event, so rejecting that event alone would leave stale intent.
+///
+/// On macOS the app bundle starts again through LaunchServices after this
+/// process has exited (see `relaunch`). Tauri's restart, which starts the
+/// executable as a child of this process, remains for a bare binary.
 #[tauri::command]
 pub fn restart_app(app: AppHandle, state: tauri::State<'_, crate::state::AppState>) -> Result<(), String> {
     state.begin_exit()?;
+    #[cfg(target_os = "macos")]
+    {
+        let bundle = tauri::process::current_binary(&app.env()).ok()
+            .and_then(|executable| crate::relaunch::app_bundle(&executable));
+        if let Some(bundle) = bundle {
+            match crate::relaunch::after_exit(&bundle) {
+                Ok(()) => {
+                    log::info!("Restarting: {} opens again once this process has exited", bundle.display());
+                    app.exit(0);
+                    return Ok(());
+                }
+                Err(error) => log::error!("Could not schedule the relaunch ({error}); restarting directly"),
+            }
+        }
+    }
     app.request_restart();
     Ok(())
 }

@@ -8,6 +8,8 @@ mod asr;
 mod llm;
 mod paste;
 mod process;
+#[cfg(target_os = "macos")]
+mod relaunch;
 mod hotkeys;
 mod tray;
 mod updater;
