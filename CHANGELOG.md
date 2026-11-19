@@ -2,7 +2,7 @@
 
 All notable changes to SottoASR are documented in this file.
 
-## [Unreleased]
+## [0.12.0] — 2026-11-19
 
 Parakeet Ultra is the new speech model, and the findings of the [November 2026 application review](https://github.com/juanqui/sottoasr/blob/main/docs/audit/2026-11-19-application-review.md) are fixed.
 
