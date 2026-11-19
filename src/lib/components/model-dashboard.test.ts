@@ -2,8 +2,8 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 const { listeners } = vi.hoisted(() => ({ listeners:new Map<string, (event?:{payload:unknown}) => void>() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (event:string, callback:(event?:{payload:unknown})=>void) => {listeners.set(event,callback);return () => listeners.delete(event);}) }));
-vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn(),repairLlmRuntime:vi.fn(),redownloadSpeechModel:vi.fn()}));
-import { getModelStatus, redownloadSpeechModel, repairLlmRuntime } from '../utils/tauri';
+vi.mock('../utils/tauri', () => ({getModelStatus:vi.fn(),getLlmStatus:vi.fn(),initAsr:vi.fn(),prepareLlmModel:vi.fn(),repairLlmRuntime:vi.fn(),redownloadSpeechModel:vi.fn(),deletePreviousSpeechModel:vi.fn()}));
+import { deletePreviousSpeechModel, getModelStatus, redownloadSpeechModel, repairLlmRuntime } from '../utils/tauri';
 import { CleanupSetup } from '../stores/cleanup-setup.svelte';
 import ModelDashboard from './model-dashboard.svelte';
 let target:HTMLDivElement;
@@ -79,4 +79,39 @@ it('stays ready and says why while an earlier speech model serves', async () => 
   await vi.waitFor(()=>expect(card.textContent).toContain('downloading in the background'));
   expect(card.querySelector('.model-state.ready')).not.toBeNull();
   expect(card.textContent).toContain('ready to transcribe');
+});
+it('offers to delete a previous speech model that is still on disk, and deletes it only after confirmation', async () => {
+  const status = {downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'Parakeet v3',size_bytes:null};
+  const offer = () => [...target.querySelectorAll('button')].find((button)=>button.textContent?.trim()==='Delete previous model');
+  await render();
+  expect(offer()).toBeUndefined();
+
+  vi.mocked(getModelStatus).mockResolvedValue({...status,previous_model:{name:'Parakeet TDT v3',size_bytes:966_514_496}});
+  listeners.get('asr-init-complete')!();
+  const card = target.querySelector('[aria-label="Speech recognition model"]')!;
+  await vi.waitFor(()=>expect(card.textContent).toContain('Parakeet TDT v3 (967 MB), is still on this Mac'));
+  offer()!.click();flushSync();
+  expect(deletePreviousSpeechModel).not.toHaveBeenCalled();
+  const dialog = [...target.querySelectorAll('dialog')].find((candidate)=>candidate.textContent?.includes('Delete the previous speech model?'))!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.textContent).toContain('SottoASR deletes Parakeet TDT v3 (967 MB)');
+
+  // The backend no longer reports the model once its folders are gone.
+  vi.mocked(deletePreviousSpeechModel).mockImplementation(async () => { vi.mocked(getModelStatus).mockResolvedValue(status); return 966_514_496; });
+  [...dialog.querySelectorAll('button')].find((button)=>button.textContent?.trim()==='Delete')!.click();
+  await vi.waitFor(()=>expect(card.textContent).toContain('Previous model deleted. 967 MB freed.'));
+  expect(deletePreviousSpeechModel).toHaveBeenCalledOnce();
+  expect(dialog.open).toBe(false);
+  await vi.waitFor(()=>expect(offer()).toBeUndefined());
+});
+it('keeps the offer and says why when the previous speech model cannot be deleted', async () => {
+  vi.mocked(getModelStatus).mockResolvedValue({downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'Parakeet v3',size_bytes:null,previous_model:{name:'Parakeet TDT v3',size_bytes:483_260_283}});
+  vi.mocked(deletePreviousSpeechModel).mockRejectedValue('Parakeet TDT v3 is in use, so SottoASR cannot delete it.');
+  await render();
+  const card = target.querySelector('[aria-label="Speech recognition model"]')!;
+  await vi.waitFor(()=>expect(card.textContent).toContain('Parakeet TDT v3 (483 MB)'));
+  [...card.querySelectorAll('button')].find((button)=>button.textContent?.trim()==='Delete previous model')!.click();flushSync();
+  [...target.querySelectorAll('dialog')].flatMap((dialog)=>[...dialog.querySelectorAll('button')]).find((button)=>button.textContent?.trim()==='Delete')!.click();
+  await vi.waitFor(()=>expect(card.querySelector('[role="alert"]')?.textContent).toBe('Could not delete the previous model: Parakeet TDT v3 is in use, so SottoASR cannot delete it.'));
+  expect([...card.querySelectorAll('button')].some((button)=>button.textContent?.trim()==='Delete previous model')).toBe(true);
 });

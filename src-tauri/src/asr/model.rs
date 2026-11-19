@@ -27,7 +27,7 @@ enum SpeechModel {
     /// The model this build downloads: Parakeet Ultra.
     Current,
     /// The model earlier releases downloaded: Parakeet TDT v3. It is never
-    /// downloaded again, and nothing deletes it.
+    /// downloaded again, and it is deleted only when the user asks.
     Previous,
 }
 
@@ -42,7 +42,7 @@ impl SpeechModel {
 
     /// The SDK's cache folder: `Repo.folderName`, which differs from the
     /// remote repository slug. The older `parakeet-tdt-0.6b-v3-coreml` folder
-    /// is not a cache of this SDK and is left untouched.
+    /// is not a cache of this SDK and is never read.
     fn directory(self) -> Option<PathBuf> {
         dirs::data_dir().map(|dir| dir.join("FluidAudio/Models").join(&self.manifest().directory))
     }
@@ -117,6 +117,112 @@ pub(crate) fn selected_speech_model() -> Option<(PathBuf, &'static str)> {
 #[cfg(feature = "asr-fluidaudio")]
 pub(crate) fn vocabulary_model_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|dir| dir.join("FluidAudio/Models").join(&integrity::vocabulary().directory))
+}
+
+/// The folder in which earlier app versions kept the previous speech model.
+/// Nothing reads it.
+#[cfg(feature = "asr-fluidaudio")]
+const OLDER_PREVIOUS_DIRECTORY: &str = "parakeet-tdt-0.6b-v3-coreml";
+
+/// The folders that hold the previous speech model: the SDK's cache, which
+/// is the fallback, and the cache of earlier app versions.
+#[cfg(feature = "asr-fluidaudio")]
+fn previous_model_directories() -> Option<[PathBuf; 2]> {
+    let models = dirs::data_dir()?.join("FluidAudio/Models");
+    Some([models.join(&integrity::previous_speech().directory), models.join(OLDER_PREVIOUS_DIRECTORY)])
+}
+
+/// What is at `path`: whether it is a real folder, and the bytes of its
+/// files. Symbolic links are not followed. `None` when nothing is there.
+#[cfg(feature = "asr-fluidaudio")]
+fn on_disk(path: &std::path::Path) -> Option<(bool, u64)> {
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    if !metadata.is_dir() {
+        return Some((false, metadata.len()));
+    }
+    let mut bytes = 0;
+    let mut folders = vec![path.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+            match entry.metadata() {
+                Ok(metadata) if metadata.is_dir() => folders.push(entry.path()),
+                Ok(metadata) => bytes += metadata.len(),
+                Err(_) => {}
+            }
+        }
+    }
+    Some((true, bytes))
+}
+
+/// Bytes in the folders that exist, or `None` when none does.
+#[cfg(feature = "asr-fluidaudio")]
+fn bytes_in(directories: &[PathBuf]) -> Option<u64> {
+    directories.iter().filter_map(|directory| on_disk(directory)).map(|(_, bytes)| bytes).reduce(|total, bytes| total + bytes)
+}
+
+/// What Settings offers to delete: the previous speech model, when it is
+/// still on disk although the current one is selected and its files match
+/// the manifest. The caller adds that the engine has a model loaded.
+#[cfg(feature = "asr-fluidaudio")]
+fn previous_model_leftover() -> Option<crate::models::PreviousModel> {
+    if selection().model != SpeechModel::Current
+        || MISMATCHES.lock().unwrap_or_else(|error| error.into_inner()).speech
+    {
+        return None;
+    }
+    Some(crate::models::PreviousModel {
+        name: SpeechModel::Previous.name().into(),
+        size_bytes: bytes_in(&previous_model_directories()?)?,
+    })
+}
+
+/// User-confirmed deletion of the previous speech model's folders. Returns
+/// the bytes freed. The caller holds the preparation claim, so nothing
+/// selects the previous model meanwhile.
+pub fn delete_previous_speech_model() -> Result<u64, String> {
+    #[cfg(feature = "asr-fluidaudio")]
+    {
+        let current = SpeechModel::Current.directory().ok_or(NO_DATA_DIRECTORY)?;
+        let previous = previous_model_directories().ok_or(NO_DATA_DIRECTORY)?;
+        // Copied out: status reads and the engine must not wait for this lock
+        // while files are hashed and deleted.
+        let selected = selection().model;
+        let freed = delete_previous(selected, (integrity::speech(), &current), &previous,
+            &fluidaudio_rs::sha256_file)?;
+        log::info!("Deleted the previous speech model: {freed} bytes freed");
+        Ok(freed)
+    }
+
+    #[cfg(not(feature = "asr-fluidaudio"))]
+    { Err("Only the CoreML speech model has a previous model.".into()) }
+}
+
+/// Deletes `previous` unless that model is selected, or the current model's
+/// files do not pass the check a start runs. After a clean check the next
+/// start loads the current model and never needs the previous one.
+#[cfg(feature = "asr-fluidaudio")]
+fn delete_previous(
+    selected: SpeechModel,
+    current: (&integrity::Manifest, &std::path::Path),
+    previous: &[PathBuf],
+    hash: &integrity::Hasher<'_>,
+) -> Result<u64, String> {
+    let (current_name, previous_name) = (SpeechModel::Current.name(), SpeechModel::Previous.name());
+    if selected != SpeechModel::Current {
+        return Err(format!("{previous_name} is in use, so SottoASR cannot delete it."));
+    }
+    if loadable(current, hash) != Some(false) {
+        return Err(format!("{current_name} did not pass its file check, so {previous_name} stays as the fallback. Re-download the speech model first."));
+    }
+    let mut freed = 0;
+    for directory in previous {
+        let Some((is_folder, bytes)) = on_disk(directory) else { continue };
+        // A link is removed, never the folder it points to.
+        let removed = if is_folder { std::fs::remove_dir_all(directory) } else { std::fs::remove_file(directory) };
+        removed.map_err(|error| format!("Could not delete {}: {error}", directory.display()))?;
+        freed += bytes;
+    }
+    Ok(freed)
 }
 
 /// Which speech model loads, and whether its files differ from the manifest.
@@ -477,6 +583,7 @@ pub fn get_model_status() -> ModelStatus {
             size_bytes: None, // FluidAudio manages this
             integrity_warning: integrity_warning(),
             notice: None,
+            previous_model: previous_model_leftover(),
         }
     }
 
@@ -497,6 +604,7 @@ pub fn get_model_status() -> ModelStatus {
             size_bytes: None,
             integrity_warning: None,
             notice: None,
+            previous_model: None,
         }
     }
 }
@@ -634,6 +742,70 @@ mod tests {
         std::fs::remove_dir(temporary.path().join("JointDecisionv3.mlmodelc")).unwrap();
         assert!(!fluidaudio_artifacts_available(temporary.path()));
     }
+
+    #[test]
+    fn only_the_previous_models_folders_are_named_for_deletion() {
+        let previous = previous_model_directories().unwrap();
+        let names: Vec<_> = previous.iter().map(|directory| directory.file_name().unwrap().to_str().unwrap()).collect();
+        assert_eq!(names, ["parakeet-tdt-0.6b-v3", "parakeet-tdt-0.6b-v3-coreml"]);
+        let kept = [SpeechModel::Current.directory().unwrap(), vocabulary_model_dir().unwrap()];
+        for directory in &previous {
+            assert!(!kept.contains(directory));
+            assert_eq!(directory.parent(), kept[0].parent());
+        }
+    }
+
+    #[test]
+    fn deleting_the_previous_model_frees_its_folders_and_nothing_else() {
+        let root = tempfile::tempdir().unwrap();
+        let (current, vocabulary) = (root.path().join("current"), root.path().join("vocabulary"));
+        let (shared, elsewhere) = (root.path().join("shared"), root.path().join("elsewhere"));
+        let previous = [root.path().join("previous"), root.path().join("older")];
+        put(&current, GOOD);
+        put(&vocabulary, GOOD);
+        put(&shared, GOOD);
+        put(&elsewhere, GOOD);
+        put(&previous[0], "12345");
+        std::fs::write(previous[0].join("config.json"), "1234567").unwrap();
+        // Links are removed, never followed: one inside a folder, one in place of a folder.
+        std::os::unix::fs::symlink(&shared, previous[0].join("link")).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, &previous[1]).unwrap();
+        let links = [previous[0].join("link"), previous[1].clone()].iter()
+            .map(|link| std::fs::symlink_metadata(link).unwrap().len()).sum::<u64>();
+
+        assert_eq!(bytes_in(&previous), Some(12 + links));
+        let delete = || delete_previous(SpeechModel::Current, (&manifest("current"), &current), &previous, &text);
+        assert_eq!(delete(), Ok(12 + links));
+        assert!(previous.iter().all(|directory| std::fs::symlink_metadata(directory).is_err()));
+        for kept in [&current, &vocabulary, &shared, &elsewhere] {
+            assert_eq!(text(&kept.join(FILE)).unwrap(), GOOD, "{}", kept.display());
+        }
+        assert_eq!(bytes_in(&previous), None, "nothing is left to offer");
+        assert_eq!(delete(), Ok(0));
+    }
+
+    #[test]
+    fn the_previous_model_stays_while_it_serves_or_the_current_one_is_doubtful() {
+        let root = tempfile::tempdir().unwrap();
+        let current = root.path().join("current");
+        let previous = [root.path().join("previous")];
+        put(&previous[0], GOOD);
+        let delete = |selected| delete_previous(selected, (&manifest("current"), &current), &previous, &text);
+
+        // No file of the current model is on disk.
+        assert!(delete(SpeechModel::Current).unwrap_err().contains("file check"));
+        // A file that was in use differs from the manifest: it loads, with a warning.
+        put(&current, "evil");
+        assert_eq!(loadable((&manifest("current"), &current), &text), Some(true));
+        assert!(delete(SpeechModel::Current).unwrap_err().contains("file check"));
+        // The previous model serves: before the switch, or after a fallback.
+        let verified = root.path().join("verified");
+        put(&verified, GOOD);
+        let error = delete_previous(SpeechModel::Previous, (&manifest("current"), &verified), &previous, &text).unwrap_err();
+        assert!(error.contains("is in use"), "{error}");
+
+        assert_eq!(text(&previous[0].join(FILE)).unwrap(), GOOD, "nothing was deleted");
+    }
 }
 
 // ─── parakeet-rs model management (only compiled with asr-parakeet) ───
@@ -696,6 +868,7 @@ fn get_parakeet_model_status() -> ModelStatus {
         },
         integrity_warning: None,
         notice: None,
+        previous_model: None,
     }
 }
 

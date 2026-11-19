@@ -52,7 +52,7 @@ The app (`src-tauri/src/asr/model.rs`) chooses before each load, without the net
 2. Otherwise TDT v3, when an earlier release left its files and they can load. Dictation works at once and onboarding does not open. Ultra then downloads in the background, is verified, and replaces v3 in memory when no dictation is in progress. If the download fails, v3 stays in use and the next start tries again.
 3. Otherwise (a new installation) it downloads and verifies Ultra, then loads it.
 
-"Can load" means that no file is missing and no newly downloaded file failed the manifest. If the verified Ultra files do not load in CoreML and v3 can load, the app loads v3 and Settings says so. Nothing deletes `Models/parakeet-tdt-0.6b-v3/` or the older `Models/parakeet-tdt-0.6b-v3-coreml/`; the first is this fallback, the second is not a cache of this SDK. Both can be deleted by hand once Settings shows Parakeet Ultra.
+"Can load" means that no file is missing and no newly downloaded file failed the manifest. If the verified Ultra files do not load in CoreML and v3 can load, the app loads v3 and Settings says so. `Models/parakeet-tdt-0.6b-v3/` and the older `Models/parakeet-tdt-0.6b-v3-coreml/` stay on disk; the first is this fallback, the second is not a cache of this SDK. The app deletes both only when the user confirms it in Settings, while Ultra serves and its files match the manifest.
 
 ## Bridge behaviour
 

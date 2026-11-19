@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getModelStatus, initAsr, redownloadSpeechModel } from '../utils/tauri';
+  import { deletePreviousSpeechModel, getModelStatus, initAsr, redownloadSpeechModel } from '../utils/tauri';
   import { createEventScope } from '../utils/event-scope';
   import { cleanupOutcome } from '../utils/cleanup-outcome';
   import ConfirmDialog from './confirm-dialog.svelte';
   import DownloadProgressBar from './download-progress.svelte';
-  import type { DownloadProgress, ModelStatus } from '../utils/tauri';
+  import type { DownloadProgress, ModelStatus, PreviousModel } from '../utils/tauri';
   import type { CleanupSetup } from '../stores/cleanup-setup.svelte';
 
   let { cleanup, onconfigure }: { cleanup: CleanupSetup; onconfigure: () => void } = $props();
@@ -17,6 +17,12 @@
   let redownloadNotice = $state('');
   let redownloadError = $state('');
   let redownloadProgress = $state<DownloadProgress | null>(null);
+  // The previous speech model the confirmation is about; the status may drop it meanwhile.
+  let deletion = $state<PreviousModel | null>(null);
+  let deleting = $state(false);
+  let deleteNotice = $state('');
+  let deleteError = $state('');
+  const megabytes = (bytes: number) => Math.round(bytes / 1_000_000).toLocaleString();
   let disposed = false;
   let refreshing = false;
   let lastOutcome = $derived(cleanupOutcome(cleanup.status?.last_cleanup_status));
@@ -78,6 +84,18 @@
       if (!disposed) redownloadError = `Could not replace the model files: ${String(error)}`;
     } finally { if (!disposed) { redownloading = false; redownloadProgress = null; void refreshAsr(); } }
   }
+  async function deletePrevious() {
+    if (deleting) return;
+    deleting = true;
+    deleteNotice = '';
+    deleteError = '';
+    try {
+      const freed = await deletePreviousSpeechModel();
+      if (!disposed) deleteNotice = `Previous model deleted. ${megabytes(freed)} MB freed.`;
+    } catch (error) {
+      if (!disposed) deleteError = `Could not delete the previous model: ${String(error)}`;
+    } finally { if (!disposed) { deleting = false; deletion = null; void refreshAsr(); } }
+  }
   onMount(() => {
     const scope = createEventScope((error) => { asrError = `Live model status unavailable: ${String(error)}`; });
     // The re-download reloads the engine once its files are verified, so any
@@ -102,6 +120,12 @@
     <p class="model-name">{asr?.name || 'Parakeet Ultra'}</p>
     <p class="model-detail" role="status">{speech.detail}</p>
     {#if asr?.notice}<p class="model-detail" role="status">{asr.notice}</p>{/if}
+    {#if asr?.previous_model && !deleting}
+      <p class="model-detail">The previous speech model, {asr.previous_model.name} ({megabytes(asr.previous_model.size_bytes)} MB), is still on this Mac. SottoASR keeps it only as a fallback.</p>
+      <button type="button" onclick={() => { deletion = asr?.previous_model ?? null; }} disabled={redownloading}>Delete previous model</button>
+    {/if}
+    {#if deleteError}<p class="integrity" role="alert">{deleteError}</p>{/if}
+    {#if deleteNotice}<p class="model-detail" role="status">{deleteNotice}</p>{/if}
     {#if redownloading && redownloadProgress}<DownloadProgressBar progress={redownloadProgress} label="Model file download" />{/if}
     {#if asr && !asr.loaded && !asr.initializing}<button type="button" onclick={retryAsr} disabled={retrying || redownloading}>Load speech recognition</button>{/if}
     {#if asr?.integrity_warning && !redownloading}
@@ -127,6 +151,8 @@
   </article>
 </section>
 <ConfirmDialog open={confirmRedownload} title="Re-download speech model?" message="SottoASR downloads fresh copies of the files that failed the check, verifies them, and reloads speech recognition. This can be several hundred megabytes. Keep SottoASR open until it finishes." confirmLabel="Re-download" busy={redownloading} onconfirm={redownload} oncancel={() => { confirmRedownload = false; }} />
+
+<ConfirmDialog open={deletion !== null} title="Delete the previous speech model?" message={deletion ? `SottoASR deletes ${deletion.name} (${megabytes(deletion.size_bytes)} MB) from this Mac. The current speech model stays in use. After that, SottoASR cannot go back to ${deletion.name} if the current model fails to load. Another app that uses ${deletion.name} must download it again. You cannot undo this.` : ''} confirmLabel="Delete" busy={deleting} onconfirm={deletePrevious} oncancel={() => { deletion = null; }} />
 
 <style>
   .model-dashboard { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 20px 16px; flex:none; }

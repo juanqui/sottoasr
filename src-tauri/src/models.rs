@@ -279,6 +279,13 @@ pub struct LlmStatus {
     pub last_cleanup_status: LlmCleanupStatus,
 }
 
+/// A speech model that earlier releases used and that is still on disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviousModel {
+    pub name: String,
+    pub size_bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelStatus {
     pub initializing: bool,
@@ -296,6 +303,10 @@ pub struct ModelStatus {
     /// could not be loaded.
     #[serde(default)]
     pub notice: Option<String>,
+    /// The previous speech model is still on disk although the current one
+    /// serves. Settings offers to delete it.
+    #[serde(default)]
+    pub previous_model: Option<PreviousModel>,
 }
 
 #[cfg(test)]

@@ -315,7 +315,7 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | Settings | `get_settings`, `update_settings`, `apply_shortcuts`, `reset_settings`, `get_settings_load_error`, `list_input_devices` |
 | Permissions | `request_accessibility_permission`, `request_microphone_permission`, `check_all_permissions`, `open_accessibility_settings`, `fix_accessibility_permission`, `open_input_monitoring_settings`, `open_microphone_settings`, `open_url` |
 | Key capture | `start_key_capture`, `stop_key_capture` |
-| Speech model | `get_asr_backend`, `get_model_status`, `init_asr`, `redownload_speech_model`, `download_model`, `complete_setup` |
+| Speech model | `get_asr_backend`, `get_model_status`, `init_asr`, `redownload_speech_model`, `delete_previous_speech_model`, `download_model`, `complete_setup` |
 | Vocabulary | `get_vocabulary_status`, `prepare_vocabulary_model` |
 | AI cleanup | `get_llm_status`, `prepare_llm_model`, `repair_llm_runtime`, `delete_llm_model` |
 | Updates | `check_app_update`, `perform_app_update`, `get_update_status` |
@@ -392,7 +392,7 @@ The model no longer has `model_path`, `language` or `max_history`. `persist_sett
 | `llm_cleanup_status` | Cleanup outcome (`Applied`, `Rejected`, `TimedOut`, `Unavailable` and more) |
 | `cleanup_suggestion`, `llm_applied` | Fields of earlier versions, still read |
 
-**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning` and `notice`. The warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3.
+**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning`, `notice` and `previous_model`. The warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3. `previous_model` (`name`, `size_bytes`) is set while Parakeet TDT v3 is still on disk and Parakeet Ultra is loaded with no file mismatch; the model dashboard then offers to delete it.
 
 ---
 
@@ -546,7 +546,9 @@ Earlier versions used Parakeet TDT v3. `asr/model.rs` decides which verified spe
 
 With an upgrade pending, `init_asr` starts the upgrade in the background and returns. The upgrade downloads and verifies Parakeet Ultra without progress events. Then it waits until the app is Idle, checking twice a second for at most 10 minutes, and reloads the engine with Parakeet Ultra. During the reload, a dictation that stops gets the "still loading" message and keeps its recording. While Parakeet TDT v3 serves, Settings shows "Ready" and the `notice`.
 
-Nothing deletes `parakeet-tdt-0.6b-v3/` or the older `parakeet-tdt-0.6b-v3-coreml/`. The first is the fallback when CoreML cannot load Parakeet Ultra. The user can delete both by hand once Settings shows Parakeet Ultra. An older app version still loads its `parakeet-tdt-0.6b-v3/` folder and ignores `parakeet-ultra/`. During the change the cache holds both speech models (483 MB and 632 MB), and peak resident memory rises by about 157 MiB (487 to 644 MiB in the LibriSpeech run).
+`parakeet-tdt-0.6b-v3/` and the older `parakeet-tdt-0.6b-v3-coreml/` stay on disk until the user deletes them. The first is the fallback when CoreML cannot load Parakeet Ultra; nothing reads the second. An older app version still loads its `parakeet-tdt-0.6b-v3/` folder and ignores `parakeet-ultra/`. During the change the cache holds both speech models (483 MB and 632 MB), and peak resident memory rises by about 157 MiB (487 to 644 MiB in the LibriSpeech run).
+
+`delete_previous_speech_model` deletes those two folders after a confirmation in the model dashboard, and returns the bytes freed. It deletes only when all of these hold: Parakeet Ultra is the selected model, the engine has a model loaded, and Parakeet Ultra's files pass the manifest check with no missing file and no mismatch. Thus the next start loads Parakeet Ultra without the fallback. The command holds the preparation claim, so `init_asr`, the background upgrade and a re-download cannot select Parakeet TDT v3 during the deletion. It does not take the engine lock. Symbolic links are removed and not followed. The [specification](../specs/2026-11-19-delete-previous-speech-model.md) lists the cases.
 
 ### Transcription Flow
 

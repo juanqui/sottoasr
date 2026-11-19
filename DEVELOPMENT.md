@@ -389,7 +389,7 @@ At first launch, onboarding downloads Parakeet Ultra (about 630 MB), verifies ea
 
 An installation that already has the verified Parakeet TDT v3 files does not show onboarding. It starts and dictates with Parakeet TDT v3 as before. Parakeet Ultra then downloads in the background and is verified. When no dictation is in progress, the app replaces Parakeet TDT v3 with it in memory. Settings shows "Ready" and a notice during this time. If the download fails, for example offline, Parakeet TDT v3 stays in use and the next launch tries again.
 
-If CoreML cannot load the verified Parakeet Ultra files and Parakeet TDT v3 is on disk, the app uses Parakeet TDT v3 and Settings shows a notice. Nothing deletes the old folders `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml`. You can delete both by hand once Settings shows Parakeet Ultra. An older app version still uses its `parakeet-tdt-0.6b-v3` folder and ignores `parakeet-ultra`.
+If CoreML cannot load the verified Parakeet Ultra files and Parakeet TDT v3 is on disk, the app uses Parakeet TDT v3 and Settings shows a notice. The old folders `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml` stay on disk until the user deletes them. While Parakeet Ultra serves and its files match the manifest, the model dashboard offers that deletion (`delete_previous_speech_model`), with a confirmation. An older app version still uses its `parakeet-tdt-0.6b-v3` folder and ignores `parakeet-ultra`; after the deletion it downloads that folder again.
 
 ### Shortcut Recorder Key Listener
 

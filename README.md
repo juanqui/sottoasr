@@ -53,7 +53,7 @@ cargo tauri dev
 
 On first launch, onboarding downloads the speech model, Parakeet Ultra (about 630 MB), and verifies each file. The model stays in `~/Library/Application Support/FluidAudio/Models/`. The setup time depends on your network and on CoreML compilation.
 
-An installation that used Parakeet TDT v3 keeps dictating with it while Parakeet Ultra downloads in the background, then switches automatically. Nothing deletes the old `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml` folders in that location; you can delete them by hand once Settings shows Parakeet Ultra.
+An installation that used Parakeet TDT v3 keeps dictating with it while Parakeet Ultra downloads in the background, then switches automatically. The old `parakeet-tdt-0.6b-v3` and `parakeet-tdt-0.6b-v3-coreml` folders stay in that location. Once Parakeet Ultra is in use, Settings offers to delete them; SottoASR never deletes them without your confirmation.
 
 ### Build for Production
 

@@ -89,6 +89,12 @@ export interface Settings {
 	audio_retention_days: number;
 }
 
+/** A speech model that earlier releases used and that is still on disk. */
+export interface PreviousModel {
+	name: string;
+	size_bytes: number;
+}
+
 export interface ModelStatus {
 	initializing?: boolean;
 	error?: string | null;
@@ -101,6 +107,8 @@ export interface ModelStatus {
 	integrity_warning?: string | null;
 	/** Set while an earlier speech model serves: the newer one is downloading, or could not be loaded. */
 	notice?: string | null;
+	/** Set while the previous speech model is on disk and no longer serves. Settings offers to delete it. */
+	previous_model?: PreviousModel | null;
 }
 
 // ---- Recording commands ----
@@ -282,6 +290,11 @@ export function downloadModel(): Promise<void> {
 /** Replace speech-model files that fail verification. Downloads up to about 630 MB. */
 export function redownloadSpeechModel(): Promise<void> {
 	return invoke("redownload_speech_model");
+}
+
+/** Delete the previous speech model's folders. Resolves to the bytes freed. */
+export function deletePreviousSpeechModel(): Promise<number> {
+	return invoke("delete_previous_speech_model");
 }
 
 export function completeSetup(): Promise<SetupResult> {

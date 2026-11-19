@@ -31,6 +31,10 @@ impl Drop for PreparationClaim {
 /// Set while the current speech model downloads behind a loaded previous one.
 static UPGRADING: AtomicBool = AtomicBool::new(false);
 
+/// Set while a confirmed deletion of the previous speech model holds the
+/// preparation slot. Like the upgrade's download, it loads nothing.
+static DELETING_PREVIOUS: AtomicBool = AtomicBool::new(false);
+
 /// How long a finished background upgrade waits for a dictation to end
 /// before it leaves the switch to the next start.
 const UPGRADE_IDLE_WAIT: std::time::Duration = std::time::Duration::from_secs(600);
@@ -65,11 +69,15 @@ pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus,
     let mut status = model::get_model_status();
     let upgrading = UPGRADING.load(Ordering::SeqCst);
     status.loaded = state.is_model_loaded.load(std::sync::atomic::Ordering::SeqCst);
-    // A background upgrade is not "loading": the previous model is serving.
+    // A background upgrade and a deletion are not "loading": a model serves.
     status.initializing = state.asr_initializing.load(Ordering::SeqCst)
-        || (PREPARING.load(Ordering::SeqCst) && !upgrading);
+        || (PREPARING.load(Ordering::SeqCst) && !upgrading && !DELETING_PREVIOUS.load(Ordering::SeqCst));
     status.error = state.asr_init_error.lock().unwrap_or_else(|e| e.into_inner()).clone();
     status.notice = model::speech_notice(upgrading);
+    // The previous model is unused only while the current one is in memory.
+    if !status.loaded || status.initializing {
+        status.previous_model = None;
+    }
     Ok(status)
 }
 
@@ -139,6 +147,35 @@ pub async fn redownload_speech_model(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     redownload(&state, &app, model::replace_failing_models, MODELS).await
+}
+
+/// User-confirmed deletion of the previous speech model, which stays on disk
+/// as a fallback after the switch to the current one. Returns the bytes
+/// freed. It does not take the engine lock, so dictation is not held up.
+#[tauri::command]
+pub async fn delete_previous_speech_model(state: State<'_, AppState>) -> Result<u64, String> {
+    delete_previous(&state, model::delete_previous_speech_model).await
+}
+
+async fn delete_previous(
+    state: &AppState,
+    delete: impl FnOnce() -> Result<u64, String> + Send + 'static,
+) -> Result<u64, String> {
+    // Loading, the background upgrade and the re-download hold this slot, and
+    // only they select the previous model. None runs during the deletion.
+    let claim = PreparationClaim::take()?;
+    DELETING_PREVIOUS.store(true, Ordering::SeqCst);
+    let deleted = if state.is_model_loaded.load(Ordering::SeqCst) && !state.asr_initializing.load(Ordering::SeqCst) {
+        tokio::task::spawn_blocking(delete).await
+            .map_err(|error| format!("Deleting the previous speech model stopped: {error}"))
+            .and_then(|deleted| deleted)
+    } else {
+        Err("Speech recognition is not loaded. Load it, then delete the previous model.".into())
+    };
+    // The slot is free before the flag clears, so no status read sees "loading".
+    drop(claim);
+    DELETING_PREVIOUS.store(false, Ordering::SeqCst);
+    deleted
 }
 
 async fn initialize(
@@ -598,5 +635,27 @@ mod tests {
         assert!(state.is_model_loaded.load(Ordering::SeqCst));
         assert!(!state.asr_initializing.load(Ordering::SeqCst));
         assert!(state.asr_init_error.lock().unwrap().is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[serial_test::serial]
+    async fn deleting_the_previous_model_needs_a_loaded_engine_and_excludes_loading() {
+        let state = loaded_state("unused");
+        let freed = delete_previous(&state, || {
+            // A load that starts now could fall back to the model being deleted.
+            PreparationClaim::take().map(|_| 0).or(Ok(7))
+        }).await;
+        assert_eq!(freed, Ok(7), "loading is refused during the deletion");
+        assert!(!DELETING_PREVIOUS.load(Ordering::SeqCst));
+
+        // While something else prepares or loads, nothing is deleted.
+        let loading = PreparationClaim::take().unwrap();
+        assert!(delete_previous(&state, || panic!("nothing may be deleted")).await.is_err());
+        drop(loading);
+
+        state.is_model_loaded.store(false, Ordering::SeqCst);
+        let error = delete_previous(&state, || panic!("nothing may be deleted")).await.unwrap_err();
+        assert!(error.contains("not loaded"), "{error}");
+        assert!(PreparationClaim::take().is_ok(), "the claim is released");
     }
 }

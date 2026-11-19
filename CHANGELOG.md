@@ -2,6 +2,11 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [Unreleased]
+
+### Added
+- After the switch to Parakeet Ultra, Settings offers to delete the previous speech model, Parakeet TDT v3. An upgraded installation holds it in up to two folders (about 970 MB together). SottoASR asks you to confirm, and it deletes the files only while Parakeet Ultra is in use and its files pass the check. After the deletion, SottoASR cannot go back to Parakeet TDT v3 if Parakeet Ultra fails to load.
+
 ## [0.12.0] — 2026-11-19
 
 Parakeet Ultra is the new speech model, and the findings of the [November 2026 application review](https://github.com/juanqui/sottoasr/blob/main/docs/audit/2026-11-19-application-review.md) are fixed.

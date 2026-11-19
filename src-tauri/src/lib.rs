@@ -80,6 +80,7 @@ pub fn run() {
             commands::setup::get_model_status,
             commands::setup::init_asr,
             commands::setup::redownload_speech_model,
+            commands::setup::delete_previous_speech_model,
             commands::vocabulary::get_vocabulary_status,
             commands::vocabulary::prepare_vocabulary_model,
             commands::setup::download_model,
