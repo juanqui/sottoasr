@@ -2,6 +2,30 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [Unreleased]
+
+SottoASR can use Amazon Bedrock in place of the local AI cleanup model. This engine is optional and off by default: SottoASR stays local by default.
+
+### Added
+- An optional cloud engine for AI cleanup, AWS Bedrock. In Settings → Dictation → Transcript cleanup, select "AWS Bedrock" in place of "On this Mac". Then select an AWS profile from `~/.aws/config` or `~/.aws/credentials`, a Region and one of four models: Claude Haiku 5.5 (the default), Claude Sonnet 5.5, Claude Opus 5.5 or GPT-6.2 Sol. SottoASR stores no AWS credentials: the AWS SDK reads your AWS files, as for AWS Transcribe.
+- In this mode, SottoASR sends to Amazon Bedrock only the parts of a dictation text that cleanup can change, after the dictation ends. It sends nothing when a text has nothing to clean. It never sends audio, History, your vocabulary words or your replacement rules. A kept recording that you reprocess is cleaned in the same way. AWS bills your account for the tokens. Amazon Bedrock does not give the text to the model provider. For GPT-6.2 Sol, AWS can keep text that its abuse classifier flags for up to 30 days.
+- SottoASR uses the inference profile of the geography of your Region when AWS has one for the model, for example `us.` in `us-west-2` or `eu.` in `eu-central-1`. Then AWS processes the text in that geography. If AWS has no such profile, SottoASR uses the global profile, and AWS can process the text in any commercial AWS Region. Settings shows the inference profile and where AWS processes the text before you save.
+- "Test connection" in Settings sends one fixed sentence to Amazon Bedrock with the values in the window, before you save. It shows the time, the model and the Region, or an error that tells you what to fix, for example a missing permission or an expired sign-in.
+- SottoASR examines each change that the cloud model proposes, as it does for the local model. Thus the model can only remove words. If one request fails, its part of the text stays as you said it. If the connection or the credentials fail, SottoASR pastes the dictation without cleanup. After you sign in again or repair your AWS files, the next dictation uses the new credentials. A restart is not necessary.
+
+### Changed
+- With AWS Bedrock selected, no cleanup sidecar starts and no cleanup model is in memory. When you save AWS Bedrock, SottoASR stops the local cleanup model. When you go back to "On this Mac", SottoASR prepares the local model again.
+- Settings → Advanced → Local models can remove the local cleanup model while AWS Bedrock is in use. "Remove cleanup model" is unavailable only while AI cleanup is on with the local engine.
+- Settings → Advanced → Local models says what leaves your Mac with the saved engines. With AWS Bedrock in use, it says "AI cleanup uses AWS Bedrock. SottoASR sends dictation text to AWS."
+- When a request to AWS Transcribe or AWS Bedrock fails, the log has the causes of the error only. It no longer has the debug text of the AWS SDK error, which can contain the body of an answer.
+- With AWS Bedrock, the status area at the top of Settings shows "AWS Bedrock" for AI cleanup, and it does not show "Repair cleanup runtime".
+- The text below "AI transcript cleanup" is now "Accepted cleanup is applied automatically. The original remains in History. Off by default." The speech option "On this Mac" says "Parakeet Ultra. The audio stays on this Mac." The setup window says "Audio and text stay on your Mac unless you choose a cloud engine". The About window names Amazon Bedrock with the AWS SDK for Rust.
+- The documents and the website name the two optional cloud engines: AWS Transcribe for speech and AWS Bedrock for AI cleanup. In the default configuration, no audio or text leaves your Mac.
+
+### Infrastructure
+- One new crate, `aws-sdk-bedrockruntime` (Apache-2.0), the Amazon Bedrock client of the AWS SDK for Rust. It uses the HTTP stack and the `ring` TLS provider that the app already links. `THIRD_PARTY_LICENSES` lists it.
+- AWS Transcribe and AWS Bedrock use the same code for the AWS profile list, the SDK configuration and the reading of an SDK error, in the new module `src-tauri/src/aws/`.
+
 ## [0.13.0] — 2026-11-20
 
 SottoASR can use Amazon Transcribe in place of the local speech model. This engine is optional and off by default: SottoASR stays local by default.

@@ -4,20 +4,21 @@ THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
 SottoASR incorporates third-party software components listed below.
 Generated: 2026-03-22
 Edited: 2026-11-20. Entries for the AWS SDK for Rust and its HTTP stack were
-added. On 2026-11-19, entries for packages that no longer ship were removed.
-The versions of the added packages are as of 2026-11-20. The versions of the
+added, for AWS Transcribe and then for AWS Bedrock (aws-sdk-bedrockruntime).
+On 2026-11-19, entries for packages that no longer ship were removed. The
+versions of the added packages are as of 2026-11-20. The versions of the
 other packages are as of 2026-03-22.
 
 
 LICENSE SUMMARY
 ------------------------------------------------------------------------------
-Total packages: 691 (637 Rust, 54 JavaScript)
+Total packages: 692 (638 Rust, 54 JavaScript)
 
   License                                                 Count
   ------------------------------------------------------- -----
   (MIT OR Apache-2.0) AND Unicode-3.0                         1
   0BSD OR MIT OR Apache-2.0                                   1
-  Apache-2.0                                                 35
+  Apache-2.0                                                 36
   Apache-2.0 AND MIT                                          1
   Apache-2.0 WITH LLVM-exception                              1
   Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT        15
@@ -150,6 +151,11 @@ aws-runtime 1.10.4
   License: Apache-2.0
   Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
   Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-sdk-bedrockruntime 1.157.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/awslabs/aws-sdk-rust
 
 aws-sdk-sso 1.122.0
   License: Apache-2.0

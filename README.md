@@ -2,7 +2,7 @@
 
 **Local-first, privacy-first speech-to-text for macOS.**
 
-Press a hotkey, speak, and text appears at your cursor. By default, speech recognition runs locally through CoreML, optional cleanup uses MLX on the GPU, and your recordings stay on this Mac. An optional cloud engine, [AWS Transcribe](#aws-transcribe-optional), works only after you turn it on.
+Press a hotkey, speak, and text appears at your cursor. By default, speech recognition runs locally through CoreML, optional cleanup uses MLX on the GPU, and your recordings stay on this Mac. Two optional cloud engines, [AWS Transcribe](#aws-transcribe-optional) for speech and [AWS Bedrock](#aws-bedrock-optional) for AI cleanup, work only after you turn them on.
 
 <!-- ![SottoASR screenshot](docs/images/screenshot.png) -->
 
@@ -18,11 +18,11 @@ Press a hotkey, speak, and text appears at your cursor. By default, speech recog
 - **Transcription history** -- browse, search, copy, export and delete past transcriptions, with optional retention periods
 - **Recording recovery** -- an interrupted dictation keeps its audio, and History offers to reprocess a recording of 15 seconds or more
 - **Personal vocabulary** -- recognize saved words using audio evidence, plus exact spelling replacements. Works with AI off.
-- **Optional AI cleanup** -- remove clear fillers and accidental repeats locally with MiniCPM5 2B. The original stays in History. Off by default.
+- **Optional AI cleanup** -- remove clear fillers and accidental repeats. By default it runs on this Mac with MiniCPM5 2B. The original stays in History. Off by default.
 - **Onboarding flow** -- guided first-launch setup with automatic model download and progress
 - **Dark and light appearance** -- follows the macOS setting
 - **Local by default** -- powered by FluidAudio (CoreML/Apple Neural Engine) with the Parakeet Ultra model
-- **Optional cloud engine** -- [AWS Transcribe](#aws-transcribe-optional) with your own AWS account, for Macs with little free memory. Off by default.
+- **Optional cloud engines** -- [AWS Transcribe](#aws-transcribe-optional) for speech and [AWS Bedrock](#aws-bedrock-optional) for AI cleanup, with your own AWS account, for Macs with little free memory. Both are off by default.
 
 ## Requirements
 
@@ -30,8 +30,8 @@ Press a hotkey, speak, and text appears at your cursor. By default, speech recog
 - **Apple Silicon** (M1 or later) -- required for Neural Engine acceleration
 - About 630 MB of disk space for the speech model, which onboarding downloads automatically
 - Optional acoustic vocabulary: about 103 MB, prepared when you save your first words
-- Optional AI cleanup: about 1.4 GB for the cleanup model, plus its Python runtime. You do not need to install Python. If no native arm64 Python 3.11 to 3.14 is installed, SottoASR downloads its own copy.
-- Optional AWS Transcribe: an AWS account and an internet connection
+- Optional AI cleanup on this Mac: about 1.4 GB for the cleanup model, plus its Python runtime. You do not need to install Python. If no native arm64 Python 3.11 to 3.14 is installed, SottoASR downloads its own copy.
+- Optional AWS Transcribe or AWS Bedrock: an AWS account and an internet connection
 - Microphone permission
 - Accessibility permission (for paste-at-cursor)
 
@@ -83,13 +83,13 @@ SottoASR is a Tauri v2 application with a Rust backend and a Svelte 5 frontend.
 ```
 Hotkey pressed
   → cpal captures the selected or default microphone
-    → (AI cleanup on) warm the resident cleanup model with fixed text
+    → (AI cleanup on this Mac) warm the resident cleanup model with fixed text
     → Disk worker writes a private WAV file and checkpoints it about once per second
 Stop
   → Parakeet Ultra recognizes the full recording through CoreML (or Amazon Transcribe, if you selected it)
     → Optional acoustic vocabulary checks saved words against the audio
       → Exact replacements apply once
-        → Optional cleanup processes bounded text windows in batches of up to 16
+        → Optional cleanup processes bounded text windows in batches of up to 16 (on this Mac, or with Amazon Bedrock if you selected it)
           → Text is pasted at the cursor, or copied
             → History saves the transcript, then the WAV file is deleted
 ```
@@ -108,13 +108,13 @@ On 2026-09-08, on an M4/32 GiB Mac, the same Parakeet TDT v3 weights produced id
 
 ### AI Cleanup
 
-In **Settings → Dictation**, turn on **AI transcript cleanup**. SottoASR then prepares the local runtime and model, and shows the download progress. Then click **Save** to turn cleanup on. The model is the stock `openbmb/MiniCPM5-2B-MLX`, pinned to one revision and verified by SHA-256. The runtime packages come from a bundled lock file with a SHA-256 hash for each package.
+By default, AI cleanup runs on this Mac. In **Settings → Dictation**, turn on **AI transcript cleanup**. SottoASR then prepares the local runtime and model, and shows the download progress. Then click **Save** to turn cleanup on. The model is the stock `openbmb/MiniCPM5-2B-MLX`, pinned to one revision and verified by SHA-256. The runtime packages come from a bundled lock file with a SHA-256 hash for each package. To use Amazon Bedrock in place of the local model, see [AWS Bedrock (optional)](#aws-bedrock-optional).
 
-MiniCPM5 2B proposes filler and accidental-repeat removals. Rust validates the edits and rebuilds the accepted text from the original. Cleanup stops after 60 seconds, or after the first runtime failure, and the rest stays as spoken. Accepted cleanup is used for paste and Copy. The original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
+The cleanup model, MiniCPM5 2B or the model in Amazon Bedrock, proposes filler and accidental-repeat removals. Rust validates the edits and rebuilds the accepted text from the original. Cleanup stops after 60 seconds, or after the first runtime failure, and the rest stays as spoken. Accepted cleanup is used for paste and Copy. The original remains in expanded History. Cancelled or interrupted recordings skip cleanup.
 
-Cleanup is off by default. A failed, rejected, or incomplete window leaves its region unchanged while validated edits elsewhere still apply. Quotes, code, identifiers, dictionary replacements, and vocabulary terms are protected. Reliable non-English detections skip cleanup. Ambiguous fillers and word-choice errors can remain. These safeguards do not prove semantic correctness. Startup and recording-start warmups use fixed text, not your speech. [Bundled smoke tests](benchmarks/llm/release-smoke/README.md) describe the cleanup checks.
+Cleanup is off by default. A failed, rejected, or incomplete window leaves its region unchanged while validated edits elsewhere still apply. Quotes, code, identifiers, dictionary replacements, and vocabulary terms are protected. Reliable non-English detections skip cleanup. Ambiguous fillers and word-choice errors can remain. These safeguards do not prove semantic correctness. With the local engine, startup and recording-start warmups use fixed text, not your speech. With AWS Bedrock, SottoASR sends no warmup. [Bundled smoke tests](benchmarks/llm/release-smoke/README.md) describe the cleanup checks.
 
-If cleanup reports a runtime problem, click **Repair cleanup runtime** at the top of Settings. A repair builds a new runtime beside the old one and replaces the old one only after the new one passes its check.
+If the local engine reports a runtime problem, click **Repair cleanup runtime** at the top of Settings. A repair builds a new runtime beside the old one and replaces the old one only after the new one passes its check.
 
 ## AWS Transcribe (optional)
 
@@ -149,9 +149,60 @@ SottoASR stores no AWS credentials. The AWS SDK for Rust reads your AWS files wh
 
 - One language. SottoASR does not use the automatic language identification of Amazon Transcribe.
 - The wait after a dictation is about a quarter of the length of the dictation, plus about 0.6 s. On a 150 s recording, Amazon Transcribe worked at 4.3 times real time.
-- Vocabulary assistance (**Words you use**) does not run, because it needs the local model. Exact replacements and AI cleanup still run on this Mac. For names and terms, use a custom vocabulary in your AWS account.
+- Vocabulary assistance (**Words you use**) does not run, because it needs the local model. Exact replacements still run on this Mac. AI cleanup runs with the cleanup engine that you select. For names and terms, use a custom vocabulary in your AWS account.
 - AWS Transcribe needs an internet connection. If a request fails, SottoASR shows the error and keeps the recording. If the recording is 15 seconds or longer, you can reprocess it from History. For a shorter one, say the words again.
 - A new installation starts with the local engine, and its setup window downloads Parakeet Ultra (about 630 MB). You can select AWS Transcribe after the setup.
+
+## AWS Bedrock (optional)
+
+SottoASR cleans up text on this Mac by default. If your Mac has little free memory, or you prefer a cloud model, you can use Amazon Bedrock instead. In this mode, SottoASR starts no cleanup sidecar and loads no cleanup model. It sends the parts of a dictation text that cleanup can change to a model in Amazon Bedrock, with your own AWS account. In a test from `us-west-2`, one request took a median of about 0.7 s with Claude Haiku 5.5, Claude Sonnet 5.5 or GPT-6.2 Sol. With Claude Opus 5.5, it took about 1.5 s. AWS Bedrock is off until you turn it on.
+
+### Setup
+
+1. Create or pick an AWS profile in `~/.aws/config` or `~/.aws/credentials`. Profiles with static keys, IAM Identity Center or `credential_process` work, as for AWS Transcribe.
+2. Give the profile the IAM permission `bedrock:InvokeModel` on the inference profile and on the foundation model of the model that you want. For the foundation model, the permission must cover each destination Region of the inference profile. Make sure that your AWS account has access to the model in Amazon Bedrock.
+3. Open **Settings → Dictation**. Under **Transcript cleanup**, select **AWS Bedrock**.
+4. Select the **AWS profile**, the **Region** and the **Model**. Settings then shows the inference profile and where AWS processes the text.
+5. Click **Test connection**. SottoASR sends one fixed sentence to Amazon Bedrock and shows the result.
+6. If **AI transcript cleanup** is off, turn it on. With AWS Bedrock, SottoASR downloads no cleanup model.
+7. Click **Save**.
+
+To go back, select **On this Mac** and click **Save**. If AI cleanup is on, SottoASR first prepares the local model, and downloads it if it is not on disk. While AWS Bedrock is in use, you can remove the local cleanup model in **Settings → Advanced → Local models**.
+
+### What SottoASR sends
+
+- After a dictation ends, SottoASR sends the parts of its text that cleanup can change, over TLS. Each part is a window of at most 100 words. The destination is the Amazon Bedrock runtime endpoint of the selected Region (`bedrock-runtime.<region>.amazonaws.com`).
+- When you reprocess a kept recording in History, SottoASR sends the parts of its text in the same way.
+- **Test connection** sends the fixed sentence "Please um keep this readiness check short."
+- SottoASR sends nothing for a text with nothing to clean, a text in another language, or a cancelled or interrupted recording. It sends no warmup request.
+- SottoASR never sends audio, History, your vocabulary words or your replacement rules.
+
+The inference profile decides where AWS processes the text. SottoASR uses the profile of the geography of your Region when AWS has one for the model. Then the request stays inside that geography. Otherwise SottoASR uses the global profile, and AWS can process the text in any commercial AWS Region. Settings shows which profile it uses before you save.
+
+| Geography | Regions | Models with a profile for the geography |
+|---|---|---|
+| United States (`us.`) | `us-east-1`, `us-east-2`, `us-west-1`, `us-west-2` | All four |
+| Canada (`ca.`) | `ca-central-1` | Claude Haiku 5.5, Claude Sonnet 5.5 |
+| European Union (`eu.`) | `eu-central-1`, `eu-north-1`, `eu-west-1`, `eu-west-2`, `eu-west-3` | Claude Haiku 5.5, Claude Sonnet 5.5, Claude Opus 5.5 |
+| Japan (`jp.`) | `ap-northeast-1`, `ap-northeast-3` | Claude Haiku 5.5, Claude Opus 5.5 |
+| Australia (`au.`) | `ap-southeast-2` | Claude Haiku 5.5, Claude Sonnet 5.5, Claude Opus 5.5 |
+
+Each other combination of Region and model uses the global profile (`global.`). In `ap-northeast-2`, `ap-south-1`, `ap-southeast-1` and `sa-east-1`, all four models use the global profile. The AWS page [cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html) explains the profiles.
+
+SottoASR stores no AWS credentials. The AWS SDK for Rust reads your AWS files when it signs a request. [SECURITY.md](SECURITY.md) lists each network request.
+
+### Cost and data use
+
+- AWS bills your account for the input and output tokens. One request has about 950 input tokens with a Claude model, and about 580 with GPT-6.2 Sol. See [Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/).
+- Amazon Bedrock does not give your text to the model provider. See [how Amazon Bedrock protects your data](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html).
+- For GPT-6.2 Sol, AWS can keep text that its abuse classifier flags for up to 30 days, for automated abuse detection. The three Claude models are not in the list of models with this retention. See [abuse detection](https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html) and [data retention](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html).
+
+### Limits
+
+- AI cleanup is for English, as with the local engine. If SottoASR detects another language, it skips cleanup and sends nothing to AWS.
+- SottoASR examines each change that the model proposes, and it can only remove words. If the model rewrites or adds words, SottoASR rejects the proposal, and the text stays as you said it.
+- The model list is fixed: Claude Haiku 5.5, Claude Sonnet 5.5, Claude Opus 5.5 and GPT-6.2 Sol. You cannot select another model or your own inference profile.
+- AWS Bedrock needs an internet connection. If the connection, the credentials or the permission fail, SottoASR pastes the dictation without cleanup. After you sign in again, the next dictation uses the new credentials. If one request fails or takes more than 10 s, only its part of the text stays as you said it.
 
 ## Settings
 
@@ -160,7 +211,7 @@ Settings has four tabs. A status area above the tabs shows the speech model and 
 | Tab | Contents |
 |---|---|
 | General | Keyboard shortcuts, **Launch at login**, **Check for updates** |
-| Dictation | **Speech recognition**, **Microphone**, **Sound cues**, **AI transcript cleanup**, **Paste automatically**, **Restore clipboard**, **Return to the original app**, **Show recording overlay** |
+| Dictation | **Speech recognition**, **Microphone**, **Sound cues**, **AI transcript cleanup** with its **Cleanup engine**, **Paste automatically**, **Restore clipboard**, **Return to the original app**, **Show recording overlay** |
 | Vocabulary | **Words you use** (up to 100) and **Exact replacements** (up to 200) |
 | Advanced | **Keep transcripts** and **Keep recordings**, permission status, local models, and the AI cleanup strategy |
 
@@ -177,7 +228,7 @@ If a dictation fails or is interrupted, or SottoASR exits during one, History li
 History lists only recordings of 15 seconds or more: to say a short dictation again is faster than to recover it. A shorter recording stays in the recording folder, and the retention setting applies to it. The error message of a failed dictation has a **Show audio** button for its file.
 
 1. Click **Show in Finder** to locate a recording.
-2. Click **Reprocess** to transcribe it with the selected speech engine and save the result in History. With AWS Transcribe, this sends the recording to AWS.
+2. Click **Reprocess** to transcribe it with the selected speech engine and save the result in History. With AWS Transcribe, this sends the recording to AWS. With AI cleanup on and AWS Bedrock selected, this also sends the parts of the text that cleanup can change to Amazon Bedrock.
 3. Copy the recovered transcript when you are ready. Recovery never pastes automatically.
 4. To remove a recording that you do not need, click **Delete audio**.
 
@@ -213,7 +264,7 @@ Restart SottoASR after you grant access.
 
 ## Privacy
 
-By default, speech recognition and cleanup run on this Mac, and SottoASR sends no audio or transcript text over the network. If you turn on [AWS Transcribe](#aws-transcribe-optional), SottoASR sends the audio of each completed dictation to AWS. It does not send History, or the text that AWS returns. SottoASR also connects to GitHub for app updates and for the optional standalone Python, to Hugging Face for models, and to PyPI for the cleanup runtime. [SECURITY.md](SECURITY.md) lists each request and when it happens.
+By default, speech recognition and cleanup run on this Mac, and SottoASR sends no audio or transcript text over the network. If you turn on [AWS Transcribe](#aws-transcribe-optional), SottoASR sends the audio of each completed dictation to Amazon Transcribe. If you turn on [AWS Bedrock](#aws-bedrock-optional), SottoASR sends the parts of a dictation text that cleanup can change to Amazon Bedrock. Neither engine sends History. SottoASR also connects to GitHub for app updates and for the optional standalone Python, to Hugging Face for models, and to PyPI for the cleanup runtime. [SECURITY.md](SECURITY.md) lists each request and when it happens.
 
 ## Tech Stack
 
@@ -224,7 +275,8 @@ By default, speech recognition and cleanup run on this Mac, and SottoASR sends n
 | ASR engine (default) | [FluidAudio](https://github.com/FluidInference/FluidAudio) via the [vendored ASR bridge](src-tauri/vendor/fluidaudio-rs/README.md) (CoreML / Apple Neural Engine) |
 | ASR engine (optional) | [parakeet-rs](https://github.com/altunenes/parakeet-rs) (ONNX Runtime, cross-platform) |
 | Cloud speech engine (optional) | [AWS SDK for Rust](https://github.com/awslabs/aws-sdk-rust) (optional Amazon Transcribe engine) |
-| AI cleanup (optional) | Python sidecar with [MLX](https://github.com/ml-explore/mlx) and mlx-lm |
+| AI cleanup engine (default) | Python sidecar with [MLX](https://github.com/ml-explore/mlx) and mlx-lm |
+| Cloud cleanup engine (optional) | [AWS SDK for Rust](https://github.com/awslabs/aws-sdk-rust) (optional Amazon Bedrock engine) |
 | Audio capture | [cpal](https://github.com/RustAudioGroup/cpal) 0.16 |
 | Build tool | [Vite](https://vitejs.dev/) 8 |
 

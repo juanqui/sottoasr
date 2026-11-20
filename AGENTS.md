@@ -1,6 +1,6 @@
 # SottoASR
 
-Local-first, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor. Local by default. An optional cloud engine, AWS Transcribe, works only after the user turns it on.
+Local-first, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor. Local by default. Two optional cloud engines, AWS Transcribe for speech and AWS Bedrock for AI cleanup, work only after the user turns them on.
 
 ## Tech Stack
 
@@ -12,6 +12,8 @@ Local-first, privacy-first speech-to-text for macOS. Press a hotkey, speak, and 
 | ASR engine (default) | FluidAudio via fluidaudio-rs | CoreML/ANE speech-to-text (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via `asr-parakeet` feature |
 | Cloud speech engine (optional) | AWS SDK for Rust | Optional Amazon Transcribe engine, off by default |
+| Transcript cleanup (optional) | Python sidecar with MLX and mlx-lm | MiniCPM5 2B on the Mac, the default cleanup engine |
+| Cloud cleanup engine (optional) | AWS SDK for Rust (`aws-sdk-bedrockruntime`) | Optional Amazon Bedrock engine for AI cleanup, off by default |
 | Audio capture | cpal 0.16 | Cross-platform audio input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
 
@@ -41,6 +43,7 @@ npm run check
 - **All audio capture and ASR inference in Rust.** Frontend is UI only — it never touches audio data or model inference.
 - **Dual ASR backend** via Cargo feature flags (`asr-fluidaudio` default, `asr-parakeet` optional).
 - **Optional cloud speech engine.** The `speech_engine` setting replaces the local engine with AWS Transcribe. Then no local speech model is in memory.
+- **Optional cloud cleanup engine.** The `cleanup_engine` setting replaces the local cleanup model with AWS Bedrock. One cleanup backend exists at a time. In Amazon Bedrock mode no sidecar starts and no cleanup model is in memory.
 - **Floating overlay window** with Canvas-based waveform (ring buffer + dynamic range normalization).
 - **Clipboard + CGEvent Cmd+V** for paste-at-cursor (requires Accessibility permission).
 - **Local by default.** Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry.

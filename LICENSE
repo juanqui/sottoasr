@@ -69,7 +69,7 @@ parakeet-rs - ONNX Runtime ASR bindings
   Copyright (c) parakeet-rs contributors
   https://github.com/jmg049/parakeet-rs
 
-AWS SDK for Rust - Optional Amazon Transcribe engine
+AWS SDK for Rust - Optional Amazon Transcribe and Amazon Bedrock engines
   License: Apache-2.0
   Copyright (c) Amazon.com, Inc. or its affiliates
   https://github.com/awslabs/aws-sdk-rust
@@ -150,7 +150,7 @@ The majority of dependencies (560+) are dual-licensed MIT OR Apache-2.0.
 Additional license types used by dependencies include:
 
   MIT ................ 205 packages
-  Apache-2.0 ......... 35 packages (sole-licensed)
+  Apache-2.0 ......... 36 packages (sole-licensed)
   BSD-3-Clause ........ 5 packages
   MPL-2.0 ............. 9 packages (file-level copyleft; see note below)
   Unicode-3.0 ........ 18 packages (ICU4X libraries)

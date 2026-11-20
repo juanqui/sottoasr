@@ -2,7 +2,7 @@
 
 ## Overview
 
-SottoASR is a local-first, privacy-first speech-to-text application for macOS. The user presses a global hotkey and speaks. SottoASR then pastes the transcribed text at the cursor. By default, all speech recognition and transcript cleanup runs on the Mac, and no audio or text leaves it. An optional cloud engine, AWS Transcribe, sends the audio of each completed dictation to Amazon Transcribe. It works only after the user selects it in Settings.
+SottoASR is a local-first, privacy-first speech-to-text application for macOS. The user presses a global hotkey and speaks. SottoASR then pastes the transcribed text at the cursor. By default, all speech recognition and transcript cleanup runs on the Mac, and no audio or text leaves it. Two optional cloud engines work only after the user selects them in Settings. AWS Transcribe sends the audio of each completed dictation to Amazon Transcribe. AWS Bedrock sends the parts of a dictation text that cleanup can change to Amazon Bedrock.
 
 ## Tech Stack
 
@@ -14,7 +14,8 @@ SottoASR is a local-first, privacy-first speech-to-text application for macOS. T
 | ASR engine (default) | FluidAudio via the vendored bridge `src-tauri/vendor/fluidaudio-rs` (Swift) | Parakeet Ultra on CoreML and the Apple Neural Engine (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via the `asr-parakeet` feature |
 | Cloud speech engine (optional) | AWS SDK for Rust (`aws-config`, `aws-sdk-transcribestreaming`) | Optional Amazon Transcribe engine, off by default. The SDK reads the AWS profiles of the user. |
-| Transcript cleanup (optional) | Python sidecar `src-tauri/sidecar/llm_cleanup.py` with MLX and mlx-lm | Runs the stock `openbmb/MiniCPM5-2B-MLX` model, pinned by revision |
+| Transcript cleanup (optional) | Python sidecar `src-tauri/sidecar/llm_cleanup.py` with MLX and mlx-lm | The default cleanup engine. Runs the stock `openbmb/MiniCPM5-2B-MLX` model, pinned by revision |
+| Cloud cleanup engine (optional) | AWS SDK for Rust (`aws-sdk-bedrockruntime`) | Optional Amazon Bedrock engine for AI cleanup, off by default. It uses the same AWS profiles and shared code (`src-tauri/src/aws/`) as AWS Transcribe. |
 | Audio capture | cpal 0.16 | Microphone input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
 
@@ -22,9 +23,10 @@ SottoASR is a local-first, privacy-first speech-to-text application for macOS. T
 
 - **Menu bar / tray app only.** No Dock icon. No main window by default. The app lives in the macOS menu bar.
 - **Floating overlay window** appears during recording to show visual feedback (waveform, status). It is a non-activating NSPanel, so it does not take focus from the app that receives the text.
-- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet Ultra), or Amazon Transcribe in cloud mode → optional acoustic vocabulary (local engine only) → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
-- **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for local ASR, sends the request to Amazon Transcribe in cloud mode, and starts the Python sidecar for cleanup.
+- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet Ultra), or Amazon Transcribe in cloud mode → optional acoustic vocabulary (local engine only) → exact replacements → optional cleanup (the local sidecar, or Amazon Bedrock in Amazon Bedrock mode) → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
+- **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for local ASR, sends the request to Amazon Transcribe in cloud mode, starts the Python sidecar for local cleanup, and sends the cleanup requests to Amazon Bedrock in Amazon Bedrock mode.
 - **One speech engine object at a time.** The `speech_engine` setting selects the engine. In cloud mode no local speech model and no vocabulary model is in memory.
+- **One cleanup backend at a time.** The `cleanup_engine` setting selects the backend, and `llm::engine::ensure_running` is the only place that makes one. In Amazon Bedrock mode no sidecar starts and no cleanup model is in memory. Both backends only propose edits. The same validator decides which deletions apply.
 
 ## Package Managers
 

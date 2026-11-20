@@ -6,7 +6,7 @@
         <title>SottoASR — Local-First, Privacy-First Speech-to-Text for macOS</title>
         <meta
             name="description"
-            content="Press a hotkey, speak, and text appears at your cursor. By default, all processing happens on your Mac and no audio or text leaves it. An optional cloud engine, Amazon Transcribe, works only after you turn it on."
+            content="Press a hotkey, speak, and text appears at your cursor. By default, all processing happens on your Mac and no audio or text leaves it. Two optional cloud engines, Amazon Transcribe and Amazon Bedrock, work only after you turn them on."
         />
         <meta name="theme-color" content="#0a0c10" />
 
@@ -147,9 +147,9 @@
                         </div>
                         <h3>Private by Default</h3>
                         <p>
-                            Out of the box, audio capture and transcription
-                            happen on-device, and no audio or text leaves your
-                            Mac. No telemetry, no data collection.
+                            Out of the box, audio capture, transcription and
+                            AI cleanup happen on-device, and no audio or text
+                            leaves your Mac. No telemetry, no data collection.
                         </p>
                     </div>
 
@@ -229,10 +229,12 @@
                         </div>
                         <h3>AI Transcript Cleanup</h3>
                         <p>
-                            Optional MiniCPM cleanup removes clear fillers and
-                            accidental repeats, with checks to preserve your
-                            wording. Off by default, prewarmed when enabled,
-                            and original transcriptions stay in History.
+                            Optional AI cleanup removes clear fillers and
+                            accidental repeats, with checks that preserve your
+                            wording. The local MiniCPM5 2B model is the default.
+                            Amazon Bedrock is an optional cloud engine. Cleanup
+                            is off by default, and the original transcription
+                            stays in History.
                         </p>
                     </div>
 
@@ -398,11 +400,12 @@
                         </div>
                         <h3>Cloud When You Choose</h3>
                         <p>
-                            Short on free memory? Switch to Amazon Transcribe
-                            in Settings: it uses your own AWS account, and
-                            SottoASR then loads no speech model. It is off by
-                            default, and audio goes to AWS only after you turn
-                            it on.
+                            Short on free memory? In Settings, Amazon
+                            Transcribe can do the speech recognition and Amazon
+                            Bedrock can do the AI cleanup, with your own AWS
+                            account. SottoASR then loads no local model for
+                            that step. Both are off by default, and no audio or
+                            text goes to AWS until you turn an engine on.
                         </p>
                     </div>
                 </div>
@@ -429,8 +432,8 @@
                             <ul>
                                 <li>macOS 14 Sonoma or later</li>
                                 <li>Apple Silicon (M1 or later)</li>
-                                <li>About 630 MB for the local speech model; ~1.4 GB more for optional AI cleanup</li>
-                                <li>Optional cloud engine: an AWS account and an internet connection</li>
+                                <li>About 630 MB for the local speech model, and about 1.4 GB more for optional AI cleanup on your Mac</li>
+                                <li>Optional cloud engines: an AWS account and an internet connection</li>
                                 <li>
                                     Accessibility permission (for
                                     paste-at-cursor)
@@ -605,7 +608,7 @@
                         <div class="ack-item">
                             <div class="ack-name">AWS SDK for Rust</div>
                             <div class="ack-desc">
-                                Optional Amazon Transcribe engine
+                                Optional Amazon Transcribe and Amazon Bedrock engines
                             </div>
                             <span class="ack-license">Apache-2.0</span>
                         </div>

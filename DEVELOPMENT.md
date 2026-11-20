@@ -136,18 +136,21 @@ Each entry script first calls `forwardConsoleToLog()` from `src/lib/utils/consol
 | `asr/fluidaudio_backend.rs` | FluidAudio backend (default) |
 | `asr/parakeet_backend.rs` | parakeet-rs ONNX backend (`asr-parakeet`) |
 | `asr/aws_transcribe.rs` | AWS Transcribe engine (optional, cloud): the request, the Regions, the languages, the error text and the connection test |
-| `asr/aws_profiles.rs` | The AWS profile list from `~/.aws/config` and `~/.aws/credentials` |
 | `asr/model.rs` | Speech model preparation, download progress, re-download |
 | `asr/integrity.rs` | SHA-256 checks of the speech and vocabulary models against `model-manifest.json` |
 | `asr/vocabulary.rs` | Vocabulary validation and acoustic candidate selection |
+| `aws/mod.rs` | Shared AWS code of AWS Transcribe and AWS Bedrock: `resolve` (the profile and the Region), `sdk_config` (the SDK configuration), `cause` (the reading of an SDK error) and the credentials text |
+| `aws/profiles.rs` | The AWS profile list from `~/.aws/config` and `~/.aws/credentials` (moved from `asr/aws_profiles.rs`) |
 | `paste/backend.rs` | `PasteBackend` trait and `write_text` |
 | `paste/macos.rs` | CGEvent `Cmd+V` and target app activation |
 | `paste/pasteboard.rs` | `NSPasteboard` snapshot, marked local-only transient write, and write-back |
 | `paste/restore.rs` | The delayed clipboard restore, and the wait for it at quit |
-| `llm/engine.rs` | The Python sidecar process, runtime checks, the hash-locked install, standalone Python, the model pin |
+| `llm/engine.rs` | The `LlmBackend` trait, `ensure_running` (makes the backend of the saved cleanup engine) and `ensure_local` (the local half, for the model load). The Python sidecar process, runtime checks, the hash-locked install, standalone Python, the model pin |
+| `llm/bedrock.rs` | AWS Bedrock cleanup backend (optional, cloud): the Regions, the models, the inference profile routes, the Converse requests, the error text and the connection test |
+| `llm/cleanup-prompts.json` | The prompt pair of the sidecar, for the Amazon Bedrock requests. A test compares its hash with `PROMPT_SHA256`. |
 | `llm/download.rs` | Cleanup model download with progress and a stall check |
-| `llm/cleanup.rs`, `llm/correction.rs`, `llm/validation.rs` | Cleanup prewarm, the window planner, and validation of proposed edits |
-| `commands/` | IPC handlers: recording, transcription (history and CSV), recovery and retention, settings, speech engine (AWS options, connection test, engine change), audio devices, permissions, key capture, setup, vocabulary, llm, overlay |
+| `llm/cleanup.rs`, `llm/correction.rs`, `llm/validation.rs` | Cleanup prewarm (nothing in Amazon Bedrock mode), the window planner, and validation of proposed edits |
+| `commands/` | IPC handlers: recording, transcription (history and CSV), recovery and retention, settings, speech engine (AWS options, connection test, engine change), audio devices, permissions, key capture, setup, vocabulary, AI cleanup (status, local preparation, Bedrock options, connection test, engine change), overlay |
 | `tray/menu.rs` | Tray icon and menu, window opening, Copy Diagnostics |
 | `updater/mod.rs` | App update checks and install |
 
@@ -175,7 +178,7 @@ User releases the key (or presses toggle again)
     → pipeline::complete runs in a spawned task:
       → transcribe_with_deadline (60 s + half the recording length)
         → vocabulary, then exact replacements (dictionary.rs)
-          → optional cleanup (llm/), with a hard 60 s limit
+          → optional cleanup (llm/: the local sidecar, or Amazon Bedrock), with a hard 60 s limit
             → paste or copy (paste/)
               → add_transcription saves History
                 → finish_after_history deletes the WAV
@@ -183,6 +186,8 @@ User releases the key (or presses toggle again)
 ```
 
 Cancel follows the same path. It pastes nothing. With the local engine, it saves the transcript in History as cancelled. With AWS Transcribe, `pipeline::complete` does not transcribe the recording: it saves a cancelled entry without text, then deletes the WAV.
+
+Cleanup uses one backend at a time. `engine::ensure_running` (`llm/engine.rs`) makes the backend of the saved cleanup engine: `LlmEngine` (the Python sidecar) for the local engine, or `BedrockCleanup` (`llm/bedrock.rs`) for AWS Bedrock. In Amazon Bedrock mode no sidecar starts and no cleanup model is in memory. Both backends only propose edits. The same validator decides which deletions apply, and the text is rebuilt from the original.
 
 ## Running in Development
 
@@ -289,6 +294,21 @@ The automated tests never call AWS. They test the settings rules, the profile li
 
 AWS bills the account for each second of audio, also for these tests.
 
+### AWS Bedrock (Manual)
+
+The automated tests never call AWS. They test the settings rules, the inference profile routes, the prompt hash, the answers and the error text with Converse outputs and SDK errors that the tests build. They test the engine selection and the save hook with stand-in backends. To test the cloud cleanup engine against the real service:
+
+1. Use an AWS profile in `~/.aws/config` or `~/.aws/credentials` that has the IAM permission `bedrock:InvokeModel` on the inference profiles and on the foundation models of the four models. The account must have access to the four models in Amazon Bedrock.
+2. Start the app (`cargo tauri dev`, or `open` the built `SottoASR.app`).
+3. In **Settings → Dictation → Transcript cleanup**, select **AWS Bedrock**. Then select the profile, the Region and the model. Make sure that Settings shows the inference profile and where AWS processes the text.
+4. Click **Test connection**. SottoASR sends the fixed sentence "Please um keep this readiness check short." and shows the time, the model and the Region, or the error. Do this for each of the four models.
+5. Turn on **AI transcript cleanup** and click **Save**. Make sure that the log has no line "Spawning LLM sidecar".
+6. Dictate a sentence with a filler, for example "I um think so". The overlay shows "Cleaned", and History keeps the original.
+7. Reprocess a kept recording in History. Cleanup runs through Amazon Bedrock.
+8. To go back to the local engine, select **On this Mac**. If AI cleanup is on, SottoASR prepares the local model first. Then click **Save**.
+
+AWS bills the account for the tokens, also for these tests.
+
 ### Dependency Audits
 
 ```bash
@@ -350,7 +370,7 @@ The `asr-parakeet` backend downloads its model from a pinned commit of `istupako
 
 ### Cleanup Model and Runtime
 
-`src-tauri/src/llm/engine.rs` pins the cleanup model (`SOTTO_MODEL`, `MODEL_REVISION`). The sidecar `src-tauri/sidecar/llm_cleanup.py` holds the same pin and the SHA-256 of each model file. A Rust test fails if the two pins, the runtime versions or the prompt hash do not agree.
+`src-tauri/src/llm/engine.rs` pins the cleanup model (`SOTTO_MODEL`, `MODEL_REVISION`). The sidecar `src-tauri/sidecar/llm_cleanup.py` holds the same pin and the SHA-256 of each model file. A Rust test fails if the two pins, the runtime versions or the prompt hash do not agree. The Amazon Bedrock requests use the same prompt pair from `src-tauri/src/llm/cleanup-prompts.json`. A Rust test computes the hash of that file as the sidecar does, and compares it with `PROMPT_SHA256`. If you change the prompt of the sidecar, change this file too.
 
 The app builds every new runtime (create, sync and Repair) in `llm-venv.staging` beside the installed one. It renames the new runtime into place only after the install and the runtime probe pass. The next preparation removes an unfinished staging folder and moves back a runtime that an interrupted swap left aside. A preparation that finds the runtime Ready removes leftover aside copies. The host Python must be a native arm64 Python 3.11 to 3.14.
 
@@ -455,6 +475,10 @@ A value of `2` means allowed and `0` means denied. If the query cannot read the 
 | Settings opens with "Review Keyboard Shortcuts" at launch | A saved shortcut was not registered | Change the shortcut in Settings → General |
 | "Could not get credentials for AWS profile ..." | The `credential_process` command has no full path, or the sign-in expired | Use the full path of the command in `~/.aws/config`, or sign in again |
 | "AWS profile ... cannot use Amazon Transcribe." | The profile does not have the permission | Give the profile `transcribe:StartStreamTranscription` |
+| "AWS profile ... cannot use ... in Amazon Bedrock." | The profile does not have the permission, or the account has no access to the model | Give the profile `bedrock:InvokeModel` on the inference profile and on the foundation model, and get access to the model in Amazon Bedrock |
+| "Amazon Bedrock does not have ... in ... for this account." | The account cannot use that model in that Region | Select another Region or another model |
+| "Amazon Bedrock has no cleanup model in ..." | The Region of the profile is not in the list, and Settings has no Region | Select a Region in Settings → Dictation → Transcript cleanup |
+| "Amazon Bedrock has too many requests for this account." | AWS throttled the requests of the account | Wait a moment. If it happens often, ask AWS for a higher quota |
 
 ### Useful Paths
 

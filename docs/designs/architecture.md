@@ -1,6 +1,6 @@
 # SottoASR — Architecture & Design Document
 
-- **Version:** 3.1
+- **Version:** 3.2
 - **Date:** 2026-11-20
 - **Status:** Implemented
 - **Author:** juanqui + Claude
@@ -34,13 +34,13 @@
 
 ## 1. Summary
 
-SottoASR is a local-first, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs Parakeet Ultra, moondream's post-training of NVIDIA Parakeet TDT v3, through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. An optional cloud engine, Amazon Transcribe, replaces the local model only when the user selects it in Settings. In the default configuration, audio and transcript text never leave the Mac.
+SottoASR is a local-first, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs Parakeet Ultra, moondream's post-training of NVIDIA Parakeet TDT v3, through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. Two optional cloud engines replace a local model only when the user selects them in Settings: Amazon Transcribe for speech, and Amazon Bedrock for AI cleanup. In the default configuration, audio and transcript text never leave the Mac.
 
 The application lives only in the macOS menu bar (no Dock icon, no main window). It has two dictation modes: **press-and-hold** (hold the hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop). A floating pill overlay with an audio waveform gives feedback during recording.
 
 After Stop, the recording goes through ASR, optional acoustic vocabulary, exact replacements and optional AI cleanup. Then SottoASR pastes or copies the text, and only after that saves it in History. A private WAV file on disk holds each recording until History saves it, so an interrupted dictation can be recovered.
 
-This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md), the [change to Parakeet Ultra](../specs/2026-11-19-parakeet-ultra-default.md) and the [optional AWS Transcribe engine](../specs/2026-11-20-aws-transcribe-cloud-mode.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
+This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md), the [change to Parakeet Ultra](../specs/2026-11-19-parakeet-ultra-default.md), the [optional AWS Transcribe engine](../specs/2026-11-20-aws-transcribe-cloud-mode.md) and the [optional AWS Bedrock cleanup engine](../specs/2026-11-20-bedrock-cleanup.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
 
 ---
 
@@ -56,7 +56,7 @@ primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 
 ### Goals
 
-1. **Privacy-first**: By default, all audio processing happens locally on the user's machine. Audio leaves the Mac only through the cloud engine, and only after the user selects it
+1. **Privacy-first**: By default, all audio and text processing happens locally on the user's machine. Audio or text leaves the Mac only through a cloud engine, and only after the user selects it
 2. **Low latency**: Transcription completes within 1-2 seconds of speech ending
 3. **Two dictation modes**: Press-and-hold for quick dictation, toggle for longer sessions
 4. **Invisible when idle**: Menu bar icon only, no Dock presence, no windows unless recording
@@ -68,7 +68,7 @@ primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 ### Non-Goals
 
 - Real-time streaming transcription (words appearing as spoken) — future enhancement
-- Automatic fallback to a cloud service — the cloud engine runs only when the user selects it. A failure of the local engine never sends audio to the cloud
+- Automatic fallback to a cloud service — a cloud engine runs only when the user selects it. A failure of a local engine never sends audio or text to the cloud
 - Audio file transcription (file import) — future enhancement
 - Speaker diarization — future enhancement
 - Translation — future enhancement
@@ -94,6 +94,7 @@ flowchart TB
         PL["pipeline.rs (start, stop, cancel)"]
         AR["audio/ (cpal capture, WAV writer)"]
         ASR["asr/ (FluidAudio bridge, optional AWS Transcribe)"]
+        CL["llm/ (cleanup planner and validator, optional AWS Bedrock)"]
         PM["paste/ (clipboard, Cmd+V)"]
         TH["History store (transcriptions.json)"]
         TM["tray/ and updater/"]
@@ -116,7 +117,8 @@ flowchart TB
     PL --> AR
     AR -->|WAV file| ASR
     PL --> ASR
-    PL -->|text windows| LLM
+    PL --> CL
+    CL -->|text windows, local engine| LLM
     PL --> PM
     PM --> CB
     PM --> AX
@@ -135,6 +137,7 @@ flowchart TB
 | ASR engine (macOS) | FluidAudio 0.18.3 via the vendored bridge `src-tauri/vendor/fluidaudio-rs` | CoreML/Apple Neural Engine, Parakeet Ultra (600M parameters, 25 languages). Models are pinned to fixed commits and verified by SHA-256. |
 | ASR engine (cross-platform) | parakeet-rs 0.3 (optional) | ONNX Runtime CPU fallback via the `asr-parakeet` feature flag |
 | Cloud speech engine (optional) | Amazon Transcribe streaming through the AWS SDK for Rust | Off by default. For Macs with little free memory: in this mode no local speech model is in memory. See [Cloud Speech Engine](#cloud-speech-engine-aws-transcribe). |
+| Cloud cleanup engine (optional) | Amazon Bedrock Converse API through the AWS SDK for Rust | Off by default. In this mode no sidecar starts and no cleanup model is in memory. The validator of the local engine checks every proposal. See [Cloud Cleanup Engine](#cloud-cleanup-engine-aws-bedrock). |
 | Audio capture | cpal 0.16 | Audio input in Rust. Version 0.16 holds a stream weakly in its disconnect listener. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped. |
 | Recording storage | Private WAV file per recording | A crash or a failed transcription keeps the audio for recovery |
 | One stop path | `pipeline.rs` | Hotkeys, IPC and tests drive the same functions. Tauri effects go through the `PipelineEvents` trait. |
@@ -143,7 +146,7 @@ flowchart TB
 | Storage | JSON files with atomic, owner-only writes (`persistence.rs`) | Settings and history survive a crash during a write |
 | Hotkeys | tauri-plugin-global-shortcut | System-wide shortcuts. Push-to-talk release is polled with `CGEventSourceKeyState`. |
 | Overlay | tauri-nspanel | A non-activating NSPanel does not take focus from the target app |
-| AI cleanup | Python sidecar with mlx-lm, stock `openbmb/MiniCPM5-2B-MLX` | Runs on the GPU through MLX. Rust validates every proposed edit. |
+| AI cleanup (default engine) | Python sidecar with mlx-lm, stock `openbmb/MiniCPM5-2B-MLX` | Runs on the GPU through MLX. Rust validates every proposed edit. |
 | App type | Menu bar only (LSUIElement) | Standard pattern for dictation apps |
 
 ### Alternatives Considered and Rejected
@@ -173,7 +176,8 @@ flowchart TB
 | ASR (optional) | `parakeet-rs` | 0.3 | Parakeet TDT inference via ONNX Runtime (`asr-parakeet`) |
 | Audio capture | `cpal` | 0.16 | Microphone input |
 | Resampling | `rubato` | 0.16 | Resample to 16 kHz, for AWS Transcribe and `asr-parakeet` |
-| Cloud speech (optional) | `aws-config`, `aws-sdk-transcribestreaming` | 1.13 / 1.129 | AWS profiles and credentials, the Amazon Transcribe streaming client |
+| Cloud speech (optional) | `aws-config`, `aws-sdk-transcribestreaming` | 1.13 / 1.129 | AWS profiles and credentials for both cloud engines, the Amazon Transcribe streaming client |
+| Cloud cleanup (optional) | `aws-sdk-bedrockruntime` | 1.157 | The Amazon Bedrock runtime client (Converse API) |
 | HTTPS for the AWS SDK | `aws-smithy-http-client` | 1.5 | rustls with the `ring` provider, which the app already links |
 | Audio encoding | `hound` | 3.5 | WAV file read/write |
 | Global shortcuts | `tauri-plugin-global-shortcut` | 2.x | System-wide hotkey registration |
@@ -214,6 +218,8 @@ The cleanup sidecar runs `mlx` 0.32.2, `mlx-lm` 0.31.3, `transformers` 5.3.0 and
 | Manifest | `model-manifest.json`, the SHA-256 and size of each speech and vocabulary model file |
 | Generation | A counter for each recording. A late key release or timer cannot stop a newer recording. |
 | Cloud mode | `speech_engine` is `aws_transcribe`. Amazon Transcribe replaces the local speech model. |
+| Amazon Bedrock mode | The saved `cleanup_engine` is `aws_bedrock`. When cleanup is on, Amazon Bedrock replaces the local cleanup model. |
+| Inference profile | An Amazon Bedrock identifier that routes a request to a model in a set of Regions. A geographic profile (`us.`, `ca.`, `eu.`, `jp.`, `au.`) keeps the request in its geography. A `global.` profile can use any commercial Region. |
 
 ---
 
@@ -252,7 +258,7 @@ flowchart LR
 **Core process (Rust)** handles all sensitive and performance-critical operations:
 - Audio capture and the private WAV file
 - ASR model inference through the Swift bridge, which is linked into the process
-- In cloud mode, the request to Amazon Transcribe. The webviews never connect to AWS.
+- In cloud mode, the request to Amazon Transcribe. In Amazon Bedrock mode, the cleanup requests to Amazon Bedrock. The webviews never connect to AWS.
 - Clipboard writes, the clipboard snapshot and the restore
 - CGEvent posting (simulated paste)
 - Global hotkey registration and the key listener of the shortcut recorder
@@ -261,7 +267,7 @@ flowchart LR
 
 **WebView windows (Svelte)** handle UI only. Components call the typed wrappers in `src/lib/utils/tauri.ts`, which is the only module that calls `invoke`. All UI state comes from commands and from events that Rust emits.
 
-**Python processes** run the cleanup model. The inference sidecar starts with `HF_HUB_OFFLINE=1` and never uses the network. The model download runs in a separate process with the same script. Both start with `python -I`, a cleared environment, `PATH=/usr/bin:/bin` and a fixed `HF_HUB_CACHE`.
+**Python processes** run the local cleanup model. The inference sidecar starts with `HF_HUB_OFFLINE=1` and never uses the network. The model download runs in a separate process with the same script. Both start with `python -I`, a cleared environment, `PATH=/usr/bin:/bin` and a fixed `HF_HUB_CACHE`. In Amazon Bedrock mode, the inference sidecar does not start ([Cloud Cleanup Engine](#cloud-cleanup-engine-aws-bedrock)).
 
 ### Startup
 
@@ -271,7 +277,7 @@ flowchart LR
 4. Register the shortcuts one by one. If one fails, open Settings with the title "SottoASR — Review Keyboard Shortcuts".
 5. Create the hidden overlay panel.
 6. In cloud mode, mark the engine as ready at once: no onboarding, no model preparation. In local mode, if neither the current nor the previous speech model is on disk, open onboarding. Otherwise load ASR in the background. If only the previous model is on disk, the current one then downloads in the background ([section 9](#9-asr-engine-integration)).
-7. If AI cleanup is on, prepare and warm the sidecar in the background. An inconclusive runtime check is tried again after about 16, 30 and 60 seconds.
+7. If AI cleanup is on with the local engine, prepare and warm the sidecar in the background. An inconclusive runtime check is tried again after about 16, 30 and 60 seconds. In Amazon Bedrock mode, the preload returns before the preparation: no sidecar starts and no model loads.
 8. Start the update checker and the retention timer (now, then every 6 hours).
 9. Sync the login item, but only if the settings file loaded.
 10. When the event loop is ready, create the tray icon and open History if recordings wait for recovery.
@@ -324,6 +330,7 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | Speech engine | `get_aws_transcribe_options`, `test_aws_transcribe` |
 | Vocabulary | `get_vocabulary_status`, `prepare_vocabulary_model` |
 | AI cleanup | `get_llm_status`, `prepare_llm_model`, `repair_llm_runtime`, `delete_llm_model` |
+| Cleanup engine | `get_bedrock_cleanup_options`, `test_bedrock_cleanup` |
 | Updates | `check_app_update`, `perform_app_update`, `get_update_status` |
 | Overlay and shell | `overlay_start_drag`, `dismiss_overlay_error`, `get_overlay_snapshot`, `restart_app`, `reveal_recording_audio`, `open_transcription_history` |
 
@@ -349,7 +356,7 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | `asr-init-started`, `asr-init-complete`, `asr-init-error`, `setup-progress` | Speech model preparation and onboarding progress |
 | `model-download-progress` | Every 500 ms during a speech model download |
 | `llm-download-progress` | Every 2 s during the cleanup model download |
-| `llm-preparation-changed` | Cleanup preparation starts or ends |
+| `llm-preparation-changed` | Cleanup preparation starts or ends, or the task of a cleanup engine change ends |
 | `vocabulary-status` | The vocabulary model status changes |
 | `update-available`, `update-up-to-date`, `update-check-error`, `update-download-progress`, `update-installed` | App update checks and installs |
 | `key-captured`, `key-modifier` | The shortcut recorder receives keys from the native key listener |
@@ -380,9 +387,11 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | `history_retention_days` | `0` | Delete history older than N days. 0 keeps it. |
 | `audio_retention_days` | `0` | Delete kept recordings older than N days. 0 keeps them. |
 | `speech_engine` | `local` | `local` (Parakeet Ultra on this Mac) or `aws_transcribe` |
-| `aws_transcribe` | `language` `en-US`, no other value | `profile`, `region`, `language` and `vocabulary_name` of the cloud engine. The file omits a key that has no value. |
+| `aws_transcribe` | `language` `en-US`, no other value | `profile`, `region`, `language` and `vocabulary_name` of the cloud speech engine. The file omits a key that has no value. |
+| `cleanup_engine` | `local` | `local` (MiniCPM5 2B on this Mac) or `aws_bedrock`. `llm_cleanup_enabled` still turns cleanup on and off. |
+| `aws_bedrock` | `model` `haiku-5.5`, no other value | `profile`, `region` and `model` (`haiku-5.5`, `sonnet-5.5`, `opus-5.5` or `gpt-6.2-sol`) of the cloud cleanup engine. The file omits a key that has no value. |
 
-`validate` rejects empty required shortcuts, shortcuts that do not parse, duplicate shortcuts (alternates and Open Settings included), a push-to-talk key that the release poller cannot watch, retention values above 3,650 days, and a microphone name with control characters or more than 256 characters. It also validates the dictionary and the vocabulary. For the cloud engine, it requires a profile when `speech_engine` is `aws_transcribe`. It checks the profile name, the Region, the language and the custom vocabulary name in both modes.
+`validate` rejects empty required shortcuts, shortcuts that do not parse, duplicate shortcuts (alternates and Open Settings included), a push-to-talk key that the release poller cannot watch, retention values above 3,650 days, and a microphone name with control characters or more than 256 characters. It also validates the dictionary and the vocabulary. For the cloud speech engine, it requires a profile when `speech_engine` is `aws_transcribe`. It checks the profile name, the Region, the language and the custom vocabulary name in both modes. For the cloud cleanup engine, it requires a profile when cleanup is on and `cleanup_engine` is `aws_bedrock` ("Choose an AWS profile for AWS Bedrock."). It checks the profile name and the Region of `aws_bedrock` in both modes.
 
 The model no longer has `model_path`, `language` or `max_history`. `persist_settings` still writes them with the fixed values `""`, `"auto"` and `500`, because earlier builds require these keys to parse the file. Without them, a rollback registers no hotkeys.
 
@@ -401,6 +410,8 @@ The model no longer has `model_path`, `language` or `max_history`. `persist_sett
 | `cleanup_suggestion`, `llm_applied` | Fields of earlier versions, still read |
 
 **`ModelStatus`** has `engine`, `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning`, `notice` and `previous_model`. `engine` is `local` or `aws_transcribe`. In cloud mode, `name` is "AWS Transcribe", `loaded` and `downloaded` are true, `path` is none, and `notice` is "SottoASR sends each dictation to Amazon Transcribe in (region) with the AWS profile (name)." In local mode, the warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3. `previous_model` (`name`, `size_bytes`) is set while Parakeet TDT v3 is still on disk and Parakeet Ultra is loaded with no file mismatch; the model dashboard then offers to delete it.
+
+**`LlmStatus`** (`get_llm_status`, `prepare_llm_model`, `repair_llm_runtime`) has `enabled`, `busy`, `available`, `unavailable_reason`, `downloaded`, `downloading`, `preparing`, `setup_error`, `loaded`, `model_name`, `model_url`, `download_size_mb`, `model_path`, `last_cleanup_status`, `engine`, `notice` and `cloud_error`. The fields before `engine` keep their meaning in both modes. Their model fields describe the local model, because the Settings window prepares and removes the local model in both modes. Thus `loaded` is true only for a registered sidecar process. `engine` is the saved cleanup engine, `local` or `aws_bedrock`. In Amazon Bedrock mode, `notice` is "SottoASR sends dictation text to Amazon Bedrock in (region) with the AWS profile (name). The model is (model)." `cloud_error` then says why no request can be made, for example "Choose an AWS profile for AWS Bedrock in Settings." In local mode, both are none.
 
 ---
 
@@ -581,11 +592,11 @@ On 2026-11-19, on an M2 Pro with 32 GB and CoreML CPU + Neural Engine, Parakeet 
 
 ### Cloud Speech Engine (AWS Transcribe)
 
-The optional cloud engine sends the recording to Amazon Transcribe instead of loading a local model. It is off by default. The [AWS Transcribe specification](../specs/2026-11-20-aws-transcribe-cloud-mode.md) is the reference: it gives the measurements, the decisions, the error texts and the edge cases.
+The optional cloud speech engine sends the recording to Amazon Transcribe instead of loading a local model. It is off by default. The [AWS Transcribe specification](../specs/2026-11-20-aws-transcribe-cloud-mode.md) is the reference: it gives the measurements, the decisions, the error texts and the edge cases.
 
 **Settings.** `speech_engine` is `local` (default) or `aws_transcribe`. The `aws_transcribe` object holds `profile`, `region`, `language` (default `en-US`) and `vocabulary_name`. The AWS fields are in their own object, because the settings file still has the legacy top-level key `language`. `normalize` trims the three optional strings and turns an empty value into none.
 
-**Profiles, Regions and languages.** `asr/aws_profiles.rs` lists the profiles of `~/.aws/config` and `~/.aws/credentials`, or of the files that `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` name. It uses the parser of the AWS SDK and puts `default` first. `asr/aws_transcribe.rs` holds the Regions of the streaming endpoint table as a constant list. The languages are the language codes of the SDK. The Region in use is `aws_transcribe.region`, or else the Region of the profile. The user selects one language: the engine does not use language identification, because it returned no text for short dictations.
+**Profiles, Regions and languages.** `aws/profiles.rs` lists the profiles of `~/.aws/config` and `~/.aws/credentials`, or of the files that `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` name. It uses the parser of the AWS SDK and puts `default` first. The two cloud engines share this list ([Cloud Cleanup Engine](#cloud-cleanup-engine-aws-bedrock)). `asr/aws_transcribe.rs` holds the Regions of the streaming endpoint table as a constant list. The languages are the language codes of the SDK. The Region in use is `aws_transcribe.region`, or else the Region of the profile. The user selects one language: the engine does not use language identification, because it returned no text for short dictations.
 
 **One engine object at a time.** `AppState.asr_engine` holds one boxed `AsrEngine`. `engine::create_engine(&Settings)` returns `TranscribeEngine` for `aws_transcribe`, else the local engine. `AppState.cloud_speech` records that the installed engine sends audio to a cloud service. In cloud mode no `FluidAudioEngine` exists in the process, and only that type can load Parakeet Ultra or the vocabulary model. Thus no local speech model and no vocabulary model is in memory. `AsrEngine` has no "unload" method: to release the models, the old engine object is dropped, and ARC frees them in the Swift bridge.
 
@@ -608,13 +619,87 @@ The request goes over TLS to `transcribestreaming.<region>.amazonaws.com`, with 
 
 The audio goes after the recording ends, not while the user speaks. Thus a recording that the user cancels never leaves the Mac. The cost is the wait: on a 150 s recording the service worked at 4.3 times real time, so the wait after a dictation is about a quarter of its length, plus about 0.6 s.
 
-**Credentials.** SottoASR stores no AWS credentials. `ProfileFileCredentialsProvider` reads the selected profile only: no environment variables, no instance metadata. The SDK resolves static keys, IAM Identity Center, `credential_process` and assumed roles, and signs the request. A `credential_process` command runs through `/bin/sh` with the environment of the app. An app that Finder starts does not have the `PATH` of the shell, so the command needs its full path. Logs name the profile and the Region, never a key or a token.
+**Credentials.** SottoASR stores no AWS credentials. `aws::sdk_config` gives the SDK a `ProfileFileCredentialsProvider` that reads the selected profile only: no environment variables, no instance metadata. The SDK resolves static keys, IAM Identity Center, `credential_process` and assumed roles, and signs the request. A `credential_process` command runs through `/bin/sh` with the environment of the app. An app that Finder starts does not have the `PATH` of the shell, so the command needs its full path. Logs name the profile and the Region, never a key or a token.
 
 **Errors.** One function maps each SDK error to a sentence for the user, for example "AWS profile (name) cannot use Amazon Transcribe. It needs the permission transcribe:StartStreamTranscription." The pipeline shows the text and keeps the recording, as for a local failure. Section 4.6 of the specification lists each text.
 
 **Cancel.** In cloud mode, `pipeline::complete` does not transcribe a cancelled recording. `save_cancelled` writes a cancelled History entry without text, and the WAV is deleted after History saved the entry. In local mode, a cancelled recording is transcribed and History keeps the text, as before.
 
 **Commands.** `get_aws_transcribe_options` returns the profiles (name and Region), a profile load error, the Regions (code and name) and the language codes. `test_aws_transcribe(options)` sends one second of silence with the values in the Settings window, before Save, through a new client. It returns the Region and the time, or the error text. It does not touch the installed engine.
+
+### Cloud Cleanup Engine (AWS Bedrock)
+
+The optional cloud cleanup engine sends the cleanup windows of a dictation to a model in Amazon Bedrock instead of the local sidecar. It is off by default. The [AWS Bedrock specification](../specs/2026-11-20-bedrock-cleanup.md) is the reference: it gives the measurements, the decisions, the error texts and the edge cases.
+
+**Settings.** `cleanup_engine` is `local` (default) or `aws_bedrock`. `llm_cleanup_enabled` keeps its meaning: cleanup is on or off. The engine is a second choice. The `aws_bedrock` object holds `profile`, `region` (none: the Region of the profile) and `model` (default `haiku-5.5`). `normalize` trims the two strings and turns an empty value into none.
+
+**Shared AWS code.** The `aws` module holds the code that AWS Transcribe and Amazon Bedrock share:
+
+| Item | Content |
+|---|---|
+| `aws/profiles.rs` | `AwsProfile` and `list()`, moved from `asr/aws_profiles.rs` |
+| `aws::resolve(profile, region, profiles, service)` | The selected profile must be in the AWS files. The Region is the one of the settings, else the one of the profile. The errors name the service. |
+| `aws::sdk_config(profile, region, retry)` | rustls with `ring`, `ProfileFileCredentialsProvider` for the selected profile only, and a connection time limit of 10 s |
+| `aws::Cause`, `aws::cause(error)` | What an `SdkError` means: a service error with its code and message, a credentials error, a connection error, or another error |
+| `aws::credentials_text`, `aws::shortened` | The credentials sentences of both engines |
+
+**Regions, models and inference profiles.** `llm/bedrock.rs` holds 17 Regions and four models: Claude Haiku 5.5, Claude Sonnet 5.5, Claude Opus 5.5 and GPT-6.2 Sol. Each model accepts only requests that name an inference profile. `route(region, model)` returns the geographic profile of the Region if AWS has one for the model, else the `global.` profile:
+
+| Geography | Prefix | Regions | Models |
+|---|---|---|---|
+| United States | `us.` | `us-east-1`, `us-east-2`, `us-west-1`, `us-west-2` | All four |
+| Canada | `ca.` | `ca-central-1` | Haiku 5.5, Sonnet 5.5 |
+| European Union | `eu.` | `eu-central-1`, `eu-north-1`, `eu-west-1`, `eu-west-2`, `eu-west-3` | Haiku 5.5, Sonnet 5.5, Opus 5.5 |
+| Japan | `jp.` | `ap-northeast-1`, `ap-northeast-3` | Haiku 5.5, Opus 5.5 |
+| Australia | `au.` | `ap-southeast-2` | Haiku 5.5, Sonnet 5.5, Opus 5.5 |
+
+The inference profile identifier is the prefix and the model identifier, for example `us.anthropic.claude-haiku-5-5`. A geographic profile keeps the request inside its geography. A global profile lets Amazon Bedrock select any commercial Region. Thus the Region that the user selects decides where AWS processes the text, when AWS has a profile for that. Settings shows the profile and a sentence for the geography before Save, for example "AWS processes the text in the United States." or "AWS can process the text in any commercial AWS Region."
+
+**The backend.** `BedrockCleanup` implements `LlmBackend`, the trait of the sidecar. The planner, the windows, the validator, the deadlines and the status values do not change. `cleanup_batch` sends one Converse request for each window, and all requests of a batch run at the same time. A batch has at most 16 windows, and 16 requests in sequence do not fit the 10 s of a batch. Each request has:
+
+- the inference profile and `maxTokens` 4,096. It has no `temperature`, because all four models reject it.
+- the pinned prompt pair of the sidecar, from `llm/cleanup-prompts.json`. A test proves that the hash of this file is `PROMPT_SHA256`.
+- for a Claude model, `{"output_config": {"effort": "low"}}` in `additionalModelRequestFields`, because cleanup needs no reasoning.
+- a time limit of 10 s, the limit of a local batch.
+
+The backend joins the `text` blocks of the answer and ignores `reasoningContent` blocks. The stop reason `max_tokens`, a missing text, a text longer than 32,000 bytes, throttling or the time limit fails only that window, and its region stays raw. A failure of the credentials, the permission, the request or the connection fails the batch with a sentence for the user. The delivered text is always rebuilt from the source bytes. Thus the model can only cause deletions that the validator authorizes, as the local model can.
+
+The backend builds the SDK client when it is made and keeps it. The SDK retries a request one time. The backend blocks on the requests with the handle of the current Tokio runtime, because the planner already calls a backend on a blocking worker.
+
+**One cleanup backend at a time.** `engine::ensure_running` is the only place that makes a backend. It reads the cleanup engine and the Bedrock options of the saved settings:
+
+| Saved engine | Resident handle | Result |
+|---|---|---|
+| Local | Local and alive | Use it |
+| Local | None, dead, or a Bedrock backend | Drop it. Start the sidecar. |
+| Amazon Bedrock | A Bedrock backend with the same options | Use it |
+| Amazon Bedrock | A Bedrock backend with other options | Drop it. Make a new one. |
+| Amazon Bedrock | The local sidecar | Stop the sidecar. Make a Bedrock backend. |
+
+`ensure_running` also makes a new backend after an error that drops the handle, so a new sign-in works without a restart. `load_locked`, the load of the local model for Settings and app start, calls `ensure_local`, the local half of the factory. It never gets a Bedrock backend. In Amazon Bedrock mode, no path starts the sidecar:
+
+| Path | In Amazon Bedrock mode |
+|---|---|
+| App start preload (`lib.rs`) | Returns before the preparation |
+| Stop-path cleanup and History reprocess (`ensure_running`) | Makes the Bedrock backend |
+| Recording-start prewarm (`prewarm_sidecar`) | Sends nothing. If a local sidecar is resident and no operation runs, it stops the sidecar. |
+| Settings preparation (`prepare_llm_model`, `repair_llm_runtime`) | Runs only when the user asks for the local engine in the window |
+
+**Engine change.** `update_settings` calls `llm::cleanup_settings_saved(app, previous, current)` (`commands/llm.rs`), which replaces `notify_on_cleanup_preference_saved`. It starts a task if cleanup went off, or if the engine or the Bedrock options changed. The task takes `llm_operation`, reads the settings again, and emits `llm-preparation-changed` so that open windows read the status again:
+
+| Saved state | Action |
+|---|---|
+| Cleanup off | Stop the resident backend |
+| Amazon Bedrock | Stop the resident backend. The next cleanup makes the Bedrock backend. |
+| Local, and the previous engine was Amazon Bedrock | Drop the Bedrock backend. Start the preparation of the local model in the background, as app start does. |
+
+A user can prepare the local model in the window while Amazon Bedrock is saved, and then not save. The local sidecar is then resident in Amazon Bedrock mode, until the next recording start or the next cleanup stops it. This is the only time when the setting says Amazon Bedrock and a local cleanup model is in memory.
+
+**Credentials and errors.** As for AWS Transcribe, SottoASR stores no credentials, and the SDK reads the selected profile only. One function maps each cause to a sentence for the user, for example "AWS profile (name) cannot use (model) in Amazon Bedrock. It needs the permission bedrock:InvokeModel and access to the model." No sentence contains the words that `is_zombie_error` looks for. Section 4.6 of the specification lists each text. Logs name the profile, the Region and the model, never a key, a token or dictation text.
+
+**Commands.** `get_bedrock_cleanup_options` returns the profiles (name and Region), a profile load error, the Regions and the models (id and name). Each Region has its code, its name, and for each model the inference profile and the sentence for where AWS processes the text. `test_bedrock_cleanup(options)` sends the fixed sentence "Please um keep this readiness check short." in retype mode through a new backend, with the values in the Settings window, before Save. It returns the Region, the model, the inference profile and the time, or the error text. It does not touch the resident backend.
+
+**Interface.** `settings-cleanup-engine.svelte` in the Dictation tab selects "On this Mac" or "AWS Bedrock". With "AWS Bedrock", it shows the profile, the Region, the model, the route, **Test connection** and the notice. If the user turns cleanup on with AWS Bedrock, no local preparation runs. The model dashboard shows "AWS Bedrock" and hides "Repair cleanup runtime". "Remove cleanup model" is disabled only while cleanup is on with the local engine, so a user of Amazon Bedrock can remove the local model.
 
 ---
 
@@ -625,7 +710,7 @@ The audio goes after the recording ends, not while the user speaks. Thus a recor
 `pipeline::deliver` runs after ASR:
 
 1. Apply exact replacements, unless the capture was interrupted.
-2. Run AI cleanup, if it is on and the capture was not interrupted.
+2. Run AI cleanup with the backend of the saved cleanup engine, if cleanup is on and the capture was not interrupted.
 3. Set `last_transcription`.
 4. Paste or copy the text, if the capture was not interrupted and the text is not empty.
 5. Save the entry in History.
@@ -743,7 +828,7 @@ History is `~/Library/Application Support/com.sottoasr.app/transcriptions.json`.
 
 A shorter recording is not listed, and it does not open History at launch: to say the words again is faster than to recover them. Its WAV stays in `recordings/`, and `enforce_retention` removes it with the other recordings. This rule also applies to a dictation that failed, for example because Amazon Transcribe did not answer. The error card of the overlay has **Show audio** for that file.
 
-- **Reprocess** transcribes the WAV with `transcribe_with_deadline` and the installed engine, runs cleanup if it is on, and saves the result in History. In cloud mode, this sends the recording to Amazon Transcribe. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
+- **Reprocess** transcribes the WAV with `transcribe_with_deadline` and the installed engine, runs cleanup if it is on, and saves the result in History. In cloud mode, this sends the recording to Amazon Transcribe. In Amazon Bedrock mode, cleanup sends the text windows to Amazon Bedrock. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
 - **Show in Finder** reveals the WAV.
 - **Delete audio** deletes the WAV and its receipt.
 - Older recordings in the system temporary folder are copied into `recordings/`. The originals are not changed. If a legacy copy still exists when a recording is deleted, a tombstone receipt stops the next scan from importing it again.
@@ -846,6 +931,14 @@ The History window (680 × 760) shows 50 entries per page, newest first, with a 
 | Quit during setup or a repair | The next preparation removes the unfinished build in `llm-venv.staging` and moves back a runtime that was left aside. A preparation that finds the runtime Ready removes leftover aside copies. |
 | Cleanup model download makes no progress for 120 s | The download stops with an error |
 | No native arm64 Python 3.11 to 3.14 installed | A pinned standalone Python is downloaded and verified. A partial download that a quit left behind is removed. |
+| Amazon Bedrock mode: the credentials, the permission, the request or the connection fails | The batch fails with the error text. The dictation is pasted without cleanup. The next cleanup makes a new backend, so a new sign-in works without a restart. |
+| Amazon Bedrock mode: one window is throttled, stops at `max_tokens`, has no text, or passes its 10 s limit | Only that window stays raw. The other windows apply. |
+| Amazon Bedrock mode: the profile is not in the AWS files, or the Region of the profile is not in the list | `cloud_error` is set and the status is "Unavailable". The model dashboard shows "Needs attention". |
+| Amazon Bedrock mode: start offline | The app starts. A cleanup fails with the connection text, and the dictation is pasted without cleanup. |
+| The cloud model rewrites or adds words | The validator rejects the proposal. The text stays as it was. |
+| A dictation with nothing to clean, or in another language | No window is sent. Nothing goes to AWS. |
+| Switch to Amazon Bedrock during a local cleanup | The save task waits for `llm_operation`. The cleanup ends locally, then the task stops the sidecar. |
+| The user prepares the local model in Settings while Amazon Bedrock is saved, and does not save | The sidecar stays resident until the next recording start or the next cleanup stops it |
 
 ---
 
@@ -864,11 +957,13 @@ sottoasr/
 │   │   ├── hotkeys/manager.rs      # Shortcuts, overlay panel, TauriEvents adapter
 │   │   ├── audio/                  # Capture, WAV writer, cues, resampling
 │   │   ├── asr/                    # Engines, model preparation, integrity
-│   │   │   ├── aws_transcribe.rs   # AWS Transcribe engine (optional, cloud)
-│   │   │   └── aws_profiles.rs     # AWS profile list
+│   │   │   └── aws_transcribe.rs   # AWS Transcribe engine (optional, cloud)
+│   │   ├── aws/                    # Shared AWS code: profile list, SDK configuration, error reading
 │   │   ├── paste/                  # Paste, pasteboard snapshot and restore
-│   │   ├── llm/                    # Cleanup sidecar, download, planner, validation
+│   │   ├── llm/                    # Cleanup backends, download, planner, validation
+│   │   │   └── bedrock.rs          # AWS Bedrock cleanup backend (optional, cloud)
 │   │   ├── commands/               # IPC handlers
+│   │   │   ├── llm.rs              # Cleanup status and preparation, Bedrock options and test, engine change
 │   │   │   └── speech.rs           # AWS options, connection test, engine change
 │   │   ├── tray/, updater/         # Menu bar and updates
 │   │   └── state.rs, models.rs, persistence.rs, dictionary.rs, process.rs, relaunch.rs
@@ -896,6 +991,7 @@ sottoasr/
 | History | Delete and clear remove audio and receipts. Retention removes only expired entries, measures from the save, keeps interrupted audio and never touches the active recording. A deleted legacy recording is not imported again. |
 | Cleanup | The lock and the sidecar pins agree. Every lock entry has a hash, and the install requires hashes. A drifted runtime is stale. Repair replaces a runtime whose interpreter link is broken. A stalled download fails after the stall limit. Dispatch stops on a transport failure and on the budget. Repeated number words stay. |
 | AWS Transcribe | Settings defaults and rules, the profile list from sample files, the audio source, the error text from built SDK errors, the engine selection and change, cancel in cloud mode. No test calls AWS. |
+| AWS Bedrock | Settings defaults and rules, each inference profile route, the prompt hash and the request text, each answer and each error text from built Converse outputs and SDK errors, the engine selection with stand-in backends, the save hook. No test calls AWS. |
 
 ### Other Tests
 
@@ -927,6 +1023,7 @@ PR CI (`.github/workflows/ci.yml`) runs all of these except the Swift bridge pro
 - [ ] App does not appear in Dock (LSUIElement)
 - [ ] Paste works in: Terminal, VS Code, Chrome, Safari, Slack, Notes
 - [ ] With AWS Transcribe selected, **Test connection** answers, a dictation is transcribed, and a cancelled recording is not sent
+- [ ] With AWS Bedrock selected, **Test connection** answers for each model, a dictation is cleaned, and no cleanup sidecar starts
 
 A development build shares the data folder and the global shortcuts of an installed SottoASR. Quit the installed app before manual tests.
 
@@ -937,9 +1034,12 @@ A development build shares the data folder and the global shortcuts of an instal
 ### Privacy
 
 - **Local by default.** In the default configuration, SottoASR sends no recordings or transcript text over the network. Speech recognition runs in the app process. The cleanup sidecar runs with the Hugging Face offline mode on.
-- **Optional cloud engine.** Only with AWS Transcribe selected, the Rust code sends audio over TLS to the Amazon Transcribe streaming endpoint of the selected Region: the audio of each completed dictation after the recording ends, a kept recording that the user recovers, and one second of silence for a connection test. It never sends a cancelled recording, History, or the text that the service returned. By default, AWS can keep the audio to improve its services, unless an AWS Organizations opt-out policy applies. The Settings notice says so.
-- **AWS credentials.** SottoASR stores none. The AWS SDK for Rust reads the AWS files of the user, and can run a `credential_process` command from them with the rights of the user, as the AWS CLI does.
-- **Network requests.** The app connects to GitHub for update checks and downloads, and for the standalone Python when no Python 3.11 to 3.14 is installed. It connects to Hugging Face for the speech, vocabulary and cleanup models, and to PyPI for the cleanup runtime. With AWS Transcribe selected, it also connects to AWS. [SECURITY.md](../../SECURITY.md) lists each request and when it happens.
+- **Optional cloud speech engine.** Only with AWS Transcribe selected, the Rust code sends audio over TLS to the Amazon Transcribe streaming endpoint of the selected Region: the audio of each completed dictation after the recording ends, a kept recording that the user recovers, and one second of silence for a connection test. It never sends a cancelled recording or History to Amazon Transcribe. By default, AWS can keep the audio to improve its services, unless an AWS Organizations opt-out policy applies. The Settings notice says so.
+- **Optional cloud cleanup engine.** Only with cleanup on and Amazon Bedrock selected, the Rust code sends text over TLS to the Amazon Bedrock runtime endpoint of the selected Region (`bedrock-runtime.<region>.amazonaws.com`, action `bedrock:InvokeModel`). It sends the windows of a dictation text that can change, after the dictation ends, and the same for a recording that the user reprocesses. A connection test sends one fixed sentence. It never sends audio, History, vocabulary words, replacement rules, a cancelled recording, or a text with nothing to clean. AWS processes the text in the geography of the inference profile, or in any commercial Region for a global profile. Settings shows which.
+- **Data use by Amazon Bedrock.** Model providers have no access to the prompts and the completions. For OpenAI models such as GPT-6.2 Sol, Amazon Bedrock keeps traffic that its classifier flags for up to 30 days, for automated abuse detection. The Settings notice says so for GPT-6.2 Sol. AWS bills the input and output tokens.
+- **What comes back from Amazon Bedrock.** A proposal. The validator authorizes deletions only, and the delivered text is rebuilt from the source bytes. A model that follows an instruction in the dictation cannot put its answer into the text.
+- **AWS credentials.** SottoASR stores none, for either cloud engine. The AWS SDK for Rust reads the AWS files of the user, and can run a `credential_process` command from them with the rights of the user, as the AWS CLI does.
+- **Network requests.** The app connects to GitHub for update checks and downloads, and for the standalone Python when no Python 3.11 to 3.14 is installed. It connects to Hugging Face for the speech, vocabulary and cleanup models, and to PyPI for the cleanup runtime. With AWS Transcribe or AWS Bedrock selected, it also connects to AWS. [SECURITY.md](../../SECURITY.md) lists each request and when it happens.
 - **Pinned downloads.** The speech and vocabulary models are pinned to fixed commits and verified against `model-manifest.json`. The cleanup model is pinned to one revision and each file is verified by SHA-256. The runtime installs only wheels whose SHA-256 matches `requirements.lock`. The standalone Python is pinned by URL and SHA-256, and extracted only after the hash matches. App updates are verified against the signing key in the app.
 - **No telemetry.** No analytics, crash reporting or usage tracking.
 - **Clipboard.** The transient transcript is excluded from clipboard history and from Universal Clipboard. Restored items keep their original types, including sensitivity markers.
@@ -962,7 +1062,7 @@ A development build shares the data folder and the global shortcuts of an instal
 - Both workflows pin each action to a full commit SHA. Secrets are declared only in the steps that sign the app.
 - `cargo audit` runs in CI. `src-tauri/.cargo/audit.toml` ignores six `zip` advisories, because `zip` is built only for Windows. CI fails if `cargo tree -i zip --target aarch64-apple-darwin` prints a dependency. The fixed `zip` needs Tauri 2.12, so Tauri stays on 2.11 for now.
 - `npm audit --omit=dev` blocks both workflows.
-- The AWS SDK for Rust and its HTTP stack add 42 crates. `cargo audit` covers them. The SDK client uses `ring`, so the app links no second TLS library.
+- The AWS SDK for Rust and its HTTP stack add 43 crates: 42 for AWS Transcribe, and `aws-sdk-bedrockruntime` (Apache-2.0) for Amazon Bedrock. `cargo audit` covers them. The SDK clients use `ring`, so the app links no second TLS library.
 
 ---
 
@@ -980,7 +1080,7 @@ A development build shares the data folder and the global shortcuts of an instal
 | Bundle size | <15 MB (without model) | Built .app size |
 | Speech model size | 632 MB | Parakeet Ultra CoreML bundles (`model-manifest.json`) |
 
-The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front. With AWS Transcribe, the wait after a dictation is about a quarter of its length, plus about 0.6 s.
+The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front. With AWS Transcribe, the wait after a dictation is about a quarter of its length, plus about 0.6 s. With AWS Bedrock, one cleanup window took a median of about 0.7 s with Claude Haiku 5.5, Claude Sonnet 5.5 or GPT-6.2 Sol, and about 1.5 s with Claude Opus 5.5 (`us-west-2`, 2026-11-20). The windows of a batch go at the same time.
 
 ---
 
@@ -1047,6 +1147,7 @@ These notes record the review passes of the original design (version 1, March 20
 | Audio capture pipeline | ✅ Complete | Microphone selection, private WAV checkpoints, stall watchdog |
 | Paste at cursor | ✅ Complete | CGEvent `Cmd+V`, full clipboard snapshot and restore |
 | AI cleanup | ✅ Complete | Python sidecar, hash-locked runtime, pinned MiniCPM5 2B |
+| AI cleanup — AWS Bedrock (cloud, optional) | ✅ Complete | Off by default. AWS profile of the user, four models, no sidecar and no cleanup model in memory |
 | System tray + menu | ✅ Complete | Copy Last, History, Settings, Updates, Diagnostics, About, Quit |
 | Floating overlay | ✅ Complete | Canvas waveform, busy notice, error card, non-activating panel |
 | Onboarding flow | ✅ Complete | Permissions, model download with progress, error and retry |
