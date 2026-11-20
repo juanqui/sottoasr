@@ -16,7 +16,7 @@ Press a hotkey, speak, and text appears at your cursor. By default, speech recog
 - **Microphone selection** -- use the system default input or select a microphone in Settings
 - **Optional sound cues** -- short system sounds for start, stop, cancel, busy and error (off by default)
 - **Transcription history** -- browse, search, copy, export and delete past transcriptions, with optional retention periods
-- **Recording recovery** -- an interrupted dictation keeps its audio, and History offers to reprocess it
+- **Recording recovery** -- an interrupted dictation keeps its audio, and History offers to reprocess a recording of 15 seconds or more
 - **Personal vocabulary** -- recognize saved words using audio evidence, plus exact spelling replacements. Works with AI off.
 - **Optional AI cleanup** -- remove clear fillers and accidental repeats locally with MiniCPM5 2B. The original stays in History. Off by default.
 - **Onboarding flow** -- guided first-launch setup with automatic model download and progress
@@ -150,7 +150,7 @@ SottoASR stores no AWS credentials. The AWS SDK for Rust reads your AWS files wh
 - One language. SottoASR does not use the automatic language identification of Amazon Transcribe.
 - The wait after a dictation is about a quarter of the length of the dictation, plus about 0.6 s. On a 150 s recording, Amazon Transcribe worked at 4.3 times real time.
 - Vocabulary assistance (**Words you use**) does not run, because it needs the local model. Exact replacements and AI cleanup still run on this Mac. For names and terms, use a custom vocabulary in your AWS account.
-- AWS Transcribe needs an internet connection. If a request fails, SottoASR shows the error and keeps the recording, so that you can reprocess it from History.
+- AWS Transcribe needs an internet connection. If a request fails, SottoASR shows the error and keeps the recording. If the recording is 15 seconds or longer, you can reprocess it from History. For a shorter one, say the words again.
 - A new installation starts with the local engine, and its setup window downloads Parakeet Ultra (about 630 MB). You can select AWS Transcribe after the setup.
 
 ## Settings
@@ -174,6 +174,8 @@ If a speech or vocabulary model file differs from the verified release, dictatio
 
 If a dictation fails or is interrupted, or SottoASR exits during one, History lists the recording for recovery. At launch, SottoASR opens History when recordings wait for recovery. Each row shows the date, the duration and the audio path.
 
+History lists only recordings of 15 seconds or more: to say a short dictation again is faster than to recover it. A shorter recording stays in the recording folder, and the retention setting applies to it. The error message of a failed dictation has a **Show audio** button for its file.
+
 1. Click **Show in Finder** to locate a recording.
 2. Click **Reprocess** to transcribe it with the selected speech engine and save the result in History. With AWS Transcribe, this sends the recording to AWS.
 3. Copy the recovered transcript when you are ready. Recovery never pastes automatically.
@@ -183,7 +185,7 @@ New recordings use private WAV files in `~/Library/Application Support/com.sotto
 
 SottoASR deletes the WAV of a successful dictation only after History saves it. Failed or interrupted operations keep the audio. If the microphone is disconnected or stops sending audio, SottoASR marks the transcript as interrupted, keeps the audio, and pastes nothing. Reprocessed audio remains in the recording folder, and a receipt prevents repeated recovery prompts. Closing History postpones recovery without deleting recordings.
 
-If you quit while SottoASR records or transcribes, a warning asks you to wait. **Quit Anyway** finishes the recording file first, and the next launch offers it for recovery.
+If you quit while SottoASR records or transcribes, a warning asks you to wait. **Quit Anyway** finishes the recording file first. If the recording is 15 seconds or longer, the next launch offers it for recovery.
 
 When you delete a history entry or clear History, SottoASR also deletes the audio kept for those entries. Recovery also copies older `sotto_<UUID>.wav` files from the current user temporary folder without changing the originals.
 

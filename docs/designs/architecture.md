@@ -739,7 +739,9 @@ History is `~/Library/Application Support/com.sottoasr.app/transcriptions.json`.
 
 ### Recording Recovery
 
-`commands/recovery.rs` lists every `sotto_<id>.wav` in `recordings/` that has no completed history entry and no receipt. An interrupted entry does not count as completed. At launch, SottoASR opens History when recordings wait for recovery or when the previous session did not end cleanly.
+`commands/recovery.rs` lists every `sotto_<id>.wav` in `recordings/` that has no completed history entry and no receipt, and that is 15 seconds or longer (`MIN_RECOVERY_DURATION_MS`). An interrupted entry does not count as completed. A file with no readable length is also listed, with its error. At launch, SottoASR opens History when recordings wait for recovery or when the previous session did not end cleanly.
+
+A shorter recording is not listed, and it does not open History at launch: to say the words again is faster than to recover them. Its WAV stays in `recordings/`, and `enforce_retention` removes it with the other recordings. This rule also applies to a dictation that failed, for example because Amazon Transcribe did not answer. The error card of the overlay has **Show audio** for that file.
 
 - **Reprocess** transcribes the WAV with `transcribe_with_deadline` and the installed engine, runs cleanup if it is on, and saves the result in History. In cloud mode, this sends the recording to Amazon Transcribe. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
 - **Show in Finder** reveals the WAV.

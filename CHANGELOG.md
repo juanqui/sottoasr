@@ -15,6 +15,7 @@ SottoASR can use Amazon Transcribe in place of the local speech model. This engi
 - With AWS Transcribe selected, a cancelled recording is not sent to AWS. SottoASR deletes it, and History keeps a cancelled entry without text. With the local engine, History keeps the transcript of a cancelled recording, as before.
 - The documents, the website, the setup window and the About window now say "local by default" in place of "local only". In the default configuration, no audio or text leaves your Mac.
 - Settings → Vocabulary and Settings → Advanced name the speech engine that is in use. With AWS Transcribe, the Vocabulary tab says that vocabulary assistance needs the local model.
+- History offers a recording for recovery only if it is 15 seconds or longer, and SottoASR does not open History at launch for a shorter one. To say a short dictation again is faster than to recover it. The shorter recording stays in the recording folder, and the retention setting applies to it.
 
 ### Infrastructure
 - The AWS SDK for Rust is a new dependency. It adds 42 crates, all from the SDK and its HTTP stack. Each one has the Apache-2.0 license, the MIT license, or both. `THIRD_PARTY_LICENSES` lists them. The SDK uses the `ring` TLS provider that the app already links.

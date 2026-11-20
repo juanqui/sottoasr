@@ -77,8 +77,10 @@ impl RecoverySession {
             .take(32)
             .read_to_end(&mut previous)
             .map_err(|e| e.to_string())?;
-        let notice = (!previous.is_empty() && previous != b"clean\n")
-            .then(|| "SottoASR did not shut down cleanly. Review the saved recordings below. If no recording is listed, no pending audio file was found.".into());
+        let notice = (!previous.is_empty() && previous != b"clean\n").then(|| format!(
+            "SottoASR did not shut down cleanly. Review the saved recordings below. If no recording is listed, no recording of {} seconds or more needs recovery.",
+            MIN_RECOVERY_DURATION_MS / 1000
+        ));
         marker.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
         marker.write_all(b"running\n").map_err(|e| e.to_string())?;
         marker.set_len(8).map_err(|e| e.to_string())?;
@@ -125,6 +127,19 @@ pub struct RecoveryRecording {
     pub duration_ms: Option<u64>,
     pub size_bytes: u64,
     pub error: Option<String>,
+}
+
+/// A shorter recording is not offered for recovery: to say the words again
+/// is faster than to recover them. Its audio stays on disk and follows the
+/// audio retention limit, like every other recording.
+const MIN_RECOVERY_DURATION_MS: u64 = 15_000;
+
+impl RecoveryRecording {
+    /// A recording with no readable length stays in the list, so that the
+    /// user sees its error and can open or delete the file.
+    fn is_offered(&self) -> bool {
+        self.duration_ms.is_none_or(|duration| duration >= MIN_RECOVERY_DURATION_MS)
+    }
 }
 
 /// Reject symlinks and paths outside the designated recording directory.
@@ -521,6 +536,7 @@ fn scan_recordings(
         }
         recordings.push(describe_or_error(&path, id));
     }
+    recordings.retain(RecoveryRecording::is_offered);
     recordings.sort_by(|left, right| {
         right
             .created_at
@@ -897,10 +913,49 @@ mod tests {
     use crate::models::Settings;
     use crate::test_support::{MockAsrEngine, MockAudioCapture, MockPasteBackend};
 
+    /// A recording of 16.75 s, long enough for recovery: 16,000 samples at
+    /// 1 kHz and the trailing silence.
     fn recording(directory: &Path) -> PathBuf {
         let path = directory.join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
-        crate::audio::wav::write_recording_wav(&path, &[0.25; 16000], 16000).unwrap();
+        crate::audio::wav::write_recording_wav(&path, &[0.25; 16000], 1000).unwrap();
         path
+    }
+
+    #[test]
+    fn a_recording_below_the_minimum_length_is_not_offered_and_stays_on_disk() {
+        let durable = tempfile::tempdir().unwrap();
+        let legacy = tempfile::tempdir().unwrap();
+        // The length in milliseconds includes 750 ms of trailing silence.
+        let with_length = |milliseconds: usize| {
+            let path = durable.path().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
+            crate::audio::wav::write_recording_wav(&path, &vec![0.25; milliseconds - 750], 1000).unwrap();
+            path
+        };
+        let short = with_length(2_800);
+        let almost = with_length(14_999);
+        let exact = with_length(15_000);
+        // A file with no readable length: the user must still see it.
+        let unreadable = durable.path().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
+        fs::write(&unreadable, b"not a WAV file").unwrap();
+
+        let offered = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
+
+        let mut ids: Vec<&str> = offered.iter().map(|item| item.id.as_str()).collect();
+        ids.sort_unstable();
+        let mut expected = [id_of(&exact), id_of(&unreadable)];
+        expected.sort_unstable();
+        assert_eq!(ids, expected);
+        assert!(offered.iter().find(|item| item.id == id_of(&unreadable)).unwrap().error.is_some());
+        for kept in [&short, &almost] {
+            assert!(kept.is_file(), "a short recording is not deleted");
+        }
+        // A short recording in the older temporary folder is still copied to
+        // the durable folder, and is not offered there either.
+        let temporary = legacy.path().join(format!("sotto_{}.wav", uuid::Uuid::new_v4()));
+        crate::audio::wav::write_recording_wav(&temporary, &[0.25; 2_000], 1000).unwrap();
+        let offered = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
+        assert_eq!(offered.len(), 2);
+        assert!(durable.path().join(temporary.file_name().unwrap()).is_file());
     }
 
     #[test]
@@ -911,7 +966,7 @@ mod tests {
         let bytes = fs::read(&source).unwrap();
         let first = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
         assert_eq!(first.len(), 1);
-        assert_eq!(first[0].duration_ms, Some(1750));
+        assert_eq!(first[0].duration_ms, Some(16750));
         assert_eq!(fs::read(&first[0].audio_path).unwrap(), bytes);
         let second = scan_recordings(durable.path(), legacy.path(), &[], None).unwrap();
         assert_eq!(second[0].id, first[0].id);
