@@ -2,7 +2,7 @@
 
 All notable changes to SottoASR are documented in this file.
 
-## [Unreleased]
+## [0.14.0] — 2026-11-20
 
 SottoASR can use Amazon Bedrock in place of the local AI cleanup model. This engine is optional and off by default: SottoASR stays local by default.
 

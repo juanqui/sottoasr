@@ -564,7 +564,8 @@ Section 12 has the measured size of the application binary.
 
 ## 12. Implementation Status
 
-Implemented on 2026-11-20. All tasks of section 11 are done.
+Implemented on 2026-11-20. Released in version 0.14.0. All tasks of section
+11 are done.
 
 ### 12.1 Checks
 
