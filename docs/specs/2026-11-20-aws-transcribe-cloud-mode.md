@@ -1,6 +1,6 @@
 # AWS Transcribe as an Optional Cloud Speech Engine
 
-- **Version:** 1.1
+- **Version:** 1.2
 - **Date:** 2026-11-20
 - **Status:** Implemented
 
@@ -746,12 +746,12 @@ Version 1.1 changed these items of version 1.0:
 
 ### 12.8 Not tested
 
-- A dictation in the packaged application in cloud mode, with the hotkey,
-  the microphone and the paste. The real engine ran below
-  `transcribe_with_deadline`. The pipeline tests ran with a stand-in engine.
-- The Settings window with the real backend, and a change of the engine from
-  that window in the running application. `install_engine` ran with the
-  real engines in a test process.
+- A dictation in cloud mode with the hotkey, the microphone and the paste.
+  Section 12.10 has the check of a recorded file in the running application.
+  The pipeline tests ran with a stand-in engine.
+- The Settings page in its own window, and the packaged build. In the check
+  of section 12.10, the page ran in the History window of a development
+  build.
 - IAM Identity Center profiles and profiles that assume a role. No such
   profile was available.
 - Text in languages other than `en-US`.
@@ -767,6 +767,40 @@ Version 1.1 changed these items of version 1.0:
 The setup window of a new installation has no engine choice. The default is
 the local engine, so the setup downloads and loads Parakeet Ultra. The user
 can select AWS Transcribe after the setup.
+
+### 12.10 Check in the running application
+
+Version 1.2 adds this check. A development build of the application
+(`cargo build --no-default-features --features asr-fluidaudio,llm-cleanup`)
+ran with a scratch home folder, shortcuts that no other program uses, and
+two synthetic recordings in its recording folder. Its windows loaded the
+pages from a Vite server that added a throwaway driver script. The script
+clicked the real controls and read the page and the backend. Thus the pages
+ran in the WKWebView of the application, with the real IPC, the real backend
+and the real service.
+
+Two limits apply. No program input can open the Settings window, so the
+script loaded the Settings page in the History window. The build was the
+development build, not the packaged one.
+
+| Step | Result |
+| --- | --- |
+| Start with the local engine. Two recordings wait for recovery | History opens. Parakeet Ultra loads in 21 s |
+| "Reprocess" in History, local engine | "A dark cloud covered the western side of the valley." after 0.2 s |
+| Settings, Dictation tab | "On this Mac" is selected. No AWS field shows |
+| "AWS Transcribe" selected | The profile list has the two profiles of the AWS files. "Test connection" is disabled until a profile is selected |
+| Profile selected | The Region shows "From the profile (us-west-2)" |
+| "Test connection" | "Amazon Transcribe answered in 0.9 s (us-west-2)." The installed engine is still the local one |
+| "Save" | The backend reports the cloud engine after 0.2 s. The log has "ASR backend: AWS Transcribe (cloud); no local speech model is loaded" and "Speech engine changed: AWS Transcribe". The dashboard shows "AWS Transcribe", "Ready" and the notice. The vocabulary status is not supported and not loaded |
+| Vocabulary tab | The sentence about the local speech model shows |
+| "Reprocess" in History, cloud engine | "We are evaluating Quinn for local speech correction." after 1.4 s. The log has "AWS Transcribe: 2.8s of audio in 1.2s (us-west-2, profile sandbox)" |
+| System wired memory, one sample each second | 4,592 to 4,717 MiB while the model loaded. 5,427 MiB one second after the local reprocess. 4,724 MiB one second after Save, then 4,593 to 4,635 MiB |
+| Second start | The log has "Cloud speech engine selected — no speech model to load" and no line about Parakeet Ultra. The settings file has the cloud engine and the profile. History has the two entries. The wired memory stays between 4,537 and 4,668 MiB |
+
+After this check, History got a minimum length of 15 seconds for recovery
+(see the CHANGELOG). The two recordings of this check were 2.8 s and 2.6 s
+long. The rows of section 5 that say that History recovers a failed
+dictation now apply only to recordings of 15 seconds or more.
 
 ## 13. Review Log
 
