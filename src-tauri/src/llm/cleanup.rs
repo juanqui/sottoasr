@@ -15,9 +15,9 @@ use std::time::{Duration, Instant};
 use crate::llm::correction;
 use crate::llm::engine::{
     BatchItem, ensure_running, is_feature_compiled, is_platform_supported,
-    is_responded_timeout, is_zombie_error, kill_orphan,
+    is_responded_timeout, is_zombie_error, kill_orphan, retire,
 };
-use crate::models::{CleanupMode, LlmCleanupStatus};
+use crate::models::{CleanupEngine, CleanupMode, LlmCleanupStatus};
 use crate::state::AppState;
 
 /// Failure-recovery deadline for a blocked sidecar. Normal local cleanup is
@@ -85,10 +85,28 @@ pub async fn prewarm_sidecar(state: &AppState) {
     }
     // Snapshot settings, then release that lock before touching
     // llm_operation (lock-order rule: never hold settings across a generation).
-    let (enabled, mode) = {
+    let (enabled, mode, engine) = {
         let settings = state.settings.lock().await;
-        (settings.llm_cleanup_enabled, settings.llm_cleanup_mode)
+        (settings.llm_cleanup_enabled, settings.llm_cleanup_mode, settings.cleanup_engine)
     };
+    if engine == CleanupEngine::AwsBedrock {
+        // No request for each recording: a cloud model has nothing to warm.
+        // A sidecar that a preparation in Settings left resident stops here,
+        // so that no local cleanup model stays in memory in this mode.
+        if state.llm_loaded.load(Ordering::SeqCst) {
+            if let Ok(_operation) = state.llm_operation.try_lock() {
+                let resident = state.llm_engine.lock().await.take();
+                match resident {
+                    Some(sidecar) if sidecar.bedrock_options().is_none() => {
+                        retire(state, sidecar).await;
+                        log::info!("Stopped the local cleanup sidecar: AWS Bedrock is the cleanup engine");
+                    }
+                    other => *state.llm_engine.lock().await = other,
+                }
+            }
+        }
+        return;
+    }
     if !enabled {
         return;
     }
@@ -317,6 +335,15 @@ async fn sidecar_batch_request(
                 state.llm_pid.store(0, Ordering::SeqCst);
                 state.llm_loaded.store(false, Ordering::SeqCst);
                 log::warn!("LLM cleanup retired the sidecar: {e}");
+                Err(LlmCleanupStatus::Failed { reason: e })
+            } else if llm_back.bedrock_options().is_some() {
+                // Amazon Bedrock refused the whole batch: the credentials,
+                // the permission, the request or the connection. Its client
+                // read the AWS files when it was made, so it goes. The next
+                // cleanup makes a new one, and a repaired sign-in then works
+                // without a restart.
+                drop(llm_back);
+                log::warn!("AWS Bedrock cleanup failed: {e}");
                 Err(LlmCleanupStatus::Failed { reason: e })
             } else {
                 // Typed endpoint decline (e.g. invalid_request, E7): the
@@ -680,5 +707,60 @@ mod tests {
         assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0);
         prewarm_sidecar(&state).await;
         assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0, "never below zero");
+    }
+
+    #[tokio::test]
+    async fn prewarm_sends_nothing_to_a_cloud_engine_and_stops_a_left_over_sidecar() {
+        use crate::models::CleanupEngine;
+        use crate::test_support::{CloudCleanupStandIn, StoppableSidecar};
+        let cloud_settings = Settings { llm_cleanup_enabled: true, cleanup_engine: CleanupEngine::AwsBedrock, ..Settings::default() };
+        let state_with = |resident: Box<dyn LlmBackend>| AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(resident),
+            Box::new(MockPasteBackend::new()),
+            cloud_settings.clone(),
+        );
+
+        // A recording start makes no request to AWS.
+        let cloud = CloudCleanupStandIn::default();
+        let requests = cloud.batches.clone();
+        let state = state_with(Box::new(cloud));
+        begin_prewarm(&state);
+        prewarm_sidecar(&state).await;
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+        assert!(state.llm_engine.lock().await.is_some(), "the cloud backend stays");
+        assert_eq!(state.llm_prewarming.load(Ordering::SeqCst), 0, "count released");
+
+        // A sidecar that a preparation in Settings left resident is stopped.
+        let sidecar = StoppableSidecar::default();
+        let (stopped, batches) = (sidecar.stopped.clone(), sidecar.batches.clone());
+        let state = state_with(Box::new(sidecar));
+        state.llm_loaded.store(true, Ordering::SeqCst);
+        begin_prewarm(&state);
+        prewarm_sidecar(&state).await;
+        assert!(stopped.load(Ordering::SeqCst));
+        assert_eq!(batches.load(Ordering::SeqCst), 0, "the local model gets no sentence");
+        assert!(state.llm_engine.lock().await.is_none());
+        assert!(!state.llm_loaded.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn a_cloud_backend_that_failed_as_a_whole_is_not_used_again() {
+        use crate::models::CleanupEngine;
+        use crate::test_support::CloudCleanupStandIn;
+        let failure = "The credentials of AWS profile \"work\" are not valid or are expired. Sign in again.";
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(Box::new(CloudCleanupStandIn { failure: Some(failure.into()), ..Default::default() })),
+            Box::new(MockPasteBackend::new()),
+            Settings { llm_cleanup_enabled: true, cleanup_engine: CleanupEngine::AwsBedrock, ..Settings::default() },
+        );
+        let result = sidecar_cleanup_batch(&state, vec!["I um agree.".into()], CleanupMode::Retype, Duration::from_secs(5)).await;
+        assert_eq!(result, Err(LlmCleanupStatus::Failed { reason: failure.into() }));
+        // Its client read the AWS files when it was made. The next cleanup
+        // makes a new client, so a repaired sign-in works without a restart.
+        assert!(state.llm_engine.lock().await.is_none());
     }
 }

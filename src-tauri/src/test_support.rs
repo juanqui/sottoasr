@@ -219,6 +219,56 @@ impl LlmBackend for MockLlmBackend {
     }
 }
 
+/// A backend that says it serves Amazon Bedrock with `options`. It makes no
+/// request: each text comes back as its own proposal, or the batch fails
+/// with `failure`.
+#[derive(Default)]
+pub struct CloudCleanupStandIn {
+    pub options: crate::models::AwsBedrockSettings,
+    pub batches: Arc<std::sync::atomic::AtomicUsize>,
+    pub failure: Option<String>,
+}
+
+impl LlmBackend for CloudCleanupStandIn {
+    fn cleanup_batch(&mut self, texts: &[String], _mode: crate::models::CleanupMode) -> Result<Vec<BatchItem>, String> {
+        self.batches.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        match &self.failure {
+            Some(failure) => Err(failure.clone()),
+            None => Ok(texts.iter().map(|text| BatchItem::Proposal(Some(text.clone()))).collect()),
+        }
+    }
+
+    fn request_raw(&mut self, _req: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err("a cloud backend has no model to load".into())
+    }
+
+    fn bedrock_options(&self) -> Option<&crate::models::AwsBedrockSettings> {
+        Some(&self.options)
+    }
+}
+
+/// A stand-in for the local sidecar that records its shutdown and each batch.
+#[derive(Default)]
+pub struct StoppableSidecar {
+    pub stopped: Arc<AtomicBool>,
+    pub batches: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl LlmBackend for StoppableSidecar {
+    fn cleanup_batch(&mut self, texts: &[String], _mode: crate::models::CleanupMode) -> Result<Vec<BatchItem>, String> {
+        self.batches.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(texts.iter().map(|text| BatchItem::Proposal(Some(text.clone()))).collect())
+    }
+
+    fn request_raw(&mut self, _req: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Ok(serde_json::json!({"ok": true}))
+    }
+
+    fn shutdown(&mut self) {
+        self.stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 // ======================== MockPasteBackend ========================
 
 /// Record of a paste operation for test assertion.

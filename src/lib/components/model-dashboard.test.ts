@@ -137,3 +137,27 @@ it('shows the cloud engine as ready, with its notice and without local model act
   expect(card.textContent).toContain('Could not connect to Amazon Transcribe');
   expect(card.querySelectorAll('button')).toHaveLength(0);
 });
+it('shows AWS Bedrock as the cleanup engine, with its notice and without the local repair', async () => {
+  const notice = 'SottoASR sends dictation text to Amazon Bedrock in us-west-2 with the AWS profile work. The model is Claude Haiku 5.5.';
+  // The other fields describe the local model. Its problems must not show in AWS Bedrock mode.
+  cleanup.status = {...cleanup.status!,engine:'aws_bedrock',notice,cloud_error:null,loaded:false,setup_error:'The cleanup runtime is broken.',last_cleanup_status:{kind:'unavailable',detail:{reason:'Choose an AWS profile for AWS Bedrock in Settings.'}}};
+  await render();
+  const card = target.querySelector('[aria-label="AI cleanup model"]')!;
+  expect(card.querySelector('.model-name')?.textContent).toBe('AWS Bedrock');
+  expect(card.querySelector('.model-state.ready')?.textContent).toBe('Ready');
+  expect(card.textContent).toContain('A cloud service. No cleanup model is in memory.');
+  expect(card.textContent).toContain(notice);
+  expect(card.textContent).not.toContain('The cleanup runtime is broken.');
+  expect(card.textContent).not.toContain('Repair cleanup runtime');
+
+  cleanup.status = {...cleanup.status!,cloud_error:'AWS profile work was not found in ~/.aws/config or ~/.aws/credentials.'};flushSync();
+  expect(card.querySelector('.model-state')?.textContent).toBe('Needs attention');
+  expect(card.textContent).toContain('AWS profile work was not found in ~/.aws/config or ~/.aws/credentials.');
+  expect(card.textContent).not.toContain(notice);
+  expect(card.textContent).not.toContain('Repair cleanup runtime');
+
+  cleanup.status = {...cleanup.status!,enabled:false};flushSync();
+  expect(card.querySelector('.model-state')?.textContent).toBe('Off');
+  expect(card.querySelector('.ready')).toBeNull();
+  expect(card.textContent).not.toContain(notice);
+});

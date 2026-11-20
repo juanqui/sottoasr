@@ -85,3 +85,18 @@ it('reports download progress only while its own preparation runs', async () => 
   work.resolve(ready); await pending;
   expect(setup.progress).toBeNull();
 });
+it('changes the engine to the local one only after its preparation succeeds, and keeps a failure apart', async () => {
+  const work = deferred<LlmStatus>(); vi.mocked(prepareLlmModel).mockReturnValue(work.promise);
+  const setup = new CleanupSetup(); const selected = vi.fn();
+  const pending = setup.selectLocal(selected);
+  expect(setup.selectingLocal).toBe(true);
+  // Cleanup stays on with AWS Bedrock, so the cancel notice about cleanup staying off does not apply.
+  setup.cancel(); work.resolve(ready); await pending;
+  expect(selected).not.toHaveBeenCalled(); expect(setup.selectingLocal).toBe(false); expect(setup.notice).toBe('');
+  vi.mocked(prepareLlmModel).mockRejectedValueOnce(new Error('Network unavailable'));
+  await setup.selectLocal(selected);
+  expect(setup.selectError).toBe('Network unavailable'); expect(setup.error).toBe(''); expect(setup.selectingLocal).toBe(false);
+  vi.mocked(prepareLlmModel).mockResolvedValueOnce(ready);
+  await setup.selectLocal(selected);
+  expect(selected).toHaveBeenCalledOnce(); expect(setup.selectError).toBe('');
+});

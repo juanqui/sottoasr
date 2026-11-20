@@ -13,7 +13,7 @@
         { name: 'NVIDIA Parakeet TDT v3', desc: 'Base model of Parakeet Ultra', license: 'CC-BY-4.0' },
         { name: 'FluidAudio', desc: 'CoreML/ANE inference engine (Swift)', license: 'Apache-2.0' },
         { name: 'parakeet-rs', desc: 'ONNX Runtime Rust bindings', license: 'MIT' },
-        { name: 'AWS SDK for Rust', desc: 'Amazon Transcribe client for the optional cloud engine', license: 'Apache-2.0' },
+        { name: 'AWS SDK for Rust', desc: 'Amazon Transcribe and Amazon Bedrock clients for the optional cloud engines', license: 'Apache-2.0' },
         { name: 'cpal', desc: 'Cross-platform audio capture', license: 'Apache-2.0' },
         { name: 'hound', desc: 'WAV encoding/decoding', license: 'Apache-2.0' },
         { name: 'rubato', desc: 'Audio resampling', license: 'MIT' },

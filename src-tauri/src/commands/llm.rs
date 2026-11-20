@@ -3,9 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::aws::profiles::{self as aws_profiles, AwsProfile};
+use crate::llm::bedrock::{self, ConnectionTest, Route};
 use crate::llm::engine::{PipNetwork, RuntimeSetup, VenvVerdict};
 use crate::llm::{download, engine};
-use crate::models::LlmStatus;
+use crate::models::{AwsBedrockSettings, BedrockModel, CleanupEngine, LlmStatus, Settings};
 use crate::state::AppState;
 
 /// Status reads are offline and never import Python/MLX or begin setup.
@@ -24,6 +26,14 @@ async fn current_status(state: &AppState) -> Result<LlmStatus, String> {
         false
     };
     let config = engine::model_config();
+    let (enabled, cleanup_engine, options) = {
+        let settings = state.settings.lock().await;
+        (settings.llm_cleanup_enabled, settings.cleanup_engine, settings.aws_bedrock.clone())
+    };
+    let (notice, cloud_error) = match cleanup_engine {
+        CleanupEngine::Local => (None, None),
+        CleanupEngine::AwsBedrock => cloud_notice(&options, aws_profiles::list().await),
+    };
     Ok(LlmStatus {
         available,
         unavailable_reason: (!available)
@@ -34,14 +44,85 @@ async fn current_status(state: &AppState) -> Result<LlmStatus, String> {
         setup_error: state.llm_setup_error.lock().await.clone(),
         loaded: state.llm_loaded.load(Ordering::SeqCst)
             && crate::process::registered_is_alive(state.llm_pid.load(Ordering::SeqCst)),
-        enabled: state.settings.lock().await.llm_cleanup_enabled,
+        enabled,
         busy: state.llm_operation.try_lock().is_err(),
         model_name: config.display_name.to_string(),
         model_url: format!("https://huggingface.co/{}", config.id),
         download_size_mb: config.download_size_mb,
         model_path: None,
         last_cleanup_status: state.llm_last_status.lock().await.clone(),
+        engine: cleanup_engine,
+        notice,
+        cloud_error,
     })
+}
+
+/// What the status says about Amazon Bedrock: where the dictation text
+/// goes, or why no request can be made.
+fn cloud_notice(
+    options: &AwsBedrockSettings,
+    profiles: Result<Vec<AwsProfile>, String>,
+) -> (Option<String>, Option<String>) {
+    match profiles.and_then(|profiles| bedrock::describe(options, &profiles)) {
+        Ok(notice) => (Some(notice), None),
+        Err(error) => (None, Some(error)),
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct BedrockRegion {
+    code: &'static str,
+    name: &'static str,
+    /// The inference profile of each model in this Region.
+    routes: Vec<Route>,
+}
+
+#[derive(serde::Serialize)]
+pub struct BedrockModelOption {
+    id: BedrockModel,
+    name: &'static str,
+}
+
+/// What the Settings window offers for AWS Bedrock.
+#[derive(serde::Serialize)]
+pub struct BedrockCleanupOptions {
+    profiles: Vec<AwsProfile>,
+    /// Why the AWS files could not be read.
+    profiles_error: Option<String>,
+    regions: Vec<BedrockRegion>,
+    models: Vec<BedrockModelOption>,
+}
+
+#[tauri::command]
+pub async fn get_bedrock_cleanup_options() -> Result<BedrockCleanupOptions, String> {
+    let (profiles, profiles_error) = match aws_profiles::list().await {
+        Ok(profiles) => (profiles, None),
+        Err(error) => (Vec::new(), Some(error)),
+    };
+    Ok(BedrockCleanupOptions {
+        profiles,
+        profiles_error,
+        regions: bedrock::REGIONS.iter()
+            .map(|&(code, name)| BedrockRegion {
+                code,
+                name,
+                routes: BedrockModel::ALL.iter().map(|&model| bedrock::route(code, model)).collect(),
+            })
+            .collect(),
+        models: BedrockModel::ALL.iter().map(|&id| BedrockModelOption { id, name: id.name() }).collect(),
+    })
+}
+
+/// Makes one request with the options in the Settings window, saved or not.
+/// It sends a fixed sentence and does not use the resident backend.
+#[tauri::command]
+pub async fn test_bedrock_cleanup(options: AwsBedrockSettings) -> Result<ConnectionTest, String> {
+    let tested = bedrock::test_connection(&options).await;
+    match &tested {
+        Ok(test) => log::info!("AWS Bedrock connection test passed in {:.1}s ({}, {})", test.seconds, test.inference_profile, test.region),
+        Err(error) => log::warn!("AWS Bedrock connection test failed: {error}"),
+    }
+    tested
 }
 
 /// Whether Settings shows a preparation. The background sync of a stale
@@ -412,7 +493,8 @@ async fn wait_until_idle(state: &AppState) {
 }
 
 async fn load_locked(state: &AppState) -> Result<(), String> {
-    let mut sidecar = engine::ensure_running(state).await?;
+    // The local half of the factory: a load is always about the local model.
+    let mut sidecar = engine::ensure_local(state).await?;
     // A resident process may have died since its last use. Validate it too.
     let result = tokio::task::spawn_blocking(move || {
         let result = sidecar.request_raw(&serde_json::json!({"action": "load"}));
@@ -444,27 +526,67 @@ pub async fn delete_llm_model(state: State<'_, AppState>) -> Result<(), String> 
 }
 
 async fn unload_locked(state: &AppState) {
-    let sidecar = state.llm_engine.lock().await.take();
-    if let Some(mut sidecar) = sidecar {
-        let _ = tokio::task::spawn_blocking(move || sidecar.shutdown()).await;
+    let resident = state.llm_engine.lock().await.take();
+    match resident {
+        Some(backend) => engine::retire(state, backend).await,
+        None => {
+            state.llm_pid.store(0, Ordering::SeqCst);
+            state.llm_loaded.store(false, Ordering::SeqCst);
+        }
     }
-    state.llm_pid.store(0, Ordering::SeqCst);
-    state.llm_loaded.store(false, Ordering::SeqCst);
 }
 
-/// Persistence acknowledgements must not wait for inference or setup to finish.
-/// A later saved-on preference wins over an earlier queued unload request.
-pub fn notify_on_cleanup_preference_saved(app: &AppHandle, enabled: bool) {
-    if enabled {
+/// Whether a Save changed what the resident cleanup backend must be:
+/// cleanup went off, the engine changed, or the options of Amazon Bedrock
+/// changed while it is selected.
+fn cleanup_changed(previous: &Settings, current: &Settings) -> bool {
+    (previous.llm_cleanup_enabled && !current.llm_cleanup_enabled)
+        || previous.cleanup_engine != current.cleanup_engine
+        || (current.cleanup_engine == CleanupEngine::AwsBedrock && previous.aws_bedrock != current.aws_bedrock)
+}
+
+/// Brings the resident backend in line with the settings of this moment, so
+/// that a later Save wins over an earlier one. Returns whether the local
+/// model must now load: the engine went from Amazon Bedrock to local with
+/// cleanup on.
+async fn apply_saved_cleanup(state: &AppState, from_bedrock: bool) -> bool {
+    let _operation = state.llm_operation.lock().await;
+    let (enabled, cleanup_engine) = {
+        let settings = state.settings.lock().await;
+        (settings.llm_cleanup_enabled, settings.cleanup_engine)
+    };
+    if !enabled || cleanup_engine == CleanupEngine::AwsBedrock {
+        // This stops the sidecar, so no local cleanup model stays in memory.
+        // A Bedrock backend for earlier options goes too; the next cleanup
+        // makes one for the saved options.
+        unload_locked(state).await;
+        return false;
+    }
+    // Local and on. A sidecar that Settings prepared stays resident.
+    let mut resident = state.llm_engine.lock().await;
+    if resident.as_ref().is_some_and(|backend| backend.bedrock_options().is_some()) {
+        *resident = None;
+    }
+    from_bedrock
+}
+
+/// Called after preferences are saved. Persistence acknowledgements must not
+/// wait for inference or setup to finish, so the change runs as a task.
+pub fn cleanup_settings_saved(app: &AppHandle, previous: &Settings, current: &Settings) {
+    if !cleanup_changed(previous, current) {
         return;
     }
+    let from_bedrock = previous.cleanup_engine == CleanupEngine::AwsBedrock;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let _operation = state.llm_operation.lock().await;
-        if !state.settings.lock().await.llm_cleanup_enabled {
-            unload_locked(&state).await;
-            let _ = app.emit("llm-preparation-changed", ());
+        let load_local = apply_saved_cleanup(&state, from_bedrock).await;
+        let _ = app.emit("llm-preparation-changed", ());
+        if load_local {
+            // As at app start: the local model loads in the background.
+            if let Err(error) = prepare(&app, &state, Preparation::Ensure).await {
+                log::warn!("Local cleanup preparation failed: {error}");
+            }
         }
     });
 }
@@ -976,5 +1098,128 @@ mod tests {
         );
         assert!(!aside.exists());
         assert!(!runtime.staging().exists());
+    }
+
+    fn cloud_settings(profile: &str) -> Settings {
+        Settings {
+            llm_cleanup_enabled: true,
+            cleanup_engine: CleanupEngine::AwsBedrock,
+            aws_bedrock: AwsBedrockSettings { profile: Some(profile.into()), ..Default::default() },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn only_a_change_of_the_cleanup_backend_starts_the_save_task() {
+        let local_on = Settings { llm_cleanup_enabled: true, ..Default::default() };
+        let local_off = Settings::default();
+        let cloud = cloud_settings("work");
+        // Turning the local engine on is not a change: Settings prepared the model before Save.
+        assert!(!cleanup_changed(&local_off, &local_on));
+        assert!(cleanup_changed(&local_on, &local_off), "cleanup went off");
+        assert!(cleanup_changed(&local_on, &cloud) && cleanup_changed(&cloud, &local_on), "the engine changed");
+        assert!(cleanup_changed(&cloud, &cloud_settings("other")), "the options of the selected cloud engine changed");
+        let edited = Settings { aws_bedrock: cloud.aws_bedrock.clone(), ..local_on.clone() };
+        assert!(!cleanup_changed(&local_on, &edited), "Bedrock options do not matter while the local engine is selected");
+        assert!(!cleanup_changed(&cloud, &Settings { sound_cues: true, ..cloud.clone() }));
+    }
+
+    #[tokio::test]
+    async fn a_save_brings_the_resident_backend_in_line_with_the_settings() {
+        use crate::test_support::{CloudCleanupStandIn, StoppableSidecar};
+        let state_with = |settings: Settings, resident: Box<dyn engine::LlmBackend>| AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(resident),
+            Box::new(MockPasteBackend::new()),
+            settings,
+        );
+        let sidecar = || {
+            let sidecar = StoppableSidecar::default();
+            (sidecar.stopped.clone(), Box::new(sidecar) as Box<dyn engine::LlmBackend>)
+        };
+        let cloud = || Box::new(CloudCleanupStandIn::default()) as Box<dyn engine::LlmBackend>;
+
+        // Amazon Bedrock saved: the sidecar stops, so no local cleanup model stays in memory.
+        let (stopped, resident) = sidecar();
+        let state = state_with(cloud_settings("work"), resident);
+        state.llm_loaded.store(true, Ordering::SeqCst);
+        assert!(!apply_saved_cleanup(&state, false).await);
+        assert!(stopped.load(Ordering::SeqCst));
+        assert!(state.llm_engine.lock().await.is_none());
+        assert!(!state.llm_loaded.load(Ordering::SeqCst));
+
+        // New Bedrock options: the backend for the earlier ones goes.
+        let state = state_with(cloud_settings("other"), cloud());
+        assert!(!apply_saved_cleanup(&state, true).await);
+        assert!(state.llm_engine.lock().await.is_none());
+
+        // Cleanup off: the backend stops, whatever the engine is.
+        let (stopped, resident) = sidecar();
+        let state = state_with(Settings::default(), resident);
+        assert!(!apply_saved_cleanup(&state, false).await);
+        assert!(stopped.load(Ordering::SeqCst));
+
+        // Back to the local engine: the cloud backend goes, and the local model must load.
+        let local_on = Settings { llm_cleanup_enabled: true, ..Default::default() };
+        let state = state_with(local_on.clone(), cloud());
+        assert!(apply_saved_cleanup(&state, true).await);
+        assert!(state.llm_engine.lock().await.is_none());
+
+        // A sidecar that Settings prepared before Save stays resident.
+        let (stopped, resident) = sidecar();
+        let state = state_with(local_on, resident);
+        assert!(apply_saved_cleanup(&state, true).await);
+        assert!(!stopped.load(Ordering::SeqCst));
+        assert!(state.llm_engine.lock().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn the_status_keeps_the_local_facts_and_names_where_the_text_goes() {
+        let work = AwsProfile { name: "work".into(), region: Some("eu-west-1".into()) };
+        let options = AwsBedrockSettings { profile: Some("work".into()), region: None, model: BedrockModel::Sonnet55 };
+        assert_eq!(
+            cloud_notice(&options, Ok(vec![work])),
+            (Some("SottoASR sends dictation text to Amazon Bedrock in eu-west-1 with the AWS profile work. The model is Claude Sonnet 5.5.".into()), None)
+        );
+        assert_eq!(
+            cloud_notice(&options, Ok(Vec::new())),
+            (None, Some("AWS profile \"work\" was not found in ~/.aws/config or ~/.aws/credentials.".into()))
+        );
+        assert_eq!(cloud_notice(&options, Err("Could not read the AWS profiles: no access".into())).1.as_deref(), Some("Could not read the AWS profiles: no access"));
+
+        // The local engine has no notice. A sidecar that is not registered is not "loaded".
+        let state = test_state();
+        let local = current_status(&state).await.unwrap();
+        assert_eq!((local.engine, local.notice, local.cloud_error), (CleanupEngine::Local, None, None));
+        *state.settings.lock().await = cloud_settings("sottoasr-test-profile-that-is-not-defined");
+        let cloud = current_status(&state).await.unwrap();
+        assert_eq!(cloud.engine, CleanupEngine::AwsBedrock);
+        assert!(cloud.enabled && !cloud.loaded, "no local model is in memory");
+        assert!(cloud.notice.is_none() && cloud.cloud_error.is_some(), "the profile is not in the AWS files");
+        assert_eq!(cloud.model_name, engine::model_config().display_name, "the local model keeps its name");
+    }
+
+    #[tokio::test]
+    async fn the_options_have_a_route_for_each_model_in_each_region() {
+        let options = serde_json::to_value(get_bedrock_cleanup_options().await.unwrap()).unwrap();
+        let regions = options["regions"].as_array().unwrap();
+        assert_eq!(regions.len(), 17);
+        assert_eq!(options["models"], serde_json::json!([
+            { "id": "haiku-5.5", "name": "Claude Haiku 5.5" },
+            { "id": "sonnet-5.5", "name": "Claude Sonnet 5.5" },
+            { "id": "opus-5.5", "name": "Claude Opus 5.5" },
+            { "id": "gpt-6.2-sol", "name": "GPT-6.2 Sol" },
+        ]));
+        for region in regions {
+            assert_eq!(region["routes"].as_array().unwrap().len(), 4, "{region}");
+        }
+        let oregon = regions.iter().find(|region| region["code"] == "us-west-2").unwrap();
+        assert_eq!(oregon["name"], "US West (Oregon)");
+        assert_eq!(oregon["routes"][3], serde_json::json!({
+            "model": "gpt-6.2-sol",
+            "inference_profile": "us.openai.gpt-6.2-sol",
+            "processed_in": "AWS processes the text in the United States.",
+        }));
     }
 }

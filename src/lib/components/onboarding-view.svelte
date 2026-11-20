@@ -228,7 +228,7 @@
           <span class="feature-icon">🔒</span>
           <div>
             <strong>Local by default</strong>
-            <span>Audio stays on your Mac unless you choose a cloud engine</span>
+            <span>Audio and text stay on your Mac unless you choose a cloud engine</span>
           </div>
         </div>
         <div class="feature">

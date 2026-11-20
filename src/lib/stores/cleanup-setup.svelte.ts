@@ -13,6 +13,10 @@ export class CleanupSetup {
   notice = $state('');
   /** Latest `llm-download-progress` payload of the preparation in flight. */
   progress: DownloadProgress | null = $state(null);
+  /** Set while the preparation in flight is for a change of the draft engine to "On this Mac". */
+  selectingLocal = $state(false);
+  /** Why the last change of the draft engine to "On this Mac" failed. The draft kept AWS Bedrock. */
+  selectError = $state('');
   private disposed = false;
   private intent = 0;
   private statusRequest = 0;
@@ -32,6 +36,18 @@ export class CleanupSetup {
   }
 
   async enable(onReady: () => void) {
+    await this.prepareLocal(onReady, false);
+  }
+
+  /**
+   * Prepare the local model for a change of the draft engine to "On this Mac".
+   * `onReady` changes the draft. It runs only after the preparation succeeds.
+   */
+  async selectLocal(onReady: () => void) {
+    await this.prepareLocal(onReady, true);
+  }
+
+  private async prepareLocal(onReady: () => void, selecting: boolean) {
     await this.run(
       prepareLlmModel,
       (status) => {
@@ -41,6 +57,7 @@ export class CleanupSetup {
         onReady();
       },
       READY_NOTICE,
+      selecting,
     );
   }
 
@@ -66,13 +83,16 @@ export class CleanupSetup {
     action: () => Promise<LlmStatus>,
     accept: (status: LlmStatus) => void,
     notice: string,
+    selecting = false,
   ) {
     if (this.pending) return;
     const intent = ++this.intent;
     ++this.statusRequest;
     this.loading = false;
     this.pending = true;
+    this.selectingLocal = selecting;
     this.error = '';
+    this.selectError = '';
     this.notice = '';
     this.progress = null;
     try {
@@ -86,9 +106,13 @@ export class CleanupSetup {
       accept(status);
       this.notice = notice;
     } catch (error) {
-      if (!this.disposed && intent === this.intent) this.error = error instanceof Error ? error.message : String(error);
+      if (!this.disposed && intent === this.intent) {
+        const text = error instanceof Error ? error.message : String(error);
+        if (selecting) this.selectError = text;
+        else this.error = text;
+      }
     } finally {
-      if (!this.disposed && intent === this.intent) { this.pending = false; this.progress = null; }
+      if (!this.disposed && intent === this.intent) { this.pending = false; this.selectingLocal = false; this.progress = null; }
     }
   }
 
@@ -99,11 +123,14 @@ export class CleanupSetup {
 
   cancel() {
     ++this.intent;
-    if (this.pending) this.notice = 'Activation cancelled. Setup may finish in the background; cleanup stays off.';
+    // A cancelled change of the engine leaves cleanup as it was, so it needs no notice.
+    if (this.pending && !this.selectingLocal) this.notice = 'Activation cancelled. Setup may finish in the background; cleanup stays off.';
     else if (this.notice === READY_NOTICE) this.notice = '';
     this.pending = false;
+    this.selectingLocal = false;
     this.progress = null;
     this.error = '';
+    this.selectError = '';
   }
 
   /** Progress is shown only for the preparation this window started. */

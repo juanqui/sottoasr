@@ -26,19 +26,28 @@
   let disposed = false;
   let refreshing = false;
   let lastOutcome = $derived(cleanupOutcome(cleanup.status?.last_cleanup_status));
-  let ai = $derived.by(() => {
+  let bedrock = $derived(cleanup.status?.engine === 'aws_bedrock');
+  let ai: { label: string; tone: string; detail: string; notice?: string | null } = $derived.by(() => {
     const status = cleanup.status;
     if (!status) return { label: cleanup.error ? 'Status unavailable' : 'Checking…', tone: 'neutral', detail: cleanup.error || 'Reading local model status.' };
+    const off = { label: 'Off', tone: 'neutral', detail: status.loaded ? 'Loaded in memory. Cleanup is off in saved settings.' : 'Optional cleanup is off in saved settings.' };
+    // The other fields describe the local model, which the saved AWS Bedrock engine does not use.
+    if (status.engine === 'aws_bedrock') {
+      if (status.enabled === false) return off;
+      if (status.cloud_error) return { label: 'Needs attention', tone: 'warning', detail: status.cloud_error };
+      return { label: 'Ready', tone: 'ready', detail: 'A cloud service. No cleanup model is in memory.', notice: status.notice };
+    }
     if (!status.available) return { label: 'Unavailable', tone: 'warning', detail: status.unavailable_reason || 'Unsupported device.' };
     if (status.preparing || status.downloading || cleanup.pending) return { label: 'Preparing…', tone: 'pending', detail: 'Downloading, loading, and warming the local model.' };
-    if (status.enabled === false) return { label: 'Off', tone: 'neutral', detail: status.loaded ? 'Loaded in memory. Cleanup is off in saved settings.' : 'Optional cleanup is off in saved settings.' };
+    if (status.enabled === false) return off;
     if (status.setup_error) return { label: 'Needs attention', tone: 'warning', detail: status.setup_error };
     if (status.loaded) return { label: status.busy ? 'Working…' : 'Ready', tone: 'ready', detail: 'Loaded and prewarmed locally with MLX.' };
     return { label: status.downloaded ? 'Not loaded' : 'Not downloaded', tone: 'warning', detail: status.downloaded ? 'The next recording will load it, or prepare it in Dictation.' : 'Enable cleanup in Dictation to prepare the model.' };
   });
   let cleanupNeedsRepair = $derived.by(() => {
     const status = cleanup.status;
-    if (!status) return false;
+    // A repair of the local runtime does not help the AWS Bedrock engine.
+    if (!status || status.engine === 'aws_bedrock') return false;
     // Only the runtime-failure states: a `failed` cleanup may be a per-request
     // problem that rebuilding the runtime would not address.
     return Boolean(status.setup_error) || status.last_cleanup_status.kind === 'unavailable';
@@ -139,8 +148,9 @@
   </article>
   <article class="model-card" aria-label="AI cleanup model">
     <div class="card-heading"><h2>AI cleanup</h2><span class="model-state {ai.tone}"><i></i>{ai.label}</span></div>
-    <p class="model-name">{cleanup.status?.model_name || 'MiniCPM5 2B'}</p>
+    <p class="model-name">{bedrock ? 'AWS Bedrock' : cleanup.status?.model_name || 'MiniCPM5 2B'}</p>
     <p class="model-detail" role="status">{ai.detail}</p>
+    {#if ai.notice}<p class="model-detail" role="status">{ai.notice}</p>{/if}
     {#if cleanup.status && !['idle', 'disabled'].includes(cleanup.status.last_cleanup_status.kind)}
       <details class:attention={lastOutcome.issue}><summary>Last recording: {lastOutcome.label}</summary><p>{lastOutcome.detail}</p></details>
     {/if}

@@ -61,6 +61,54 @@ impl AwsTranscribeSettings {
     }
 }
 
+/// Where AI cleanup runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CleanupEngine {
+    /// MiniCPM5 2B in the sidecar on this Mac.
+    #[default]
+    Local,
+    /// Amazon Bedrock: the dictation text that can change goes to AWS.
+    AwsBedrock,
+}
+
+/// The models that the Amazon Bedrock cleanup engine offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BedrockModel {
+    #[default]
+    #[serde(rename = "haiku-5.5")]
+    Haiku55,
+    #[serde(rename = "sonnet-5.5")]
+    Sonnet55,
+    #[serde(rename = "opus-5.5")]
+    Opus55,
+    #[serde(rename = "gpt-6.2-sol")]
+    Gpt62Sol,
+}
+
+/// Options of the Amazon Bedrock cleanup engine. They stay saved while the
+/// local engine is selected.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AwsBedrockSettings {
+    /// A profile of `~/.aws/config` or `~/.aws/credentials`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// `None` uses the region of the profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default)]
+    pub model: BedrockModel,
+}
+
+impl AwsBedrockSettings {
+    /// Trims each value. An empty value becomes `None`.
+    pub fn normalize(&mut self) {
+        for value in [&mut self.profile, &mut self.region] {
+            *value = value.take().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty());
+        }
+    }
+}
+
 /// How the cleanup model proposes its edits to the frozen validator.
 ///
 /// `Retype` (default, production behavior): the model outputs the cleaned
@@ -205,6 +253,11 @@ pub struct Settings {
     pub speech_engine: SpeechEngine,
     #[serde(default)]
     pub aws_transcribe: AwsTranscribeSettings,
+    /// The local model (default) or a cloud service, for AI cleanup.
+    #[serde(default)]
+    pub cleanup_engine: CleanupEngine,
+    #[serde(default)]
+    pub aws_bedrock: AwsBedrockSettings,
 }
 
 impl Settings {
@@ -227,6 +280,7 @@ impl Settings {
             .map(|name| name.trim().to_owned())
             .filter(|name| !name.is_empty());
         self.aws_transcribe.normalize();
+        self.aws_bedrock.normalize();
         Ok(())
     }
 
@@ -283,6 +337,10 @@ impl Settings {
         if self.speech_engine == SpeechEngine::AwsTranscribe && self.aws_transcribe.profile.is_none() {
             return Err("Choose an AWS profile for AWS Transcribe.".into());
         }
+        crate::llm::bedrock::validate(&self.aws_bedrock)?;
+        if self.llm_cleanup_enabled && self.cleanup_engine == CleanupEngine::AwsBedrock && self.aws_bedrock.profile.is_none() {
+            return Err("Choose an AWS profile for AWS Bedrock.".into());
+        }
         Ok(())
     }
 }
@@ -313,6 +371,8 @@ impl Default for Settings {
             audio_retention_days: 0,
             speech_engine: SpeechEngine::default(),
             aws_transcribe: AwsTranscribeSettings::default(),
+            cleanup_engine: CleanupEngine::default(),
+            aws_bedrock: AwsBedrockSettings::default(),
         }
     }
 }
@@ -338,6 +398,16 @@ pub struct LlmStatus {
     /// Frontend uses this to display a status badge in the settings panel.
     #[serde(default = "default_llm_cleanup_status")]
     pub last_cleanup_status: LlmCleanupStatus,
+    /// The saved cleanup engine. The fields above describe the local model
+    /// in both modes.
+    #[serde(default)]
+    pub engine: CleanupEngine,
+    /// Amazon Bedrock only: where the dictation text goes.
+    #[serde(default)]
+    pub notice: Option<String>,
+    /// Amazon Bedrock only: why no request can be made.
+    #[serde(default)]
+    pub cloud_error: Option<String>,
 }
 
 /// A speech model that earlier releases used and that is still on disk.
@@ -771,5 +841,64 @@ mod tests {
         assert!(settings.validate().unwrap_err().contains("Alternate toggle"));
         settings.toggle_shortcut_alt = None;
         assert!(settings.validate().is_ok());
+    }
+
+    #[test]
+    fn the_local_cleanup_engine_is_the_default_and_bedrock_needs_a_profile_when_cleanup_is_on() {
+        let defaults = serde_json::to_value(Settings::default()).unwrap();
+        assert_eq!(defaults["cleanup_engine"], "local");
+        assert_eq!(defaults["aws_bedrock"], serde_json::json!({ "model": "haiku-5.5" }));
+        // A settings file of an earlier version has neither key.
+        let mut earlier = defaults.clone();
+        earlier.as_object_mut().unwrap().retain(|key, _| key != "cleanup_engine" && key != "aws_bedrock");
+        let loaded: Settings = serde_json::from_value(earlier).unwrap();
+        assert_eq!((loaded.cleanup_engine, loaded.aws_bedrock), (CleanupEngine::Local, AwsBedrockSettings::default()));
+
+        // Amazon Bedrock without a profile is valid while cleanup is off.
+        let mut cloud = Settings { cleanup_engine: CleanupEngine::AwsBedrock, ..Default::default() };
+        assert_eq!(cloud.validate(), Ok(()));
+        cloud.llm_cleanup_enabled = true;
+        assert_eq!(cloud.validate().unwrap_err(), "Choose an AWS profile for AWS Bedrock.");
+        // Spaces only is no profile.
+        cloud.aws_bedrock.profile = Some("   ".into());
+        cloud.normalize().unwrap();
+        assert_eq!(cloud.validate().unwrap_err(), "Choose an AWS profile for AWS Bedrock.");
+        cloud.aws_bedrock.profile = Some("  work ".into());
+        cloud.aws_bedrock.region = Some(String::new());
+        cloud.normalize().unwrap();
+        assert_eq!(cloud.validate(), Ok(()));
+        assert_eq!(cloud.aws_bedrock, AwsBedrockSettings { profile: Some("work".into()), region: None, model: BedrockModel::Haiku55 });
+
+        // The options are examined with the local engine too, but no profile is needed.
+        let local = Settings {
+            llm_cleanup_enabled: true,
+            aws_bedrock: AwsBedrockSettings { region: Some("nowhere-1".into()), ..Default::default() },
+            ..Default::default()
+        };
+        assert!(local.validate().unwrap_err().contains("Region"));
+    }
+
+    #[test]
+    fn the_cleanup_engine_and_its_options_survive_a_round_trip() {
+        for (model, name) in [
+            (BedrockModel::Haiku55, "haiku-5.5"),
+            (BedrockModel::Sonnet55, "sonnet-5.5"),
+            (BedrockModel::Opus55, "opus-5.5"),
+            (BedrockModel::Gpt62Sol, "gpt-6.2-sol"),
+        ] {
+            let saved = Settings {
+                cleanup_engine: CleanupEngine::AwsBedrock,
+                aws_bedrock: AwsBedrockSettings { profile: Some("work".into()), region: Some("eu-west-1".into()), model },
+                ..Default::default()
+            };
+            let json = serde_json::to_value(&saved).unwrap();
+            assert_eq!(json["cleanup_engine"], "aws_bedrock");
+            assert_eq!(json["aws_bedrock"], serde_json::json!({ "profile": "work", "region": "eu-west-1", "model": name }));
+            assert_eq!(serde_json::from_value::<Settings>(json).unwrap(), saved);
+        }
+        // A null value reads as not set. A model that this version does not know does not load.
+        let partial: AwsBedrockSettings = serde_json::from_str(r#"{"profile": null, "region": "us-east-2"}"#).unwrap();
+        assert_eq!(partial, AwsBedrockSettings { region: Some("us-east-2".into()), ..Default::default() });
+        assert!(serde_json::from_str::<AwsBedrockSettings>(r#"{"model": "opus-9"}"#).is_err());
     }
 }

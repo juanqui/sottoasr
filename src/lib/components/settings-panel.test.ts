@@ -7,11 +7,11 @@ const { listeners, onClose, closeWindow } = vi.hoisted(() => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onCloseRequested:onClose, close:closeWindow }) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (name:string, callback:(event:unknown)=>void) => { listeners.set(name,callback); return () => listeners.delete(name); }) }));
-vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getSettingsLoadError:vi.fn(), resetSettings:vi.fn(), listInputDevices:vi.fn(), checkAllPermissions:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn(), getAwsTranscribeOptions:vi.fn() }));
+vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getSettingsLoadError:vi.fn(), resetSettings:vi.fn(), listInputDevices:vi.fn(), checkAllPermissions:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn(), getAwsTranscribeOptions:vi.fn(), getBedrockCleanupOptions:vi.fn() }));
 import SettingsPanel from './settings-panel.svelte';
 import { listen } from '@tauri-apps/api/event';
 import { settingsStore, createDefaultSettings } from '../stores/settings.svelte';
-import { getSettings, updateSettings, getSettingsLoadError, resetSettings, listInputDevices, checkAllPermissions, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus, getAwsTranscribeOptions } from '../utils/tauri';
+import { getSettings, updateSettings, getSettingsLoadError, resetSettings, listInputDevices, checkAllPermissions, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus, getAwsTranscribeOptions, getBedrockCleanupOptions } from '../utils/tauri';
 import type { LlmStatus } from '../utils/tauri';
 const status:LlmStatus = { available:true, unavailable_reason:null, downloaded:false, downloading:false, loaded:false, preparing:false, setup_error:null, model_name:'Test cleanup', model_path:null, model_url:'https://example.com/model', download_size_mb:227, last_cleanup_status:{kind:'idle'} };
 let component:ReturnType<typeof mount>|undefined;
@@ -28,6 +28,8 @@ beforeEach(() => {
   vi.mocked(getLlmStatus).mockResolvedValue({...status});
   vi.mocked(getVocabularyStatus).mockResolvedValue({supported:true, downloaded:false, loaded:false, preparing:false, download_size_mb:300, error:null});
   vi.mocked(getAwsTranscribeOptions).mockResolvedValue({ profiles:[{ name:'work', region:'us-west-2' }], profiles_error:null, regions:[{ code:'us-west-2', name:'US West (Oregon)' }], languages:['en-US'] });
+  vi.mocked(getBedrockCleanupOptions).mockResolvedValue({ profiles:[{ name:'work', region:'us-west-2' }], profiles_error:null, models:[{ id:'haiku-5.5', name:'Claude Haiku 5.5' }],
+    regions:[{ code:'us-west-2', name:'US West (Oregon)', routes:[{ model:'haiku-5.5', inference_profile:'us.anthropic.claude-haiku-5-5', processed_in:'AWS processes the text in the United States.' }] }] });
   settingsStore.loaded = false;
   listeners.clear();
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
@@ -223,6 +225,44 @@ it('blocks Save until AWS Transcribe has a profile, and says so when the window 
   button('Save').click();
   await vi.waitFor(() => expect(updateSettings).toHaveBeenCalledOnce());
   expect(vi.mocked(updateSettings).mock.calls[0][0]).toMatchObject({ speech_engine:'aws_transcribe', aws_transcribe:{ profile:'work', region:null, language:'en-US', vocabulary_name:null } });
+});
+
+it('blocks Save while cleanup is on with AWS Bedrock and no profile, and says so when the window closes', async () => {
+  await render(); button('Dictation').click(); flushSync();
+  target.querySelector<HTMLInputElement>('input[name="cleanup-engine"][value="aws_bedrock"]')!.click(); flushSync();
+  // With cleanup off, the draft needs no profile.
+  expect(button('Save').disabled).toBe(false);
+  cleanupToggle().click(); flushSync();
+  expect(prepareLlmModel).not.toHaveBeenCalled();
+  expect(button('Save').disabled).toBe(true);
+  expect(target.querySelector('.footer-feedback')?.textContent).toContain('Choose an AWS profile for AWS Bedrock.');
+  onClose.mock.calls[0][0]({ preventDefault:vi.fn() }); flushSync();
+  expect(closeDialog().textContent).toContain('AWS Bedrock needs an AWS profile. Choose one in Dictation to save, or discard this draft.');
+  button('Keep editing').click(); flushSync();
+  const profile = Array.from(target.querySelectorAll('label.setting-field')).find((item) => item.querySelector('.field-label')?.textContent === 'AWS profile')!.querySelector('select')!;
+  await vi.waitFor(() => expect(Array.from(profile.options).map((option) => option.value)).toEqual(['', 'work']));
+  profile.value = 'work'; profile.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  expect(target.textContent).toContain('Inference profile us.anthropic.claude-haiku-5-5. AWS processes the text in the United States.');
+  expect(button('Save').disabled).toBe(false);
+  button('Save').click();
+  await vi.waitFor(() => expect(updateSettings).toHaveBeenCalledOnce());
+  expect(vi.mocked(updateSettings).mock.calls[0][0]).toMatchObject({ llm_cleanup_enabled:true, cleanup_engine:'aws_bedrock', aws_bedrock:{ profile:'work', region:null, model:'haiku-5.5' } });
+});
+
+it('lets a user of AWS Bedrock remove the local cleanup model', async () => {
+  vi.mocked(getLlmStatus).mockResolvedValue({ ...status, downloaded:true, engine:'aws_bedrock' });
+  vi.mocked(getSettings).mockResolvedValue({ ...createDefaultSettings(), llm_cleanup_enabled:true, cleanup_engine:'aws_bedrock', aws_bedrock:{ profile:'work', region:null, model:'haiku-5.5' } });
+  await render(); button('Advanced').click();
+  await vi.waitFor(() => expect(button('Remove cleanup model')).toBeDefined());
+  expect(button('Remove cleanup model').disabled).toBe(false);
+  // The window does not say that the text stays on the Mac.
+  expect(target.textContent).toContain('Speech recognition uses Parakeet Ultra. AI cleanup uses AWS Bedrock. SottoASR sends dictation text to AWS. History and kept recordings stay on your Mac.');
+  expect(target.textContent).not.toContain('transcripts stay on your Mac');
+  expect(target.textContent).not.toContain('Turn off cleanup and Save before removing its model.');
+  // The local engine in the draft uses the model.
+  settingsStore.update('cleanup_engine', 'local'); flushSync();
+  expect(button('Remove cleanup model').disabled).toBe(true);
+  expect(target.textContent).toContain('Turn off cleanup and Save before removing its model.');
 });
 
 it('warns before a retention choice deletes older transcripts and recordings', async () => {

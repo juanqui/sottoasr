@@ -21,6 +21,17 @@
       warning: (period: string) => `Saving deletes recordings older than ${period}, including recordings waiting for recovery. This cannot be undone.` },
   ] as const;
   const period = (days: number) => days === 1 ? '1 day' : `${days} days`;
+  // Only the local engine uses the cleanup model, so AWS Bedrock users can remove it.
+  let localCleanupOn = $derived([settingsStore.current, settingsStore.saved].some((settings) => settings?.llm_cleanup_enabled && settings.cleanup_engine === 'local'));
+  // What leaves this Mac with the saved engines.
+  let dataHint = $derived.by(() => {
+    const saved = settingsStore.saved;
+    const cloudSpeech = saved?.speech_engine === 'aws_transcribe';
+    const cloudCleanup = !!saved?.llm_cleanup_enabled && saved.cleanup_engine === 'aws_bedrock';
+    return (cloudSpeech ? 'Speech recognition uses AWS Transcribe. SottoASR sends each completed dictation to AWS.' : 'Speech recognition uses Parakeet Ultra.')
+      + (cloudCleanup ? ' AI cleanup uses AWS Bedrock. SottoASR sends dictation text to AWS.' : '')
+      + (cloudSpeech || cloudCleanup ? ' History and kept recordings stay on your Mac.' : ' Recordings and transcripts stay on your Mac.');
+  });
 
   async function refreshPermissions() {
     if (checking) return;
@@ -78,7 +89,7 @@
 </section>
 <section class="setting-card">
   <h3>Local models</h3>
-  <p class="setting-hint">{settingsStore.saved?.speech_engine === 'aws_transcribe' ? 'Speech recognition uses AWS Transcribe. SottoASR sends each completed dictation to AWS. History and kept recordings stay on your Mac.' : 'Speech recognition uses Parakeet Ultra. Recordings and transcripts stay on your Mac.'}</p>
+  <p class="setting-hint">{dataHint}</p>
   <div class="model-details">
     <span class="field-label">AI cleanup</span>
     {#if cleanup.status}
@@ -86,8 +97,8 @@
       <p class="setting-hint">{cleanup.status.loaded ? 'Ready in memory' : cleanup.status.downloaded ? 'Downloaded' : 'Not downloaded'} · About {cleanup.status.download_size_mb} MB</p>
       <a href={cleanup.status.model_url} onclick={(event) => { event.preventDefault(); if (cleanup.status) void openUrl(cleanup.status.model_url).catch((err) => { error = String(err); }); }}>Model details ↗</a>
       {#if cleanup.status.downloaded}
-        <button class="secondary-button danger" type="button" disabled={deleting || cleanup.pending || cleanup.status.preparing || settingsStore.current.llm_cleanup_enabled || !!settingsStore.saved?.llm_cleanup_enabled} onclick={() => { confirmDelete = true; }}>Remove cleanup model</button>
-        {#if settingsStore.current.llm_cleanup_enabled || settingsStore.saved?.llm_cleanup_enabled}<p class="setting-hint">Turn off cleanup and Save before removing its model.</p>{/if}
+        <button class="secondary-button danger" type="button" disabled={deleting || cleanup.pending || cleanup.status.preparing || localCleanupOn} onclick={() => { confirmDelete = true; }}>Remove cleanup model</button>
+        {#if localCleanupOn}<p class="setting-hint">Turn off cleanup and Save before removing its model.</p>{/if}
       {/if}
     {:else}<p class="setting-hint">{cleanup.loading ? 'Checking cleanup model…' : 'Model status unavailable.'}</p><button class="secondary-button" type="button" onclick={() => cleanup.refresh()}>Retry status</button>{/if}
   </div>

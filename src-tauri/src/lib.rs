@@ -5,6 +5,7 @@ mod state;
 mod commands;
 mod audio;
 mod asr;
+mod aws;
 mod llm;
 mod paste;
 mod process;
@@ -94,6 +95,8 @@ pub fn run() {
             commands::llm::prepare_llm_model,
             commands::llm::repair_llm_runtime,
             commands::llm::delete_llm_model,
+            commands::llm::get_bedrock_cleanup_options,
+            commands::llm::test_bedrock_cleanup,
             // App updater
             updater::check_app_update,
             updater::perform_app_update,
@@ -213,7 +216,13 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     {
                         let state: tauri::State<'_, AppState> = llm_handle.state();
-                        if !state.settings.lock().await.llm_cleanup_enabled {
+                        let settings = state.settings.lock().await;
+                        if !settings.llm_cleanup_enabled {
+                            return;
+                        }
+                        // A cloud cleanup engine has no model to load.
+                        if settings.cleanup_engine == models::CleanupEngine::AwsBedrock {
+                            log::info!("Cloud cleanup engine selected — no cleanup model to load");
                             return;
                         }
                     }

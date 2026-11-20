@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../utils/tauri', () => ({ getSettings: vi.fn(), updateSettings: vi.fn(), getSettingsLoadError: vi.fn(), resetSettings: vi.fn() }));
 import { getSettings, getSettingsLoadError, resetSettings, updateSettings } from '../utils/tauri';
 import { SettingsStore, createDefaultSettings } from './settings.svelte';
-import type { Settings, UpdateSettingsResult } from '../utils/tauri';
+import type { AwsBedrockSettings, Settings, UpdateSettingsResult } from '../utils/tauri';
 const deferred = <T>() => { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 /** The backend skips `None` options when it serializes settings. */
 const asSerialized = (settings: Settings) => Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== null)) as Settings;
@@ -159,6 +159,57 @@ describe('speech engine', () => {
     await store.save();
     expect(vi.mocked(updateSettings).mock.calls[0][0].aws_transcribe).toEqual(aws);
     expect(store.current.aws_transcribe).toEqual(aws);
+    expect(store.dirty).toBe(false);
+  });
+});
+
+describe('cleanup engine', () => {
+  const bedrock: AwsBedrockSettings = { profile:'work', region:null, model:'haiku-5.5' };
+  it('defaults to the local engine and Claude Haiku 5.5, also for a file without the engine keys', async () => {
+    expect(createDefaultSettings().cleanup_engine).toBe('local');
+    expect(createDefaultSettings().aws_bedrock).toEqual({ profile:null, region:null, model:'haiku-5.5' });
+    const { cleanup_engine: _engine, aws_bedrock: _aws, ...older } = createDefaultSettings();
+    vi.mocked(getSettings).mockResolvedValueOnce(older as Settings);
+    await store.load();
+    expect(store.current.cleanup_engine).toBe('local');
+    expect(store.current.aws_bedrock).toEqual(createDefaultSettings().aws_bedrock);
+    expect(store.dirty).toBe(false);
+  });
+  it('treats a no-op AWS Bedrock edit as clean when the backend omits the empty options', async () => {
+    // The backend omits `None` values and may write the keys in another order.
+    vi.mocked(getSettings).mockResolvedValueOnce({ ...createDefaultSettings(), cleanup_engine:'aws_bedrock', aws_bedrock:{ model:'haiku-5.5', profile:'work' } });
+    await store.load();
+    expect(JSON.stringify(store.current.aws_bedrock)).toBe(JSON.stringify(bedrock));
+    store.update('aws_bedrock', { ...store.current.aws_bedrock, region:null });
+    expect(store.dirty).toBe(false);
+  });
+  it('blocks Save only while cleanup is on with AWS Bedrock and no profile', async () => {
+    await store.load();
+    store.update('cleanup_engine', 'aws_bedrock');
+    // With cleanup off, nothing goes to AWS, so no profile is necessary.
+    expect(store.validationError).toBe('');
+    store.update('llm_cleanup_enabled', true);
+    expect(store.validationError).toBe('Choose an AWS profile for AWS Bedrock.');
+    await expect(store.save()).rejects.toThrow('Choose an AWS profile for AWS Bedrock.');
+    expect(updateSettings).not.toHaveBeenCalled();
+    store.update('aws_bedrock', { ...store.current.aws_bedrock, profile:'  ' });
+    expect(store.validationError).toBe('Choose an AWS profile for AWS Bedrock.');
+    store.update('aws_bedrock', bedrock);
+    expect(store.validationError).toBe('');
+    // The local engine needs no profile.
+    store.update('aws_bedrock', createDefaultSettings().aws_bedrock);
+    store.update('cleanup_engine', 'local');
+    expect(store.validationError).toBe('');
+  });
+  it('sends trimmed AWS Bedrock options, with an empty value as null', async () => {
+    await store.load();
+    store.update('llm_cleanup_enabled', true);
+    store.update('cleanup_engine', 'aws_bedrock');
+    store.update('aws_bedrock', { profile:' work ', region:'', model:'haiku-5.5' });
+    vi.mocked(updateSettings).mockImplementationOnce(async (settings) => ({ settings, warnings:[] }));
+    await store.save();
+    expect(vi.mocked(updateSettings).mock.calls[0][0]).toMatchObject({ llm_cleanup_enabled:true, cleanup_engine:'aws_bedrock', aws_bedrock:bedrock });
+    expect(store.current.aws_bedrock).toEqual(bedrock);
     expect(store.dirty).toBe(false);
   });
 });

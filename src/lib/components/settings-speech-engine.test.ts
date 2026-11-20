@@ -35,7 +35,7 @@ it('shows only the two engines in local mode and reads no AWS files', () => {
   render();
   expect(engine('local').checked).toBe(true);
   expect(engine('aws_transcribe').checked).toBe(false);
-  expect(target.textContent).toContain('Parakeet Ultra. Audio and text stay on this Mac.');
+  expect(target.textContent).toContain('Parakeet Ultra. The audio stays on this Mac.');
   expect(target.querySelector('select')).toBeNull();
   expect(target.querySelector('input:not([type="radio"])')).toBeNull();
   expect(button('Test connection')).toBeUndefined();

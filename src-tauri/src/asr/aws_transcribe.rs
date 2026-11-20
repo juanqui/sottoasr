@@ -13,22 +13,17 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
-use aws_config::profile::ProfileFileCredentialsProvider;
-use aws_config::provider_config::ProviderConfig;
 use aws_config::retry::RetryConfig;
-use aws_config::timeout::TimeoutConfig;
-use aws_config::{BehaviorVersion, Region};
-use aws_credential_types::provider::error::CredentialsError;
-use aws_sdk_transcribestreaming::error::{DisplayErrorContext, ProvideErrorMetadata, SdkError};
+use aws_sdk_transcribestreaming::error::{ProvideErrorMetadata, SdkError};
 use aws_sdk_transcribestreaming::primitives::Blob;
 use aws_sdk_transcribestreaming::types::error::AudioStreamError;
 use aws_sdk_transcribestreaming::types::{AudioEvent, AudioStream, LanguageCode, MediaEncoding, TranscriptResultStream};
 use aws_sdk_transcribestreaming::Client;
-use aws_smithy_http_client::tls::{rustls_provider::CryptoMode, Provider};
 
-use super::aws_profiles::{self, AwsProfile};
 use super::engine::{AsrEngine, AsrResult};
 use crate::audio::resample::{Resampler16k, TARGET_RATE};
+use crate::aws::profiles::{self as aws_profiles, AwsProfile};
+use crate::aws::{self, Cause};
 use crate::models::AwsTranscribeSettings;
 
 pub const BACKEND_NAME: &str = "AWS Transcribe";
@@ -104,11 +99,7 @@ struct Target {
 /// The selected profile must be in the AWS files. The Region is the one of
 /// the settings, else the one of the profile.
 fn resolve(settings: &AwsTranscribeSettings, profiles: &[AwsProfile]) -> Result<Target, String> {
-    let profile = settings.profile.clone().ok_or("Choose an AWS profile for AWS Transcribe in Settings.")?;
-    let found = profiles.iter().find(|candidate| candidate.name == profile)
-        .ok_or_else(|| format!("AWS profile \"{profile}\" was not found in ~/.aws/config or ~/.aws/credentials."))?;
-    let region = settings.region.clone().or_else(|| found.region.clone())
-        .ok_or_else(|| format!("AWS profile \"{profile}\" has no Region. Choose a Region in Settings."))?;
+    let (profile, region) = aws::resolve(settings.profile.as_deref(), settings.region.as_deref(), profiles, BACKEND_NAME)?;
     Ok(Target { profile, region, language: settings.language.clone(), vocabulary_name: settings.vocabulary_name.clone() })
 }
 
@@ -307,60 +298,28 @@ where
     E: ProvideErrorMetadata + std::error::Error + 'static,
     R: std::fmt::Debug + 'static,
 {
-    if matches!(error, SdkError::ServiceError(_)) {
-        return Failed { text: service_text(error.code(), error.message(), target), retry: false };
-    }
-    // The cause is the last error of the chain. A credential provider
-    // error is somewhere in the chain of a dispatch failure.
-    let mut cause: &(dyn std::error::Error + 'static) = error;
-    let mut credentials = false;
-    while let Some(source) = cause.source() {
-        credentials |= source.is::<CredentialsError>();
-        cause = source;
-    }
-    if credentials {
-        return Failed { text: credentials_text(&cause.to_string(), target), retry: false };
-    }
-    log::warn!("AWS Transcribe request failed: {}", DisplayErrorContext(error));
-    match error {
-        SdkError::DispatchFailure(_) | SdkError::TimeoutError(_) => Failed {
-            text: format!("Could not connect to Amazon Transcribe in {}. Examine your internet connection.", target.region),
-            retry: at_start,
-        },
-        _ => Failed { text: format!("Amazon Transcribe had an error: {}", shortened(&cause.to_string())), retry: false },
-    }
-}
-
-/// The first line, at most 300 characters: a cause can carry a whole
-/// standard-error text or a list of every valid value.
-fn shortened(text: &str) -> String {
-    let line = text.lines().next().unwrap_or_default().trim();
-    match line.char_indices().nth(300) {
-        Some((end, _)) => format!("{}…", &line[..end]),
-        None => line.to_owned(),
-    }
-}
-
-fn credentials_text(cause: &str, target: &Target) -> String {
-    let mut text = format!("Could not get credentials for AWS profile \"{}\": {}", target.profile, shortened(cause));
-    if !text.ends_with('.') {
-        text.push('.');
-    }
-    // An application that Finder starts has only /usr/bin:/bin:/usr/sbin:/sbin,
-    // so the shell does not find a command that is given without its path.
-    if cause.contains("command not found") {
-        text.push_str(" SottoASR runs the command without the PATH of your shell. Use the full path of the command in ~/.aws/config.");
-    }
-    text
+    let (text, retry) = match aws::cause(error) {
+        Cause::Service { code, message } => (service_text(code.as_deref(), message.as_deref(), target), false),
+        Cause::Credentials(cause) => (aws::credentials_text(&cause, &target.profile), false),
+        Cause::Connection => {
+            log::warn!("AWS Transcribe request failed: {}", aws::causes(error));
+            (format!("Could not connect to Amazon Transcribe in {}. Examine your internet connection.", target.region), at_start)
+        }
+        Cause::Other(cause) => {
+            log::warn!("AWS Transcribe request failed: {}", aws::causes(error));
+            (format!("Amazon Transcribe had an error: {}", aws::shortened(&cause)), false)
+        }
+    };
+    Failed { text, retry }
 }
 
 fn service_text(code: Option<&str>, message: Option<&str>, target: &Target) -> String {
-    let detail = shortened(message.or(code).unwrap_or("no detail"));
-    match code.unwrap_or_default() {
-        "UnrecognizedClientException" | "ExpiredTokenException" | "ExpiredToken" | "InvalidSignatureException"
-        | "InvalidClientTokenId" | "IncompleteSignature" => {
-            format!("The credentials of AWS profile \"{}\" are not valid or are expired. Sign in again.", target.profile)
-        }
+    let detail = aws::shortened(message.or(code).unwrap_or("no detail"));
+    let code = code.unwrap_or_default();
+    if let Some(text) = aws::rejected_credentials_text(code, &target.profile) {
+        return text;
+    }
+    match code {
         "AccessDeniedException" | "AccessDenied" => format!(
             "AWS profile \"{}\" cannot use Amazon Transcribe. It needs the permission transcribe:StartStreamTranscription.",
             target.profile
@@ -374,32 +333,10 @@ fn service_text(code: Option<&str>, message: Option<&str>, target: &Target) -> S
     }
 }
 
-/// The client for one target. The credentials come from the selected profile
-/// only. The HTTP client uses rustls with ring, the provider that the rest
-/// of the application links; the credentials provider gets the same client,
-/// because a provider without one cannot resolve an SSO or role profile.
+/// The client for one target. An audio stream cannot be sent again by the
+/// SDK, so its retries are off; `transcribe` sends the request again.
 async fn client(target: &Target) -> Client {
-    let http = aws_smithy_http_client::Builder::new()
-        .tls_provider(Provider::Rustls(CryptoMode::Ring))
-        .build_https();
-    let region = Region::new(target.region.clone());
-    let provider_config = ProviderConfig::default()
-        .with_http_client(http.clone())
-        .with_region(Some(region.clone()));
-    let credentials = ProfileFileCredentialsProvider::builder()
-        .configure(&provider_config)
-        .profile_name(&target.profile)
-        .build();
-    let config = aws_config::defaults(BehaviorVersion::latest())
-        .http_client(http)
-        .credentials_provider(credentials)
-        .region(region)
-        // An audio stream cannot be sent again by the SDK; `transcribe` does it.
-        .retry_config(RetryConfig::disabled())
-        .timeout_config(TimeoutConfig::builder().connect_timeout(Duration::from_secs(10)).build())
-        .load()
-        .await;
-    Client::new(&config)
+    Client::new(&aws::sdk_config(&target.profile, &target.region, RetryConfig::disabled()).await)
 }
 
 struct Session {
@@ -659,25 +596,8 @@ mod tests {
     }
 
     #[test]
-    fn a_credential_error_names_the_profile_and_explains_a_command_that_was_not_found() {
-        let target = target();
-        let missing = credentials_text(
-            "Error retrieving credentials: external process exited with code exit status: 127. Stderr: sh: aws-vault: command not found\nmore", &target);
-        assert!(missing.starts_with("Could not get credentials for AWS profile \"work\": Error retrieving credentials"), "{missing}");
-        assert!(missing.contains("command not found") && !missing.contains("more"), "{missing}");
-        assert!(missing.ends_with("Use the full path of the command in ~/.aws/config."), "{missing}");
-
-        // A full path that does not exist is not a PATH problem.
-        let absent = credentials_text(
-            "Error retrieving credentials: external process exited with code exit status: 127. Stderr: sh: /opt/tool: No such file or directory", &target);
-        assert!(absent.ends_with("No such file or directory."), "{absent}");
-
-        let expired = credentials_text("the SSO token has expired", &target);
-        assert_eq!(expired, "Could not get credentials for AWS profile \"work\": the SSO token has expired.");
-    }
-
-    #[test]
     fn an_sdk_error_becomes_the_sentence_of_its_cause() {
+        use aws_credential_types::provider::error::CredentialsError;
         use aws_sdk_transcribestreaming::error::{ConnectorError, ErrorMetadata};
         use aws_sdk_transcribestreaming::operation::start_stream_transcription::StartStreamTranscriptionError;
         type Error = SdkError<StartStreamTranscriptionError, ()>;

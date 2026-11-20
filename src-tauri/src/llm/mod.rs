@@ -1,3 +1,4 @@
+pub mod bedrock;
 pub mod cleanup;
 pub mod correction;
 pub mod download;

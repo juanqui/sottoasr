@@ -222,9 +222,7 @@ pub async fn update_settings(
             Err(error) => warnings.push(format!("Settings saved, but the login-item task failed: {error}")),
         }
     }
-    if previous.llm_cleanup_enabled != new_settings.llm_cleanup_enabled {
-        crate::commands::llm::notify_on_cleanup_preference_saved(&app, new_settings.llm_cleanup_enabled);
-    }
+    crate::commands::llm::cleanup_settings_saved(&app, &previous, &new_settings);
     crate::commands::vocabulary::settings_saved(app.clone(), &previous, &new_settings);
     crate::commands::speech::settings_saved(app.clone(), &previous, &new_settings);
     log::info!("Settings updated and persisted");

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import { settingsStore, AWS_PROFILE_REQUIRED_MESSAGE } from '../stores/settings.svelte';
+  import { settingsStore, AWS_BEDROCK_PROFILE_REQUIRED_MESSAGE, AWS_PROFILE_REQUIRED_MESSAGE } from '../stores/settings.svelte';
   import { CleanupSetup } from '../stores/cleanup-setup.svelte';
   import { VocabularySetup } from '../stores/vocabulary-setup.svelte';
   import { createEventScope } from '../utils/event-scope';
@@ -140,7 +140,7 @@
     </div>
   </footer>
 </div>
-<ConfirmDialog open={closeConfirm} title="Save your changes?" message={settingsStore.validationError === AWS_PROFILE_REQUIRED_MESSAGE ? 'AWS Transcribe needs an AWS profile. Choose one in Dictation to save, or discard this draft.' : settingsStore.validationError ? 'A replacement in Vocabulary is incomplete. Finish or remove it to save, or discard this draft.' : cleanup.pending ? 'Cleanup setup may finish in the background. Discarding changes keeps your saved preferences.' : 'You have unsaved settings. Save them before closing, or discard this draft.'} confirmLabel="Save and close" cancelLabel="Keep editing" secondaryLabel="Discard" busy={settingsStore.saving} confirmDisabled={cleanup.pending || !!settingsStore.validationError} onconfirm={() => save(true)} oncancel={() => { closeConfirm = false; }} onsecondary={() => { discard(); void closeWindow(); }} />
+<ConfirmDialog open={closeConfirm} title="Save your changes?" message={settingsStore.validationError === AWS_PROFILE_REQUIRED_MESSAGE ? 'AWS Transcribe needs an AWS profile. Choose one in Dictation to save, or discard this draft.' : settingsStore.validationError === AWS_BEDROCK_PROFILE_REQUIRED_MESSAGE ? 'AWS Bedrock needs an AWS profile. Choose one in Dictation to save, or discard this draft.' : settingsStore.validationError ? 'A replacement in Vocabulary is incomplete. Finish or remove it to save, or discard this draft.' : cleanup.pending ? 'Cleanup setup may finish in the background. Discarding changes keeps your saved preferences.' : 'You have unsaved settings. Save them before closing, or discard this draft.'} confirmLabel="Save and close" cancelLabel="Keep editing" secondaryLabel="Discard" busy={settingsStore.saving} confirmDisabled={cleanup.pending || !!settingsStore.validationError} onconfirm={() => save(true)} oncancel={() => { closeConfirm = false; }} onsecondary={() => { discard(); void closeWindow(); }} />
 <ConfirmDialog open={resetConfirm} title="Reset settings?" message="SottoASR keeps the unreadable settings file as a backup in its settings folder, then starts again with default settings and shortcuts." confirmLabel="Back up and reset" busy={settingsStore.resetting} onconfirm={resetUnreadableSettings} oncancel={() => { resetConfirm = false; }} />
 
 <style>

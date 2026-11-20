@@ -4,6 +4,7 @@
   import { listInputDevices } from '../utils/tauri';
   import SettingsToggle from './settings-toggle.svelte';
   import SettingsSpeechEngine from './settings-speech-engine.svelte';
+  import SettingsCleanupEngine from './settings-cleanup-engine.svelte';
   import DownloadProgressBar from './download-progress.svelte';
   import type { InputDevice } from '../utils/tauri';
   import type { CleanupSetup } from '../stores/cleanup-setup.svelte';
@@ -14,10 +15,13 @@
   let selectedDevice = $derived(settingsStore.current.input_device ?? '');
   let systemDefault = $derived(devices?.find((device) => device.is_default)?.name);
   let connected = $derived(devices !== null && devices.some((device) => device.name === selectedDevice));
+  // The local setup applies to "On this Mac", also while that choice prepares the model and the draft still has AWS Bedrock.
+  let local = $derived(settingsStore.current.cleanup_engine === 'local' || cleanup.selectingLocal);
 
   function toggleCleanup(enabled: boolean) {
-    if (enabled) void cleanup.enable(() => settingsStore.update('llm_cleanup_enabled', true));
-    else { cleanup.cancel(); settingsStore.update('llm_cleanup_enabled', false); }
+    if (!enabled) { cleanup.cancel(); settingsStore.update('llm_cleanup_enabled', false); }
+    else if (settingsStore.current.cleanup_engine === 'aws_bedrock') settingsStore.update('llm_cleanup_enabled', true);
+    else void cleanup.enable(() => settingsStore.update('llm_cleanup_enabled', true));
   }
 
   async function refreshDevices() {
@@ -72,32 +76,35 @@
 <section class="setting-card" aria-busy={cleanup.pending}>
   <h3>Transcript cleanup</h3>
   <SettingsToggle label="AI transcript cleanup" hint="Remove clear fillers and accidental repeats. Preserve wording, facts, and order."
-    checked={settingsStore.current.llm_cleanup_enabled || cleanup.pending}
-    disabled={cleanup.status?.available === false}
+    checked={settingsStore.current.llm_cleanup_enabled || (local && cleanup.pending)}
+    disabled={local && cleanup.status?.available === false}
     onchange={toggleCleanup} />
-  <p class="setting-hint">Accepted cleanup is applied automatically. The original remains in History. Runs locally with MiniCPM5 2B; off by default.</p>
-  {#if cleanup.pending}
-    <div class="setting-status" role="status">
-      <span>{cleanup.progress || cleanup.status?.downloading ? 'Downloading cleanup model…' : 'Preparing local cleanup…'}</span>
-      <button class="secondary-button" type="button" onclick={() => cleanup.cancel()}>Cancel setup</button>
-    </div>
-    {#if cleanup.progress}<DownloadProgressBar progress={cleanup.progress} label="Cleanup model download" />{/if}
-    <p class="setting-hint">This may download the model and prepare its runtime. Your other settings remain available.</p>
-  {:else if cleanup.status?.available === false}
-    <p class="setting-hint">{cleanup.status.unavailable_reason ?? 'Cleanup is unavailable on this device.'}</p>
-  {:else if !cleanup.status?.downloaded}
-    <p class="setting-hint">Turning this on handles setup automatically{cleanup.status ? `, including a one-time ${cleanup.status.download_size_mb} MB download` : ''}.</p>
+  <p class="setting-hint">Accepted cleanup is applied automatically. The original remains in History. Off by default.</p>
+  <SettingsCleanupEngine {cleanup} />
+  {#if local}
+    {#if cleanup.pending}
+      <div class="setting-status" role="status">
+        <span>{cleanup.progress || cleanup.status?.downloading ? 'Downloading cleanup model…' : 'Preparing local cleanup…'}</span>
+        <button class="secondary-button" type="button" onclick={() => cleanup.cancel()}>Cancel setup</button>
+      </div>
+      {#if cleanup.progress}<DownloadProgressBar progress={cleanup.progress} label="Cleanup model download" />{/if}
+      <p class="setting-hint">This may download the model and prepare its runtime. Your other settings remain available.</p>
+    {:else if cleanup.status?.available === false}
+      <p class="setting-hint">{cleanup.status.unavailable_reason ?? 'Cleanup is unavailable on this device.'}</p>
+    {:else if !cleanup.status?.downloaded}
+      <p class="setting-hint">Turning this on handles setup automatically{cleanup.status ? `, including a one-time ${cleanup.status.download_size_mb} MB download` : ''}.</p>
+    {/if}
+    {#if settingsStore.saved?.llm_cleanup_enabled && !cleanup.pending && cleanup.status?.downloaded && !cleanup.status.loaded && !cleanup.error}
+      <button class="secondary-button" type="button" onclick={() => cleanup.prepare()}>Prepare cleanup now</button>
+    {/if}
+    {#if cleanup.error}
+      <div class="setting-error" role="alert">
+        <p>{cleanup.error}</p>
+        <button class="secondary-button" type="button" onclick={() => toggleCleanup(true)}>Retry setup</button>
+      </div>
+    {/if}
+    {#if cleanup.notice}<p class="setting-hint" role="status">{cleanup.notice}</p>{/if}
   {/if}
-  {#if settingsStore.saved?.llm_cleanup_enabled && !cleanup.pending && cleanup.status?.downloaded && !cleanup.status.loaded && !cleanup.error}
-    <button class="secondary-button" type="button" onclick={() => cleanup.prepare()}>Prepare cleanup now</button>
-  {/if}
-  {#if cleanup.error}
-    <div class="setting-error" role="alert">
-      <p>{cleanup.error}</p>
-      <button class="secondary-button" type="button" onclick={() => toggleCleanup(true)}>Retry setup</button>
-    </div>
-  {/if}
-  {#if cleanup.notice}<p class="setting-hint" role="status">{cleanup.notice}</p>{/if}
 </section>
 
 <section class="setting-card">

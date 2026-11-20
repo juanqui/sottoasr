@@ -80,7 +80,7 @@
     <label class="mode-option"><input type="radio" name="speech-engine" value="local"
       checked={!cloud}
       onchange={() => settingsStore.update('speech_engine', 'local')} />
-      <span><strong>On this Mac</strong><span class="mode-hint">Parakeet Ultra. Audio and text stay on this Mac.</span></span></label>
+      <span><strong>On this Mac</strong><span class="mode-hint">Parakeet Ultra. The audio stays on this Mac.</span></span></label>
     <label class="mode-option"><input type="radio" name="speech-engine" value="aws_transcribe"
       checked={cloud}
       onchange={() => settingsStore.update('speech_engine', 'aws_transcribe')} />

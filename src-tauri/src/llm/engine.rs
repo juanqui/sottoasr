@@ -74,6 +74,10 @@ pub trait LlmBackend: Send {
     /// Shut down the backend. Default is a no-op.
     /// Production impl kills the sidecar process.
     fn shutdown(&mut self) {}
+
+    /// The options of an Amazon Bedrock backend. `None` is a backend for
+    /// the local model.
+    fn bedrock_options(&self) -> Option<&crate::models::AwsBedrockSettings> { None }
 }
 
 /// The LLM engine manages a Python sidecar process for transcript cleanup.
@@ -1837,6 +1841,48 @@ pub fn is_zombie_error(err: &str) -> bool {
         || e.starts_with("cleanup runtime requires restart")
 }
 
+/// The backend of the saved cleanup engine. Returns the handle (ownership
+/// transferred to the caller — remember to put it back in `state.llm_engine`
+/// after use). This is the only place that makes a backend, so with Amazon
+/// Bedrock saved nothing starts the sidecar.
+///
+/// The caller must hold `state.llm_operation` through the returned handle's
+/// use and restoration, so lifecycle commands cannot replace it.
+pub async fn ensure_running(state: &AppState) -> Result<Box<dyn LlmBackend>, String> {
+    let (engine, options) = {
+        let settings = state.settings.lock().await;
+        (settings.cleanup_engine, settings.aws_bedrock.clone())
+    };
+    match engine {
+        crate::models::CleanupEngine::Local => ensure_local(state).await,
+        crate::models::CleanupEngine::AwsBedrock => ensure_bedrock(state, &options).await,
+    }
+}
+
+/// The Amazon Bedrock backend for `options`. A resident backend for other
+/// options, or a resident sidecar, is retired first.
+async fn ensure_bedrock(
+    state: &AppState,
+    options: &crate::models::AwsBedrockSettings,
+) -> Result<Box<dyn LlmBackend>, String> {
+    let resident = state.llm_engine.lock().await.take();
+    if let Some(resident) = resident {
+        if resident.bedrock_options() == Some(options) {
+            return Ok(resident);
+        }
+        retire(state, resident).await;
+    }
+    Ok(Box::new(super::bedrock::BedrockCleanup::connect(options).await?))
+}
+
+/// Stop a backend that is out of `state.llm_engine`. For the sidecar this
+/// ends the process, which releases the local model.
+pub async fn retire(state: &AppState, mut backend: Box<dyn LlmBackend>) {
+    let _ = tokio::task::spawn_blocking(move || backend.shutdown()).await;
+    state.llm_pid.store(0, Ordering::SeqCst);
+    state.llm_loaded.store(false, Ordering::SeqCst);
+}
+
 /// Ensure a live sidecar handle is available, spawning + loading the model if
 /// none is currently running. Returns the handle (ownership transferred to the
 /// caller — remember to put it back in `state.llm_engine` after use).
@@ -1846,17 +1892,11 @@ pub fn is_zombie_error(err: &str) -> bool {
 /// Retries once with a short backoff on persistent failures. On success,
 /// stores the subprocess PID in `state.llm_pid` for `kill_orphan()` use.
 /// See docs/specs/2026-04-11-llm-cleanup-reliability.md §4.1.
-pub async fn ensure_running(state: &AppState) -> Result<Box<dyn LlmBackend>, String> {
+pub async fn ensure_local(state: &AppState) -> Result<Box<dyn LlmBackend>, String> {
     // Fast path — sidecar already running in the guard.
-    {
-        let mut guard = state.llm_engine.lock().await;
-        if let Some(mut llm) = guard.take() {
-            if llm.is_alive() {
-                state.llm_loaded.store(true, Ordering::SeqCst);
-                return Ok(llm);
-            }
-            log::warn!("Resident cleanup process exited; starting a fresh process");
-        }
+    if let Some(sidecar) = resident_sidecar(state).await {
+        state.llm_loaded.store(true, Ordering::SeqCst);
+        return Ok(sidecar);
     }
     state.llm_loaded.store(false, Ordering::SeqCst);
 
@@ -1905,6 +1945,21 @@ pub async fn ensure_running(state: &AppState) -> Result<Box<dyn LlmBackend>, Str
         last_err
     );
     Err(last_err)
+}
+
+/// The resident sidecar, if it is alive. The slot is empty afterwards: a
+/// cloud backend that the engine change left there has no process to stop,
+/// and a sidecar that exited is of no use.
+async fn resident_sidecar(state: &AppState) -> Option<Box<dyn LlmBackend>> {
+    let mut resident = state.llm_engine.lock().await.take()?;
+    if resident.bedrock_options().is_some() {
+        return None;
+    }
+    if !resident.is_alive() {
+        log::warn!("Resident cleanup process exited; starting a fresh process");
+        return None;
+    }
+    Some(resident)
 }
 
 /// Terminate the registered owned subprocess after a cleanup panic or timeout.
@@ -3029,5 +3084,66 @@ mod tests {
                 .unavailable_reason();
         assert!(unknown.contains("retries"), "{unknown}");
         assert!(!unknown.contains("Download the model"), "{unknown}");
+    }
+
+    fn cleanup_state(settings: crate::models::Settings, resident: Box<dyn LlmBackend>) -> AppState {
+        use crate::test_support::{MockAsrEngine, MockAudioCapture, MockPasteBackend};
+        AppState::new_with_backends(
+            Box::new(MockAudioCapture::sine_wave()),
+            Box::new(MockAsrEngine::with_text("unused")),
+            Some(resident),
+            Box::new(MockPasteBackend::new()),
+            settings,
+        )
+    }
+
+    #[tokio::test]
+    async fn the_cloud_engine_keeps_its_backend_and_never_uses_a_sidecar() {
+        use crate::models::{AwsBedrockSettings, BedrockModel, CleanupEngine, Settings};
+        use crate::test_support::{CloudCleanupStandIn, StoppableSidecar};
+        // No machine has this profile, so a new backend cannot be made here.
+        let options = AwsBedrockSettings {
+            profile: Some("sottoasr-test-profile-that-is-not-defined".into()),
+            region: Some("us-west-2".into()),
+            model: BedrockModel::Haiku55,
+        };
+        let settings = Settings { llm_cleanup_enabled: true, cleanup_engine: CleanupEngine::AwsBedrock, aws_bedrock: options.clone(), ..Default::default() };
+        let state = cleanup_state(settings, Box::new(CloudCleanupStandIn { options: options.clone(), ..Default::default() }));
+
+        // The backend for the saved options is used again.
+        let backend = ensure_running(&state).await.unwrap();
+        assert_eq!(backend.bedrock_options(), Some(&options));
+
+        // Other options: the old backend goes, and a new one is made.
+        *state.llm_engine.lock().await = Some(backend);
+        state.settings.lock().await.aws_bedrock.model = BedrockModel::Opus55;
+        assert!(ensure_running(&state).await.is_err(), "the profile of the new backend is not in the AWS files");
+        assert!(state.llm_engine.lock().await.is_none());
+
+        // A resident sidecar is stopped, not used.
+        let sidecar = StoppableSidecar::default();
+        let (stopped, batches) = (sidecar.stopped.clone(), sidecar.batches.clone());
+        *state.llm_engine.lock().await = Some(Box::new(sidecar));
+        state.llm_loaded.store(true, Ordering::SeqCst);
+        assert!(ensure_running(&state).await.is_err());
+        assert!(stopped.load(Ordering::SeqCst), "the sidecar process ends");
+        assert!(!state.llm_loaded.load(Ordering::SeqCst));
+        assert_eq!(batches.load(Ordering::SeqCst), 0, "no text went to the local model");
+    }
+
+    #[tokio::test]
+    async fn the_local_engine_never_gets_a_cloud_backend() {
+        use crate::models::Settings;
+        use crate::test_support::{CloudCleanupStandIn, StoppableSidecar};
+        let cloud = CloudCleanupStandIn::default();
+        let state = cleanup_state(Settings::default(), Box::new(cloud));
+        assert!(resident_sidecar(&state).await.is_none());
+        assert!(state.llm_engine.lock().await.is_none(), "the cloud backend is not kept for the local engine");
+
+        // A live sidecar is the resident handle, as before.
+        *state.llm_engine.lock().await = Some(Box::new(StoppableSidecar::default()));
+        let sidecar = ensure_running(&state).await.unwrap();
+        assert!(sidecar.bedrock_options().is_none());
+        assert!(state.llm_loaded.load(Ordering::SeqCst));
     }
 }

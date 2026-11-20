@@ -1,5 +1,5 @@
 import { getSettings, getSettingsLoadError, resetSettings, updateSettings } from '../utils/tauri';
-import type { AwsTranscribeSettings, DictionaryEntry, Settings, UpdateSettingsResult } from '../utils/tauri';
+import type { AwsBedrockSettings, AwsTranscribeSettings, DictionaryEntry, Settings, UpdateSettingsResult } from '../utils/tauri';
 
 export function createDefaultSettings(): Settings {
   return {
@@ -12,6 +12,7 @@ export function createDefaultSettings(): Settings {
     llm_cleanup_enabled: false, llm_cleanup_mode: 'retype', dictionary: [], vocabulary: [], auto_check_updates: true,
     input_device: null, sound_cues: false, history_retention_days: 0, audio_retention_days: 0,
     speech_engine: 'local', aws_transcribe: { profile: null, region: null, language: 'en-US', vocabulary_name: null },
+    cleanup_engine: 'local', aws_bedrock: { profile: null, region: null, model: 'haiku-5.5' },
   };
 }
 
@@ -21,15 +22,24 @@ export const INCOMPLETE_REPLACEMENT_MESSAGE = 'Finish or remove the incomplete r
 /** Shown when Save is blocked because AWS Transcribe is selected without a profile. */
 export const AWS_PROFILE_REQUIRED_MESSAGE = 'Choose an AWS profile for AWS Transcribe.';
 
+/** Shown when Save is blocked because cleanup is on with AWS Bedrock and no profile. */
+export const AWS_BEDROCK_PROFILE_REQUIRED_MESSAGE = 'Choose an AWS profile for AWS Bedrock.';
+
 /** One field filled in and the other empty. Rows with both fields empty are dropped on save. */
 export function isIncompleteEntry(entry: DictionaryEntry): boolean {
   return !entry.heard.trim() !== !entry.replacement.trim();
 }
 
+const optional = (value: string | null | undefined) => value?.trim() || null;
+
 /** The AWS options as the backend accepts them: trimmed, with an empty optional value as null. */
 export function normalizedAwsTranscribe(options: AwsTranscribeSettings): AwsTranscribeSettings {
-  const optional = (value: string | null | undefined) => value?.trim() || null;
   return { profile: optional(options.profile), region: optional(options.region), language: options.language, vocabulary_name: optional(options.vocabulary_name) };
+}
+
+/** The AWS Bedrock options as the backend accepts them: trimmed, with an empty optional value as null. */
+export function normalizedAwsBedrock(options: AwsBedrockSettings): AwsBedrockSettings {
+  return { profile: optional(options.profile), region: optional(options.region), model: options.model };
 }
 
 /**
@@ -40,9 +50,11 @@ export function normalizedAwsTranscribe(options: AwsTranscribeSettings): AwsTran
  */
 function withDefaults(settings: Settings): Settings {
   const aws = settings.aws_transcribe;
+  const bedrock = settings.aws_bedrock;
   return {
     ...createDefaultSettings(), ...settings, dictionary: settings.dictionary ?? [], vocabulary: settings.vocabulary ?? [],
     aws_transcribe: { profile: aws?.profile ?? null, region: aws?.region ?? null, language: aws?.language ?? 'en-US', vocabulary_name: aws?.vocabulary_name ?? null },
+    aws_bedrock: { profile: bedrock?.profile ?? null, region: bedrock?.region ?? null, model: bedrock?.model ?? 'haiku-5.5' },
   };
 }
 
@@ -71,6 +83,7 @@ export class SettingsStore {
   get validationError() {
     if (this.current.dictionary.some(isIncompleteEntry)) return INCOMPLETE_REPLACEMENT_MESSAGE;
     if (this.current.speech_engine === 'aws_transcribe' && !this.current.aws_transcribe.profile?.trim()) return AWS_PROFILE_REQUIRED_MESSAGE;
+    if (this.current.llm_cleanup_enabled && this.current.cleanup_engine === 'aws_bedrock' && !this.current.aws_bedrock.profile?.trim()) return AWS_BEDROCK_PROFILE_REQUIRED_MESSAGE;
     return '';
   }
 
@@ -143,6 +156,7 @@ export class SettingsStore {
       .map((entry) => ({ heard: entry.heard.trim(), replacement: entry.replacement.trim() }))
       .filter((entry) => entry.heard || entry.replacement);
     submitted.aws_transcribe = normalizedAwsTranscribe(submitted.aws_transcribe);
+    submitted.aws_bedrock = normalizedAwsBedrock(submitted.aws_bedrock);
     const generation = this.loadGeneration;
     this.saving = true;
     this.error = '';

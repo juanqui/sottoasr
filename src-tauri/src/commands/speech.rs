@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::asr::aws_profiles::{self, AwsProfile};
+use crate::aws::profiles::{self as aws_profiles, AwsProfile};
 use crate::asr::aws_transcribe::{self, ConnectionTest};
 use crate::asr::engine::create_engine;
 use crate::models::{AwsTranscribeSettings, Settings, SpeechEngine};

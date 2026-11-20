@@ -74,7 +74,7 @@ pub async fn get_asr_backend(state: State<'_, AppState>) -> Result<serde_json::V
 pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus, String> {
     if state.cloud_speech() {
         let options = state.settings.lock().await.aws_transcribe.clone();
-        return Ok(cloud_status(&options, crate::asr::aws_profiles::list().await));
+        return Ok(cloud_status(&options, crate::aws::profiles::list().await));
     }
     let mut status = model::get_model_status();
     let upgrading = UPGRADING.load(Ordering::SeqCst);
@@ -96,7 +96,7 @@ pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus,
 /// error.
 fn cloud_status(
     options: &crate::models::AwsTranscribeSettings,
-    profiles: Result<Vec<crate::asr::aws_profiles::AwsProfile>, String>,
+    profiles: Result<Vec<crate::aws::profiles::AwsProfile>, String>,
 ) -> ModelStatus {
     let described = profiles.and_then(|profiles| crate::asr::aws_transcribe::describe(options, &profiles));
     let (notice, error) = match described {
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn the_cloud_status_names_where_the_audio_goes_or_why_it_cannot_go() {
-        use crate::asr::aws_profiles::AwsProfile;
+        use crate::aws::profiles::AwsProfile;
         let options = crate::models::AwsTranscribeSettings { profile: Some("work".into()), ..Default::default() };
         let work = AwsProfile { name: "work".into(), region: Some("eu-west-1".into()) };
 

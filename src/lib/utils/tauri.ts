@@ -76,6 +76,20 @@ export interface AwsTranscribeSettings {
 	vocabulary_name?: string | null;
 }
 
+export type CleanupEngine = 'local' | 'aws_bedrock';
+
+/** Setting names of the Amazon Bedrock cleanup models. */
+export type BedrockModel = 'haiku-5.5' | 'sonnet-5.5' | 'opus-5.5' | 'gpt-6.2-sol';
+
+/** Options of the AWS Bedrock cleanup engine. The backend omits the optional keys that have no value. */
+export interface AwsBedrockSettings {
+	/** Profile name in ~/.aws/config or ~/.aws/credentials. */
+	profile?: string | null;
+	/** Null or absent: the Region of the profile. */
+	region?: string | null;
+	model: BedrockModel;
+}
+
 export interface Settings {
 	push_to_talk_shortcut: string;
 	push_to_talk_shortcut_alt?: string | null;
@@ -103,6 +117,8 @@ export interface Settings {
 	audio_retention_days: number;
 	speech_engine: SpeechEngine;
 	aws_transcribe: AwsTranscribeSettings;
+	cleanup_engine: CleanupEngine;
+	aws_bedrock: AwsBedrockSettings;
 }
 
 /** A speech model that earlier releases used and that is still on disk. */
@@ -370,6 +386,12 @@ export interface LlmStatus {
 	download_size_mb: number;
 	model_path: string | null;
 	last_cleanup_status: LlmCleanupStatus;
+	/** The saved cleanup engine. The other fields describe the local model in both modes. */
+	engine?: CleanupEngine;
+	/** AWS Bedrock only: where SottoASR sends the text, with which profile and model. */
+	notice?: string | null;
+	/** AWS Bedrock only: why no request can be made. */
+	cloud_error?: string | null;
 }
 
 export function getLlmStatus(): Promise<LlmStatus> {
@@ -387,6 +409,52 @@ export function repairLlmRuntime(): Promise<LlmStatus> {
 
 export function deleteLlmModel(): Promise<void> {
 	return invoke("delete_llm_model");
+}
+
+// ---- AWS Bedrock cleanup commands ----
+
+/** The inference profile of one model in one Region. */
+export interface BedrockRoute {
+	model: BedrockModel;
+	/** Such as `us.anthropic.claude-haiku-5-5`. */
+	inference_profile: string;
+	/** A sentence that says where AWS processes the text. */
+	processed_in: string;
+}
+
+export interface BedrockRegion extends AwsRegion {
+	routes: BedrockRoute[];
+}
+
+export interface BedrockModelOption {
+	id: BedrockModel;
+	/** Display name, such as "Claude Haiku 5.5". */
+	name: string;
+}
+
+export interface BedrockCleanupOptions {
+	profiles: AwsProfile[];
+	/** Why the AWS files could not be read; null when they were read or are absent. */
+	profiles_error: string | null;
+	regions: BedrockRegion[];
+	models: BedrockModelOption[];
+}
+
+export interface BedrockCleanupTest {
+	region: string;
+	/** Display name of the model. */
+	model: string;
+	inference_profile: string;
+	seconds: number;
+}
+
+export function getBedrockCleanupOptions(): Promise<BedrockCleanupOptions> {
+	return invoke("get_bedrock_cleanup_options");
+}
+
+/** Send one fixed sentence with these options. Rejects with a sentence for the user. */
+export function testBedrockCleanup(options: AwsBedrockSettings): Promise<BedrockCleanupTest> {
+	return invoke("test_bedrock_cleanup", { options });
 }
 
 // ---- App update commands ----
