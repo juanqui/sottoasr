@@ -746,9 +746,10 @@ Version 1.1 changed these items of version 1.0:
 
 ### 12.8 Not tested
 
-- A dictation in cloud mode with the hotkey, the microphone and the paste.
-  Section 12.10 has the check of a recorded file in the running application.
-  The pipeline tests ran with a stand-in engine.
+- A dictation in cloud mode with the hotkey, the real microphone and the
+  paste into another application. Section 12.10 has the check of a recorded
+  file in the running application, and the check of the dictation pipeline
+  with the real engine.
 - The Settings page in its own window, and the packaged build. In the check
   of section 12.10, the page ran in the History window of a development
   build.
@@ -801,6 +802,16 @@ After this check, History got a minimum length of 15 seconds for recovery
 (see the CHANGELOG). The two recordings of this check were 2.8 s and 2.6 s
 long. The rows of section 5 that say that History recovers a failed
 dictation now apply only to recordings of 15 seconds or more.
+
+**Dictation pipeline.** A throwaway test ran `pipeline::start`,
+`claim_and_finish` and `complete` with the real cloud engine. A stand-in for
+the microphone gave the samples of a synthetic clip, and a stand-in recorded
+the paste:
+
+| Case | Result |
+| --- | --- |
+| Dictation of 2.6 s | Delivered after 1.5 s. The pasted text and the History entry were "A dark cloud covered the western side of the valley." The WAV was deleted after History saved the entry |
+| Cancelled recording | Dismissed after 0.02 s, which is less than the time of a request. The History entry is cancelled and has no text. Nothing was pasted. The WAV was deleted |
 
 ## 13. Review Log
 
