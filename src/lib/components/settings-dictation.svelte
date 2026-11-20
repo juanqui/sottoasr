@@ -3,6 +3,7 @@
   import { settingsStore } from '../stores/settings.svelte';
   import { listInputDevices } from '../utils/tauri';
   import SettingsToggle from './settings-toggle.svelte';
+  import SettingsSpeechEngine from './settings-speech-engine.svelte';
   import DownloadProgressBar from './download-progress.svelte';
   import type { InputDevice } from '../utils/tauri';
   import type { CleanupSetup } from '../stores/cleanup-setup.svelte';
@@ -36,6 +37,8 @@
     return () => { ++deviceRequest; window.removeEventListener('focus', refresh); };
   });
 </script>
+
+<SettingsSpeechEngine />
 
 <section class="setting-card">
   <h3>Recording</h3>

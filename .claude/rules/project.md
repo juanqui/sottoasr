@@ -2,7 +2,7 @@
 
 ## Overview
 
-SottoASR is a local, privacy-first speech-to-text application for macOS. The user presses a global hotkey and speaks. SottoASR then pastes the transcribed text at the cursor. All speech recognition and transcript cleanup runs on the Mac. No audio or text is ever sent to a cloud service.
+SottoASR is a local-first, privacy-first speech-to-text application for macOS. The user presses a global hotkey and speaks. SottoASR then pastes the transcribed text at the cursor. By default, all speech recognition and transcript cleanup runs on the Mac, and no audio or text leaves it. An optional cloud engine, AWS Transcribe, sends the audio of each completed dictation to Amazon Transcribe. It works only after the user selects it in Settings.
 
 ## Tech Stack
 
@@ -13,6 +13,7 @@ SottoASR is a local, privacy-first speech-to-text application for macOS. The use
 | Frontend | Svelte 5 + TypeScript | Recording overlay, history, settings, onboarding, about and update windows |
 | ASR engine (default) | FluidAudio via the vendored bridge `src-tauri/vendor/fluidaudio-rs` (Swift) | Parakeet Ultra on CoreML and the Apple Neural Engine (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via the `asr-parakeet` feature |
+| Cloud speech engine (optional) | AWS SDK for Rust (`aws-config`, `aws-sdk-transcribestreaming`) | Optional Amazon Transcribe engine, off by default. The SDK reads the AWS profiles of the user. |
 | Transcript cleanup (optional) | Python sidecar `src-tauri/sidecar/llm_cleanup.py` with MLX and mlx-lm | Runs the stock `openbmb/MiniCPM5-2B-MLX` model, pinned by revision |
 | Audio capture | cpal 0.16 | Microphone input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
@@ -21,8 +22,9 @@ SottoASR is a local, privacy-first speech-to-text application for macOS. The use
 
 - **Menu bar / tray app only.** No Dock icon. No main window by default. The app lives in the macOS menu bar.
 - **Floating overlay window** appears during recording to show visual feedback (waveform, status). It is a non-activating NSPanel, so it does not take focus from the app that receives the text.
-- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet Ultra) → optional acoustic vocabulary → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
-- **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for ASR and starts the Python sidecar for cleanup.
+- **Dictation pipeline:** microphone → cpal → private WAV file on disk → FluidAudio (Parakeet Ultra), or Amazon Transcribe in cloud mode → optional acoustic vocabulary (local engine only) → exact replacements → optional cleanup → paste or copy → history. `src-tauri/src/pipeline.rs` is the only implementation of start, stop and cancel.
+- **All audio and ASR processing happens in the backend.** The frontend is only for UI. It never touches audio data or model inference. Rust owns the pipeline. Rust calls the Swift bridge for local ASR, sends the request to Amazon Transcribe in cloud mode, and starts the Python sidecar for cleanup.
+- **One speech engine object at a time.** The `speech_engine` setting selects the engine. In cloud mode no local speech model and no vocabulary model is in memory.
 
 ## Package Managers
 
@@ -93,7 +95,7 @@ sottoasr/
 - **All audio processing happens in Rust, not in the frontend.** If you need to add audio-related functionality, it goes in `src-tauri/src/`, not in `src/`.
 - **The app MUST remain menu-bar-only.** No Dock icon, no main window by default. Any UI must be a floating overlay or a settings panel opened from the tray menu.
 - **Accessibility permissions are required** for the paste-at-cursor functionality (simulated Cmd+V). Code that interacts with accessibility APIs must handle the case where permissions have not been granted and guide the user to enable them.
-- **Local-only processing is a hard constraint.** Never add features that send audio, transcriptions, or usage data to external services.
+- **Local by default.** Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry. Never add a feature that sends audio, transcriptions or usage data to an external service without these two conditions.
 - **Experiment logs go in `docs/journals/`**, not alongside code. Benchmark code lives in `benchmarks/`; the narrative of what was tried, measured, and learned lives in `docs/journals/YYYY-MM-DD-slug.md`.
 
 ## HuggingFace Artifacts (historical)

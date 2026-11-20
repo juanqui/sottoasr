@@ -48,6 +48,9 @@ pub struct AppState {
     /// Set when a transcription outlives its deadline. The blocking call still
     /// holds the engine, so dictations fail at once until it returns and clears this.
     pub asr_stuck: std::sync::Arc<AtomicBool>,
+    /// The installed engine sends audio to a cloud service and holds no
+    /// model. Changed only where the engine object is replaced.
+    pub cloud_speech: std::sync::Arc<AtomicBool>,
     // Audio capture — managed by hotkey handlers
     pub audio_capture: std::sync::Arc<StdMutex<Box<dyn AudioCaptureBackend>>>,
     pub capture_health: std::sync::Arc<StdMutex<crate::audio::capture::CaptureHealth>>,
@@ -129,15 +132,18 @@ impl AppState {
         #[cfg(not(target_os = "macos"))]
         let paste: Box<dyn PasteBackend> = Box::new(crate::paste::StubPasteBackend);
 
-        Self::build(
+        let cloud = settings.speech_engine == crate::models::SpeechEngine::AwsTranscribe;
+        let state = Self::build(
             Box::new(AudioCapture::new()),
-            crate::asr::engine::create_engine(),
+            crate::asr::engine::create_engine(&settings),
             None,
             paste,
             settings,
             settings_load_error,
             false,
-        )
+        );
+        state.cloud_speech.store(cloud, std::sync::atomic::Ordering::SeqCst);
+        state
     }
 
     /// Construct AppState with injected backends. Used by integration tests.
@@ -180,6 +186,7 @@ impl AppState {
             asr_initializing: AtomicBool::new(false),
             asr_init_error: StdMutex::new(None),
             asr_stuck: std::sync::Arc::new(AtomicBool::new(false)),
+            cloud_speech: std::sync::Arc::new(AtomicBool::new(false)),
             is_model_loaded: AtomicBool::new(model_loaded),
             audio_capture: std::sync::Arc::new(StdMutex::new(audio)),
             capture_health: Default::default(),
@@ -217,6 +224,11 @@ impl AppState {
         self.show_overlay.store(settings.show_overlay, Ordering::SeqCst);
         self.sound_cues.store(settings.sound_cues, Ordering::SeqCst);
         *self.input_device.lock().unwrap_or_else(|error| error.into_inner()) = settings.input_device.clone();
+    }
+
+    /// Whether the installed engine sends audio to a cloud service.
+    pub fn cloud_speech(&self) -> bool {
+        self.cloud_speech.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn settings_load_error(&self) -> Option<String> {

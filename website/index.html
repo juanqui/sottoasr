@@ -3,10 +3,10 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>SottoASR — Local, Privacy-First Speech-to-Text for macOS</title>
+        <title>SottoASR — Local-First, Privacy-First Speech-to-Text for macOS</title>
         <meta
             name="description"
-            content="Press a hotkey, speak, and text appears at your cursor. All processing happens on-device. No audio or text is ever sent to a cloud service."
+            content="Press a hotkey, speak, and text appears at your cursor. By default, all processing happens on your Mac and no audio or text leaves it. An optional cloud engine, Amazon Transcribe, works only after you turn it on."
         />
         <meta name="theme-color" content="#0a0c10" />
 
@@ -17,7 +17,7 @@
         />
         <meta
             property="og:description"
-            content="Local, privacy-first speech-to-text. Press a hotkey, speak, and text appears at your cursor."
+            content="Local-first, privacy-first speech-to-text. Press a hotkey, speak, and text appears at your cursor."
         />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="assets/logo.png" />
@@ -49,12 +49,12 @@
                 />
                 <h1 class="hero-title">SottoASR</h1>
                 <p class="hero-tagline">
-                    Local, privacy-first speech-to-text for macOS
+                    Local-first, privacy-first speech-to-text for macOS
                 </p>
                 <p class="hero-sub">
                     Press a hotkey, speak, and text appears at your cursor.<br />
-                    All processing happens on-device — no audio or text ever
-                    leaves your Mac.
+                    By default, all processing happens on-device — no audio
+                    or text leaves your Mac.
                 </p>
                 <div class="hero-actions">
                     <a
@@ -112,7 +112,7 @@
                     >
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
-                    Open Source &middot; MIT Licensed &middot; 100% Local
+                    Open Source &middot; MIT Licensed &middot; Local by Default
                 </div>
             </div>
         </section>
@@ -145,11 +145,11 @@
                                 <path d="M9 12l2 2 4-4" />
                             </svg>
                         </div>
-                        <h3>Completely Private</h3>
+                        <h3>Private by Default</h3>
                         <p>
-                            All audio capture and transcription happens
-                            on-device. No cloud APIs, no telemetry, no data
-                            collection. Your words stay on your Mac.
+                            Out of the box, audio capture and transcription
+                            happen on-device, and no audio or text leaves your
+                            Mac. No telemetry, no data collection.
                         </p>
                     </div>
 
@@ -373,9 +373,36 @@
                         </div>
                         <h3>Lightweight</h3>
                         <p>
-                            Models are downloaded once on
+                            The speech model is downloaded once on
                             first launch (about 630 MB) and cached locally. Minimal
                             resource usage when idle.
+                        </p>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"
+                                />
+                            </svg>
+                        </div>
+                        <h3>Cloud When You Choose</h3>
+                        <p>
+                            Short on free memory? Switch to Amazon Transcribe
+                            in Settings: it uses your own AWS account, and
+                            SottoASR then loads no speech model. It is off by
+                            default, and audio goes to AWS only after you turn
+                            it on.
                         </p>
                     </div>
                 </div>
@@ -402,7 +429,8 @@
                             <ul>
                                 <li>macOS 14 Sonoma or later</li>
                                 <li>Apple Silicon (M1 or later)</li>
-                                <li>About 630 MB for ASR; ~1.4 GB more for optional AI cleanup</li>
+                                <li>About 630 MB for the local speech model; ~1.4 GB more for optional AI cleanup</li>
+                                <li>Optional cloud engine: an AWS account and an internet connection</li>
                                 <li>
                                     Accessibility permission (for
                                     paste-at-cursor)
@@ -536,7 +564,7 @@
                 <p class="section-title">Built on the shoulders of giants</p>
                 <p class="section-desc">
                     SottoASR relies on outstanding open-source libraries and
-                    models. All 660+ dependencies use permissive or
+                    models. All 690+ dependencies use permissive or
                     weak-copyleft licenses (MIT, Apache-2.0, BSD, MPL-2.0,
                     Unicode-3.0, ISC, Zlib, CC-BY-4.0). See
                     <a href="https://github.com/juanqui/sottoasr/blob/main/THIRD_PARTY_LICENSES">THIRD_PARTY_LICENSES</a>
@@ -573,6 +601,13 @@
                                 ONNX Runtime Rust bindings
                             </div>
                             <span class="ack-license">MIT</span>
+                        </div>
+                        <div class="ack-item">
+                            <div class="ack-name">AWS SDK for Rust</div>
+                            <div class="ack-desc">
+                                Optional Amazon Transcribe engine
+                            </div>
+                            <span class="ack-license">Apache-2.0</span>
                         </div>
                         <div class="ack-item">
                             <div class="ack-name">cpal</div>

@@ -21,7 +21,7 @@ This document tells you how to build, test and debug SottoASR.
 
 | Tool | Minimum Version | CI Uses | Install |
 |---|---|---|---|
-| Rust | 1.80 (`rust-version` in `src-tauri/Cargo.toml`) | 1.94.0 | [rustup.rs](https://rustup.rs/) |
+| Rust | 1.94.1 (`rust-version` in `src-tauri/Cargo.toml`, needed by the AWS SDK for Rust) | 1.96.0 | [rustup.rs](https://rustup.rs/) |
 | Node.js | 20.19 or 22.12 (required by Vite 8) | 24 | [nodejs.org](https://nodejs.org/) |
 | Xcode or Xcode Command Line Tools | -- | -- | `xcode-select --install` |
 | Tauri CLI | 2 | -- | `cargo install tauri-cli --version "^2" --locked` |
@@ -131,10 +131,12 @@ Each entry script first calls `forwardConsoleToLog()` from `src/lib/utils/consol
 | `audio/recovery.rs` | The disk writer: private WAV checkpoints and the stall watchdog |
 | `audio/wav.rs` | WAV serialization, and deletion of a WAV after the history save |
 | `audio/cue.rs` | Optional system sounds for start, stop, cancel, busy and error |
-| `audio/resample.rs` | rubato resampling to 16 kHz (`asr-parakeet` only) |
-| `asr/engine.rs` | The `AsrEngine` trait and the engine lock |
+| `audio/resample.rs` | Streaming rubato resampler to 16 kHz (`Resampler16k`), for AWS Transcribe and the ONNX backend |
+| `asr/engine.rs` | The `AsrEngine` trait, the engine lock, and `create_engine`, which makes the engine that the settings select |
 | `asr/fluidaudio_backend.rs` | FluidAudio backend (default) |
 | `asr/parakeet_backend.rs` | parakeet-rs ONNX backend (`asr-parakeet`) |
+| `asr/aws_transcribe.rs` | AWS Transcribe engine (optional, cloud): the request, the Regions, the languages, the error text and the connection test |
+| `asr/aws_profiles.rs` | The AWS profile list from `~/.aws/config` and `~/.aws/credentials` |
 | `asr/model.rs` | Speech model preparation, download progress, re-download |
 | `asr/integrity.rs` | SHA-256 checks of the speech and vocabulary models against `model-manifest.json` |
 | `asr/vocabulary.rs` | Vocabulary validation and acoustic candidate selection |
@@ -145,7 +147,7 @@ Each entry script first calls `forwardConsoleToLog()` from `src/lib/utils/consol
 | `llm/engine.rs` | The Python sidecar process, runtime checks, the hash-locked install, standalone Python, the model pin |
 | `llm/download.rs` | Cleanup model download with progress and a stall check |
 | `llm/cleanup.rs`, `llm/correction.rs`, `llm/validation.rs` | Cleanup prewarm, the window planner, and validation of proposed edits |
-| `commands/` | IPC handlers: recording, transcription (history and CSV), recovery and retention, settings, audio devices, permissions, key capture, setup, vocabulary, llm, overlay |
+| `commands/` | IPC handlers: recording, transcription (history and CSV), recovery and retention, settings, speech engine (AWS options, connection test, engine change), audio devices, permissions, key capture, setup, vocabulary, llm, overlay |
 | `tray/menu.rs` | Tray icon and menu, window opening, Copy Diagnostics |
 | `updater/mod.rs` | App update checks and install |
 
@@ -180,7 +182,7 @@ User releases the key (or presses toggle again)
                   → state returns to Idle
 ```
 
-Cancel follows the same path. It pastes nothing and saves the transcript in History as cancelled.
+Cancel follows the same path. It pastes nothing. With the local engine, it saves the transcript in History as cancelled. With AWS Transcribe, `pipeline::complete` does not transcribe the recording: it saves a cancelled entry without text, then deletes the WAV.
 
 ## Running in Development
 
@@ -275,6 +277,18 @@ python3 scripts/check-vocabulary-cache.py
 
 These probes test the loaders of the FluidAudio bridge. They need no model and no network. They need a previous `cargo build` or `cargo test`, because they use the Swift build in `src-tauri/target/`. `check-asr-cache.py` checks that a failed load or download keeps every file, that model URLs use the pinned commits, and that the SDK does not pin those repositories itself. CI does not run these probes. Run them after you change the FluidAudio version or a file in `src-tauri/vendor/fluidaudio-rs/`.
 
+### AWS Transcribe (Manual)
+
+The automated tests never call AWS. They test the settings rules, the profile list, the audio source, the error text and the engine selection with sample files and SDK errors that the tests build. To test the cloud engine against the real service:
+
+1. Use an AWS profile in `~/.aws/config` or `~/.aws/credentials` that has the IAM permission `transcribe:StartStreamTranscription`. A `credential_process` command needs its full path, because an app that Finder starts does not have the `PATH` of your shell.
+2. Start the app (`cargo tauri dev`, or `open` the built `SottoASR.app`).
+3. In **Settings → Dictation → Speech recognition**, select **AWS Transcribe**. Then select the profile, the Region and the language.
+4. Click **Test connection**. SottoASR sends one second of silence and shows the Region and the time, or the error.
+5. Click **Save** and dictate. To go back to the local engine, select **On this Mac** and click **Save**.
+
+AWS bills the account for each second of audio, also for these tests.
+
 ### Dependency Audits
 
 ```bash
@@ -298,7 +312,7 @@ The features are defined in `src-tauri/Cargo.toml`. The default is `custom-proto
 | Flag | Purpose | Default |
 |---|---|---|
 | `asr-fluidaudio` | FluidAudio (CoreML/ANE) speech backend, macOS only | Yes |
-| `asr-parakeet` | parakeet-rs (ONNX Runtime) speech backend. It also enables `rubato`, `reqwest` and `audio/resample.rs`. | No |
+| `asr-parakeet` | parakeet-rs (ONNX Runtime) speech backend. It also enables `reqwest` and `sha2` for its model download. | No |
 | `llm-cleanup` | The optional AI cleanup feature | Yes |
 | `custom-protocol` | Tauri production asset protocol | Yes |
 
@@ -312,7 +326,7 @@ cargo tauri build --no-default-features --features custom-protocol,asr-parakeet
 
 Note: `custom-protocol` is a Tauri feature that the app needs. Always include it when you override the default features. These commands also leave out `llm-cleanup`.
 
-`asr/engine.rs` defines the `AsrEngine` trait. The active feature flag selects the backend at compile time. Both backends implement the same trait, so the rest of the code does not depend on the backend.
+`asr/engine.rs` defines the `AsrEngine` trait. The active feature flag selects the local backend at compile time. At run time, the `speech_engine` setting selects the local backend or the AWS Transcribe engine (`asr/aws_transcribe.rs`). All engines implement the same trait, so the rest of the code does not depend on the engine.
 
 ## Pinned Models and the Cleanup Runtime
 
@@ -439,6 +453,8 @@ A value of `2` means allowed and `0` means denied. If the query cannot read the 
 | "The microphone sent only silence..." | Permission off, or the microphone is muted | Grant access, or examine the microphone |
 | "The microphone ... is not connected" | The selected microphone is absent | Connect it, or select another microphone in Settings → Dictation |
 | Settings opens with "Review Keyboard Shortcuts" at launch | A saved shortcut was not registered | Change the shortcut in Settings → General |
+| "Could not get credentials for AWS profile ..." | The `credential_process` command has no full path, or the sign-in expired | Use the full path of the command in `~/.aws/config`, or sign in again |
+| "AWS profile ... cannot use Amazon Transcribe." | The profile does not have the permission | Give the profile `transcribe:StartStreamTranscription` |
 
 ### Useful Paths
 
@@ -449,6 +465,7 @@ A value of `2` means allowed and `0` means denied. If the query cannot read the 
 | Recordings | `~/Library/Application Support/com.sottoasr.app/recordings/` |
 | Cleanup runtime and standalone Python | `~/Library/Application Support/com.sottoasr.app/llm-venv/` and `python/` |
 | Cleanup model | `~/.cache/huggingface/hub/models--openbmb--MiniCPM5-2B-MLX/` |
+| AWS profiles (read only) | `~/.aws/config` and `~/.aws/credentials` |
 | Log file | `~/Library/Logs/com.sottoasr.app/SottoASR.log` |
 | CSV exports | `~/Downloads/SottoASR-transcriptions-*.csv` |
 | Build output | `src-tauri/target/release/bundle/macos/SottoASR.app` |
@@ -477,7 +494,7 @@ A value of `2` means allowed and `0` means denied. If the query cannot read the 
 
 - **All audio processing happens in Rust.** Never add audio handling to the frontend.
 - **The app must remain menu-bar-only.** No Dock icon, no main window.
-- **Local-only processing is a hard constraint.** Never add features that send audio, transcriptions, or usage data to external services.
+- **Local by default.** Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry.
 - **Never use `npx`.** Use `npm run <script>` or invoke tools directly.
 - **Components call the wrappers in `src/lib/utils/tauri.ts`.** Do not call `invoke` directly.
 

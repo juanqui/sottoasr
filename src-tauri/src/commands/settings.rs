@@ -226,6 +226,7 @@ pub async fn update_settings(
         crate::commands::llm::notify_on_cleanup_preference_saved(&app, new_settings.llm_cleanup_enabled);
     }
     crate::commands::vocabulary::settings_saved(app.clone(), &previous, &new_settings);
+    crate::commands::speech::settings_saved(app.clone(), &previous, &new_settings);
     log::info!("Settings updated and persisted");
     let retention_changed = previous.history_retention_days != new_settings.history_retention_days
         || previous.audio_retention_days != new_settings.audio_retention_days;

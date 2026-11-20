@@ -584,6 +584,7 @@ pub fn get_model_status() -> ModelStatus {
             integrity_warning: integrity_warning(),
             notice: None,
             previous_model: previous_model_leftover(),
+            engine: crate::models::SpeechEngine::Local,
         }
     }
 
@@ -605,6 +606,7 @@ pub fn get_model_status() -> ModelStatus {
             integrity_warning: None,
             notice: None,
             previous_model: None,
+            engine: crate::models::SpeechEngine::Local,
         }
     }
 }
@@ -869,6 +871,7 @@ fn get_parakeet_model_status() -> ModelStatus {
         integrity_warning: None,
         notice: None,
         previous_model: None,
+        engine: crate::models::SpeechEngine::Local,
     }
 }
 

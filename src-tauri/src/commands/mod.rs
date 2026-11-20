@@ -4,6 +4,7 @@ pub mod recovery;
 pub mod settings;
 pub mod permissions;
 pub mod setup;
+pub mod speech;
 pub mod keycapture;
 pub mod llm;
 pub mod overlay;

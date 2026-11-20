@@ -54,18 +54,28 @@ const MODELS: Models = Models {
     fall_back: model::fall_back_to_previous_speech_model,
 };
 
-/// Get the current ASR backend info.
+/// The name of the installed speech engine.
+pub(crate) fn backend_name(state: &AppState) -> &'static str {
+    if state.cloud_speech() { crate::asr::aws_transcribe::BACKEND_NAME } else { model::backend_name() }
+}
+
+/// Get the current ASR backend info. A cloud engine needs no model, so it
+/// reports one as available and onboarding downloads nothing.
 #[tauri::command]
-pub async fn get_asr_backend() -> Result<serde_json::Value, String> {
+pub async fn get_asr_backend(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
-        "backend": model::backend_name(),
-        "model_available": model::is_model_available(),
+        "backend": backend_name(&state),
+        "model_available": state.cloud_speech() || model::is_model_available(),
     }))
 }
 
 /// Get detailed model status.
 #[tauri::command]
 pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus, String> {
+    if state.cloud_speech() {
+        let options = state.settings.lock().await.aws_transcribe.clone();
+        return Ok(cloud_status(&options, crate::asr::aws_profiles::list().await));
+    }
     let mut status = model::get_model_status();
     let upgrading = UPGRADING.load(Ordering::SeqCst);
     status.loaded = state.is_model_loaded.load(std::sync::atomic::Ordering::SeqCst);
@@ -81,6 +91,33 @@ pub async fn get_model_status(state: State<'_, AppState>) -> Result<ModelStatus,
     Ok(status)
 }
 
+/// The status of a cloud engine: no model on disk or in memory matters. The
+/// notice names where the audio goes; a profile that cannot be used is the
+/// error.
+fn cloud_status(
+    options: &crate::models::AwsTranscribeSettings,
+    profiles: Result<Vec<crate::asr::aws_profiles::AwsProfile>, String>,
+) -> ModelStatus {
+    let described = profiles.and_then(|profiles| crate::asr::aws_transcribe::describe(options, &profiles));
+    let (notice, error) = match described {
+        Ok(notice) => (Some(notice), None),
+        Err(error) => (None, Some(error)),
+    };
+    ModelStatus {
+        initializing: false,
+        error,
+        downloaded: true,
+        loaded: true,
+        path: None,
+        name: crate::asr::aws_transcribe::BACKEND_NAME.into(),
+        size_bytes: None,
+        integrity_warning: None,
+        notice,
+        previous_model: None,
+        engine: crate::models::SpeechEngine::AwsTranscribe,
+    }
+}
+
 /// What a model operation tells the windows. The commands pass the app
 /// handle; tests pass a silent stand-in and so run the commands' sequence.
 trait SetupNotices: Sync {
@@ -94,7 +131,7 @@ trait SetupNotices: Sync {
 impl SetupNotices for AppHandle {
     fn started(&self) {
         let _ = self.emit("asr-init-started", serde_json::json!({
-            "backend": model::backend_name(),
+            "backend": backend_name(&self.state::<AppState>()),
         }));
     }
 
@@ -120,13 +157,14 @@ impl SetupNotices for AppHandle {
 /// still has only the previous speech model loads it at once; the current
 /// model then follows in the background.
 /// For parakeet-rs: loads ONNX model from disk.
+/// For a cloud engine: nothing is prepared, downloaded or loaded.
 #[tauri::command]
 pub async fn init_asr(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    initialize(&state, &app, model::prepare_speech_model, MODELS).await?;
-    if model::upgrade_pending() {
+    start(&state, &app, model::prepare_speech_model, MODELS).await?;
+    if !state.cloud_speech() && model::upgrade_pending() {
         // Nobody waits for this: the previous model serves meanwhile.
         tauri::async_runtime::spawn(async move {
             let state: State<'_, AppState> = app.state();
@@ -134,6 +172,22 @@ pub async fn init_asr(
         });
     }
     Ok(())
+}
+
+/// Makes the installed engine ready to transcribe. A cloud engine holds no
+/// model: no model file is read and nothing is loaded.
+async fn start(
+    state: &AppState,
+    notices: &impl SetupNotices,
+    prepare: impl FnOnce() -> Result<(), String> + Send + 'static,
+    models: Models,
+) -> Result<(), String> {
+    if state.cloud_speech() {
+        state.is_model_loaded.store(true, Ordering::SeqCst);
+        *state.asr_init_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        return notices.finished(Ok(()));
+    }
+    initialize(state, notices, prepare, models).await
 }
 
 /// User-confirmed replacement of the speech and vocabulary model files that
@@ -366,10 +420,9 @@ fn announce_result(app: &AppHandle, result: Result<(), String>) -> Result<(), St
     match result {
         Ok(()) => {
             crate::commands::vocabulary::restore_cached(app.clone());
-            log::info!("ASR engine ready: {}", model::backend_name());
-            app.emit("asr-init-complete", serde_json::json!({
-                "backend": model::backend_name(),
-            })).map_err(|e| e.to_string())
+            let backend = backend_name(&app.state::<AppState>());
+            log::info!("ASR engine ready: {backend}");
+            app.emit("asr-init-complete", serde_json::json!({ "backend": backend })).map_err(|e| e.to_string())
         }
         Err(e) => {
             log::error!("ASR init failed: {}", e);
@@ -421,7 +474,8 @@ pub async fn complete_setup(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SetupResult, String> {
-    let backend = model::backend_name();
+    let backend = backend_name(&state);
+    let cloud = state.cloud_speech();
 
     app.emit("setup-progress", serde_json::json!({
         "step": "checking_permissions",
@@ -452,7 +506,7 @@ pub async fn complete_setup(
         microphone_permission: mic_ok,
         accessibility_permission: ax_ok,
         asr_ready: asr.is_ok(),
-        model_available: model::is_model_available(),
+        model_available: cloud || model::is_model_available(),
         error: asr.err(),
     })
 }
@@ -520,6 +574,82 @@ mod tests {
         }
         fn is_model_available(&self) -> bool { true }
         fn backend_name(&self) -> &'static str { "scripted" }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[serial_test::serial]
+    async fn a_cloud_engine_is_ready_without_preparing_or_loading_a_model() {
+        // An engine with no scripted load fails if anything loads it.
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::silence()),
+            Box::new(Scripted::new([])),
+            None,
+            Box::new(MockPasteBackend::new()),
+            crate::models::Settings::default(),
+        );
+        state.cloud_speech.store(true, Ordering::SeqCst);
+        state.is_model_loaded.store(false, Ordering::SeqCst);
+        *state.asr_init_error.lock().unwrap() = Some("the local model failed to load earlier".into());
+        let notices = Quiet::default();
+        let never_selects = Models { use_current: || panic!("no model is selected"), fall_back: |_| panic!("no fallback") };
+
+        let started = start(&state, &notices, || panic!("no model file may be read or downloaded"), never_selects).await;
+
+        assert_eq!(started, Ok(()));
+        assert!(state.is_model_loaded.load(Ordering::SeqCst), "dictation can start");
+        assert!(!state.asr_initializing.load(Ordering::SeqCst));
+        assert!(state.asr_init_error.lock().unwrap().is_none());
+        assert_eq!(*notices.finished.lock().unwrap(), [Ok::<(), String>(())]);
+        assert!(PreparationClaim::take().is_ok(), "nothing was prepared");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[serial_test::serial]
+    async fn the_local_engine_still_prepares_and_loads() {
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::silence()),
+            Box::new(Scripted::new([Ok(())])),
+            None,
+            Box::new(MockPasteBackend::new()),
+            crate::models::Settings::default(),
+        );
+        state.is_model_loaded.store(false, Ordering::SeqCst);
+        let notices = Quiet::default();
+        static PREPARED: AtomicBool = AtomicBool::new(false);
+        PREPARED.store(false, Ordering::SeqCst);
+
+        let started = start(&state, &notices, || { PREPARED.store(true, Ordering::SeqCst); Ok(()) }, NO_PREVIOUS).await;
+
+        assert_eq!(started, Ok(()));
+        assert!(PREPARED.load(Ordering::SeqCst));
+        assert!(state.is_model_loaded.load(Ordering::SeqCst));
+        assert!(state.asr_engine.lock().await.is_ready());
+    }
+
+    #[test]
+    fn the_cloud_status_names_where_the_audio_goes_or_why_it_cannot_go() {
+        use crate::asr::aws_profiles::AwsProfile;
+        let options = crate::models::AwsTranscribeSettings { profile: Some("work".into()), ..Default::default() };
+        let work = AwsProfile { name: "work".into(), region: Some("eu-west-1".into()) };
+
+        let ready = cloud_status(&options, Ok(vec![work]));
+        assert_eq!(ready.engine, crate::models::SpeechEngine::AwsTranscribe);
+        assert_eq!(ready.name, "AWS Transcribe");
+        assert!(ready.loaded && ready.downloaded && !ready.initializing);
+        assert_eq!(
+            ready.notice.as_deref(),
+            Some("SottoASR sends each dictation to Amazon Transcribe in eu-west-1 with the AWS profile work.")
+        );
+        // Nothing of a local model shows, whatever is on disk.
+        assert!(ready.error.is_none() && ready.path.is_none() && ready.size_bytes.is_none());
+        assert!(ready.integrity_warning.is_none() && ready.previous_model.is_none());
+
+        let removed = cloud_status(&options, Ok(Vec::new()));
+        assert_eq!(removed.error.as_deref(), Some("AWS profile \"work\" was not found in ~/.aws/config or ~/.aws/credentials."));
+        assert!(removed.notice.is_none() && removed.loaded);
+
+        let unreadable = cloud_status(&options, Err("Could not read the AWS profiles: no access".into()));
+        assert_eq!(unreadable.error.as_deref(), Some("Could not read the AWS profiles: no access"));
     }
 
     #[test]

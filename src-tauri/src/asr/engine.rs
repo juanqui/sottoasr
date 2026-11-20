@@ -132,11 +132,21 @@ pub async fn with_engine<T: Send + 'static>(
         .map_err(|error| format!("ASR worker failed: {error}"))?
 }
 
-/// Create the ASR engine for the current build configuration.
+/// Create the speech engine that the settings select. With a cloud engine
+/// no local engine object exists, so nothing can load a local model.
+pub fn create_engine(settings: &crate::models::Settings) -> Box<dyn AsrEngine> {
+    if settings.speech_engine == crate::models::SpeechEngine::AwsTranscribe {
+        log::info!("ASR backend: AWS Transcribe (cloud); no local speech model is loaded");
+        return Box::new(super::aws_transcribe::TranscribeEngine::new(settings.aws_transcribe.clone()));
+    }
+    create_local_engine()
+}
+
+/// The local engine for the current build configuration.
 /// - With `asr-fluidaudio` feature: FluidAudio (CoreML/ANE) — macOS only, best performance
 /// - With `asr-parakeet` feature: parakeet-rs (ONNX Runtime) — cross-platform, CPU
 /// - Neither: placeholder that returns an error
-pub fn create_engine() -> Box<dyn AsrEngine> {
+fn create_local_engine() -> Box<dyn AsrEngine> {
     #[cfg(feature = "asr-fluidaudio")]
     {
         log::info!("ASR backend: FluidAudio (CoreML / Apple Neural Engine)");

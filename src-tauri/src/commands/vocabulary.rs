@@ -50,17 +50,22 @@ fn tokenizer_is_parseable(tokenizer: &serde_json::Value) -> bool {
             .is_some_and(|merges| merges.iter().all(serde_json::Value::is_string))
 }
 
+/// The vocabulary model works with the local speech model only. With a
+/// cloud engine it is never downloaded, loaded or attached.
+const LOCAL_ONLY: &str = "Vocabulary assistance works with the local speech model only.";
+
 async fn status(state: &AppState) -> Result<VocabularyStatus, String> {
     let downloaded = tokio::task::spawn_blocking(cached_model_available)
         .await.map_err(|error| format!("Unable to inspect vocabulary model: {error}"))?;
+    let local = !state.cloud_speech();
     let runtime = state.vocabulary_runtime.lock().unwrap_or_else(|error| error.into_inner());
     Ok(VocabularyStatus {
-        supported: cfg!(feature = "asr-fluidaudio"),
+        supported: cfg!(feature = "asr-fluidaudio") && local,
         downloaded,
-        loaded: runtime.loaded,
-        preparing: runtime.preparing,
+        loaded: runtime.loaded && local,
+        preparing: runtime.preparing && local,
         download_size_mb: DOWNLOAD_SIZE_MB,
-        error: runtime.error.clone(),
+        error: runtime.error.clone().filter(|_| local),
     })
 }
 
@@ -74,6 +79,9 @@ pub async fn prepare_vocabulary_model(app: AppHandle, state: State<'_, AppState>
     if !cfg!(feature = "asr-fluidaudio") {
         return Err("Vocabulary assistance is unavailable for this ASR backend".into());
     }
+    if state.cloud_speech() {
+        return Err(LOCAL_ONLY.into());
+    }
     if state.vocabulary_terms.lock().unwrap_or_else(|error| error.into_inner()).is_empty() {
         return Err("Save at least one vocabulary term before preparing its model".into());
     }
@@ -83,6 +91,9 @@ pub async fn prepare_vocabulary_model(app: AppHandle, state: State<'_, AppState>
 
 fn start_preparation(app: AppHandle, allow_download: bool) {
     let state: State<'_, AppState> = app.state();
+    if state.cloud_speech() {
+        return;
+    }
     {
         let mut runtime = state.vocabulary_runtime.lock().unwrap_or_else(|error| error.into_inner());
         if runtime.preparing || runtime.loaded || !cfg!(feature = "asr-fluidaudio") {
@@ -98,7 +109,10 @@ fn start_preparation(app: AppHandle, allow_download: bool) {
         let result = if terms_empty {
             Ok(false)
         } else {
-            prepare_and_attach(&state.asr_engine, &state.vocabulary_terms, move || PreparedVocabulary::load(allow_download)).await
+            // The engine can change while files download, so this looks at
+            // the engine again immediately before the load.
+            let cloud = std::sync::Arc::clone(&state.cloud_speech);
+            prepare_and_attach(&state.asr_engine, &state.vocabulary_terms, move || load_for_local_engine(&cloud, allow_download)).await
         };
         // A completed download must not resurrect a cleared word list.
         let app_for_unload = app.clone();
@@ -122,6 +136,15 @@ fn start_preparation(app: AppHandle, allow_download: bool) {
         }
         if restart { start_preparation(app.clone(), true); }
     });
+}
+
+/// Loads the vocabulary model, unless a cloud engine is installed: that
+/// engine must never get a local model into memory.
+fn load_for_local_engine(cloud: &std::sync::atomic::AtomicBool, allow_download: bool) -> Result<PreparedVocabulary, String> {
+    if cloud.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(LOCAL_ONLY.into());
+    }
+    PreparedVocabulary::load(allow_download)
 }
 
 /// Called after preferences have been persisted and acknowledged in memory.
@@ -191,5 +214,33 @@ mod tests {
         tokenizer["model"]["merges"] = serde_json::json!([]);
         tokenizer["model"]["type"] = serde_json::json!("Unigram");
         assert!(!tokenizer_is_parseable(&tokenizer));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_cloud_engine_has_no_vocabulary_assistance_and_loads_no_model_for_it() {
+        use crate::test_support::{MockAsrEngine, MockAudioCapture, MockPasteBackend};
+        use std::sync::atomic::Ordering;
+        let state = AppState::new_with_backends(
+            Box::new(MockAudioCapture::silence()),
+            Box::new(MockAsrEngine::with_text("text")),
+            None,
+            Box::new(MockPasteBackend::new()),
+            Settings::default(),
+        );
+        {
+            // What the local engine left behind.
+            let mut runtime = state.vocabulary_runtime.lock().unwrap();
+            runtime.loaded = true;
+            runtime.error = Some("The vocabulary model is not fully downloaded.".into());
+        }
+        let local = status(&state).await.unwrap();
+        assert_eq!(local.supported, cfg!(feature = "asr-fluidaudio"));
+        assert!(local.loaded && local.error.is_some());
+
+        state.cloud_speech.store(true, Ordering::SeqCst);
+        let cloud = status(&state).await.unwrap();
+        assert!(!cloud.supported && !cloud.loaded && !cloud.preparing && cloud.error.is_none());
+        // Returns before any file is read or downloaded.
+        assert_eq!(load_for_local_engine(&state.cloud_speech, true).err().as_deref(), Some(LOCAL_ONLY));
     }
 }

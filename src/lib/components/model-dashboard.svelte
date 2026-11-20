@@ -43,11 +43,13 @@
     // problem that rebuilding the runtime would not address.
     return Boolean(status.setup_error) || status.last_cleanup_status.kind === 'unavailable';
   });
+  let cloud = $derived(asr?.engine === 'aws_transcribe');
   let speech = $derived.by(() => {
     if (redownloading && !asr?.initializing) return { label: 'Downloading…', tone: 'pending', detail: 'Replacing the model files that failed the check.' };
     if (retrying || asr?.initializing) return { label: 'Loading…', tone: 'pending', detail: 'Preparing speech recognition.' };
     if (asrError || asr?.error) return { label: 'Needs attention', tone: 'warning', detail: asrError || asr?.error || '' };
     if (!asr) return { label: 'Checking…', tone: 'neutral', detail: 'Reading local model status.' };
+    if (cloud) return { label: 'Ready', tone: 'ready', detail: 'A cloud service. No speech model is in memory.' };
     if (asr.loaded) return { label: 'Ready', tone: 'ready', detail: 'Loaded locally and ready to transcribe.' };
     return { label: asr.downloaded ? 'Not loaded' : 'Not downloaded', tone: 'warning', detail: 'Load speech recognition to start dictating.' };
   });
@@ -114,21 +116,21 @@
   });
 </script>
 
-<section class="model-dashboard" aria-label="Local model status">
+<section class="model-dashboard" aria-label="Model status">
   <article class="model-card" aria-label="Speech recognition model">
     <div class="card-heading"><h2>Speech recognition</h2><span class="model-state {speech.tone}"><i></i>{speech.label}</span></div>
     <p class="model-name">{asr?.name || 'Parakeet Ultra'}</p>
     <p class="model-detail" role="status">{speech.detail}</p>
     {#if asr?.notice}<p class="model-detail" role="status">{asr.notice}</p>{/if}
-    {#if asr?.previous_model && !deleting}
+    {#if asr?.previous_model && !deleting && !cloud}
       <p class="model-detail">The previous speech model, {asr.previous_model.name} ({megabytes(asr.previous_model.size_bytes)} MB), is still on this Mac. SottoASR keeps it only as a fallback.</p>
       <button type="button" onclick={() => { deletion = asr?.previous_model ?? null; }} disabled={redownloading}>Delete previous model</button>
     {/if}
     {#if deleteError}<p class="integrity" role="alert">{deleteError}</p>{/if}
     {#if deleteNotice}<p class="model-detail" role="status">{deleteNotice}</p>{/if}
     {#if redownloading && redownloadProgress}<DownloadProgressBar progress={redownloadProgress} label="Model file download" />{/if}
-    {#if asr && !asr.loaded && !asr.initializing}<button type="button" onclick={retryAsr} disabled={retrying || redownloading}>Load speech recognition</button>{/if}
-    {#if asr?.integrity_warning && !redownloading}
+    {#if asr && !asr.loaded && !asr.initializing && !cloud}<button type="button" onclick={retryAsr} disabled={retrying || redownloading}>Load speech recognition</button>{/if}
+    {#if asr?.integrity_warning && !redownloading && !cloud}
       <p class="integrity" role="alert">{asr.integrity_warning}</p>
       <button type="button" onclick={() => { confirmRedownload = true; }} disabled={retrying || !!asr.initializing}>Re-download speech model</button>
     {/if}

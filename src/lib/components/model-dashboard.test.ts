@@ -18,7 +18,7 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.open = false; };
 });
 afterEach(async () => {if(component) await unmount(component);component=undefined;cleanup.dispose();target?.remove();});
-async function render() {target=document.createElement('div');document.body.append(target);component=mount(ModelDashboard,{target,props:{cleanup,onconfigure:vi.fn()}});flushSync();await vi.waitFor(()=>expect(target.textContent).toContain('Parakeet v3'));flushSync();}
+async function render(name='Parakeet v3') {target=document.createElement('div');document.body.append(target);component=mount(ModelDashboard,{target,props:{cleanup,onconfigure:vi.fn()}});flushSync();await vi.waitFor(()=>expect(target.textContent).toContain(name));flushSync();}
 it('shows loaded readiness separately from a rejected last proposal', async () => {
   await render();expect(target.querySelectorAll('.model-state.ready')).toHaveLength(2);
   expect(target.textContent).toContain('Last recording: Original kept');
@@ -114,4 +114,26 @@ it('keeps the offer and says why when the previous speech model cannot be delete
   [...target.querySelectorAll('dialog')].flatMap((dialog)=>[...dialog.querySelectorAll('button')]).find((button)=>button.textContent?.trim()==='Delete')!.click();
   await vi.waitFor(()=>expect(card.querySelector('[role="alert"]')?.textContent).toBe('Could not delete the previous model: Parakeet TDT v3 is in use, so SottoASR cannot delete it.'));
   expect([...card.querySelectorAll('button')].some((button)=>button.textContent?.trim()==='Delete previous model')).toBe(true);
+});
+it('shows the cloud engine as ready, with its notice and without local model actions', async () => {
+  const notice = 'SottoASR sends each dictation to Amazon Transcribe in us-west-2 with the AWS profile work.';
+  const cloud = {engine:'aws_transcribe' as const,downloaded:true,loaded:true,initializing:false,error:null,path:null,name:'AWS Transcribe',size_bytes:null,notice};
+  // Leftovers of the local model must not offer local actions in cloud mode.
+  vi.mocked(getModelStatus).mockResolvedValue({...cloud,integrity_warning:'2 model files differ from the verified copies.',previous_model:{name:'Parakeet TDT v3',size_bytes:966_514_496}});
+  await render('AWS Transcribe');
+  expect(target.querySelector('[aria-label="Model status"]')).not.toBeNull();
+  const card = target.querySelector('[aria-label="Speech recognition model"]')!;
+  expect(card.querySelector('.model-name')?.textContent).toBe('AWS Transcribe');
+  expect(card.querySelector('.model-state.ready')?.textContent).toBe('Ready');
+  expect(card.textContent).toContain('A cloud service. No speech model is in memory.');
+  expect(card.textContent).toContain(notice);
+  expect(card.querySelector('.integrity')).toBeNull();
+  expect(card.textContent).not.toContain('Parakeet TDT v3');
+  expect(card.querySelectorAll('button')).toHaveLength(0);
+
+  vi.mocked(getModelStatus).mockResolvedValue({...cloud,error:'Could not connect to Amazon Transcribe in us-west-2. Examine your internet connection.'});
+  listeners.get('asr-init-error')!();
+  await vi.waitFor(()=>expect(card.querySelector('.model-state')?.textContent).toBe('Needs attention'));
+  expect(card.textContent).toContain('Could not connect to Amazon Transcribe');
+  expect(card.querySelectorAll('button')).toHaveLength(0);
 });

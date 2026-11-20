@@ -1,5 +1,5 @@
 import { getSettings, getSettingsLoadError, resetSettings, updateSettings } from '../utils/tauri';
-import type { DictionaryEntry, Settings, UpdateSettingsResult } from '../utils/tauri';
+import type { AwsTranscribeSettings, DictionaryEntry, Settings, UpdateSettingsResult } from '../utils/tauri';
 
 export function createDefaultSettings(): Settings {
   return {
@@ -11,24 +11,39 @@ export function createDefaultSettings(): Settings {
     launch_at_login: false,
     llm_cleanup_enabled: false, llm_cleanup_mode: 'retype', dictionary: [], vocabulary: [], auto_check_updates: true,
     input_device: null, sound_cues: false, history_retention_days: 0, audio_retention_days: 0,
+    speech_engine: 'local', aws_transcribe: { profile: null, region: null, language: 'en-US', vocabulary_name: null },
   };
 }
 
 /** Shown when Save is blocked by a replacement row with only one field filled in. */
 export const INCOMPLETE_REPLACEMENT_MESSAGE = 'Finish or remove the incomplete replacement in Vocabulary before saving.';
 
+/** Shown when Save is blocked because AWS Transcribe is selected without a profile. */
+export const AWS_PROFILE_REQUIRED_MESSAGE = 'Choose an AWS profile for AWS Transcribe.';
+
 /** One field filled in and the other empty. Rows with both fields empty are dropped on save. */
 export function isIncompleteEntry(entry: DictionaryEntry): boolean {
   return !entry.heard.trim() !== !entry.replacement.trim();
 }
 
+/** The AWS options as the backend accepts them: trimmed, with an empty optional value as null. */
+export function normalizedAwsTranscribe(options: AwsTranscribeSettings): AwsTranscribeSettings {
+  const optional = (value: string | null | undefined) => value?.trim() || null;
+  return { profile: optional(options.profile), region: optional(options.region), language: options.language, vocabulary_name: optional(options.vocabulary_name) };
+}
+
 /**
  * The backend omits empty optional fields, so every copy of the settings is
  * filled from the defaults. Equal settings then serialize equally, and a
- * no-op edit is not reported as unsaved.
+ * no-op edit is not reported as unsaved. The AWS options get a fixed key
+ * order for the same reason.
  */
 function withDefaults(settings: Settings): Settings {
-  return { ...createDefaultSettings(), ...settings, dictionary: settings.dictionary ?? [], vocabulary: settings.vocabulary ?? [] };
+  const aws = settings.aws_transcribe;
+  return {
+    ...createDefaultSettings(), ...settings, dictionary: settings.dictionary ?? [], vocabulary: settings.vocabulary ?? [],
+    aws_transcribe: { profile: aws?.profile ?? null, region: aws?.region ?? null, language: aws?.language ?? 'en-US', vocabulary_name: aws?.vocabulary_name ?? null },
+  };
 }
 
 const snapshot = (settings: Settings): Settings => JSON.parse(JSON.stringify(settings));
@@ -54,7 +69,9 @@ export class SettingsStore {
 
   /** A problem in the draft that blocks Save; empty when the draft can be saved. */
   get validationError() {
-    return this.current.dictionary.some(isIncompleteEntry) ? INCOMPLETE_REPLACEMENT_MESSAGE : '';
+    if (this.current.dictionary.some(isIncompleteEntry)) return INCOMPLETE_REPLACEMENT_MESSAGE;
+    if (this.current.speech_engine === 'aws_transcribe' && !this.current.aws_transcribe.profile?.trim()) return AWS_PROFILE_REQUIRED_MESSAGE;
+    return '';
   }
 
   private adopt(settings: Settings) {
@@ -125,6 +142,7 @@ export class SettingsStore {
     submitted.dictionary = submitted.dictionary
       .map((entry) => ({ heard: entry.heard.trim(), replacement: entry.replacement.trim() }))
       .filter((entry) => entry.heard || entry.replacement);
+    submitted.aws_transcribe = normalizedAwsTranscribe(submitted.aws_transcribe);
     const generation = this.loadGeneration;
     this.saving = true;
     this.error = '';

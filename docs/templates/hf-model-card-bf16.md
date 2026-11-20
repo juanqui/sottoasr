@@ -23,7 +23,7 @@ datasets:
 
 **Full-precision bf16** fine-tune of [LiquidAI/LFM2.5-350M-Base](https://huggingface.co/LiquidAI/LFM2.5-350M-Base) for on-device speech-to-text transcript cleanup. This is the **training artifact** — for on-device deployment, use the [5-bit MLX variant](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m-mlx-5bit) instead.
 
-This model powers on-device transcript cleanup in [SottoASR](https://sottoasr.app) — a local, privacy-first speech-to-text application for macOS. It removes filler words, corrects grammar, formats punctuation, and handles false starts and self-corrections — all locally, with zero cloud dependency.
+This model powers on-device transcript cleanup in [SottoASR](https://sottoasr.app) — a local-first, privacy-first speech-to-text application for macOS. It removes filler words, corrects grammar, formats punctuation, and handles false starts and self-corrections — all locally, with zero cloud dependency.
 
 ## Key Specs
 

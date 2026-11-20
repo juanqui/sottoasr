@@ -213,8 +213,10 @@ pub async fn claim_and_finish(
     finish_capture(state, events, generation, false).await
 }
 
-/// Cancel the recording: nothing is pasted, but what was said is still
-/// transcribed and saved to History as cancelled by `complete`.
+/// Cancel the recording: nothing is pasted. With the local engine, what was
+/// said is still transcribed and saved to History as cancelled by
+/// `complete`. With a cloud engine it is not sent: History keeps an entry
+/// without text.
 pub async fn cancel(state: &AppState, events: &dyn PipelineEvents) -> Option<StopJob> {
     if !state.claim_recording_end(None) {
         log::warn!("Cannot cancel recording: currently in {:?} state", state.get_state());
@@ -316,11 +318,18 @@ async fn finish_capture(
 /// Transcribe, clean up, deliver and save a claimed recording, then return
 /// to Idle. The adapter spawns this; tests await it.
 pub async fn complete(state: &AppState, events: &dyn PipelineEvents, mut job: StopJob) {
+    if job.cancelled && state.cloud_speech() {
+        // The user cancelled it, so its audio does not leave this Mac.
+        log::info!("Cancelled recording is not sent to the cloud speech service");
+        let outcome = save_cancelled(state, events, &job, None).await;
+        settle(state, events, job.generation, outcome).await;
+        return;
+    }
     log::info!("Starting transcription...");
     let vocabulary = std::mem::take(&mut job.vocabulary);
     let path = job.audio_path.to_string_lossy().into_owned();
     let outcome = match transcribe_with_deadline(state, path, vocabulary, job.duration_ms).await {
-        Ok(asr) if job.cancelled => save_cancelled(state, events, &job, asr).await,
+        Ok(asr) if job.cancelled => save_cancelled(state, events, &job, Some(asr)).await,
         Ok(asr) => deliver(state, events, &job, asr).await,
         Err(_) if job.is_stale(state) => {
             log::info!("Job {} is stale, discarding its transcription error", job.job_id);
@@ -600,20 +609,23 @@ fn paste_target(state: &AppState, restore_focus: bool) -> Option<i32> {
     (receiver != own_pid).then_some(target_pid)
 }
 
-async fn save_cancelled(state: &AppState, events: &dyn PipelineEvents, job: &StopJob, asr: AsrResult) -> Outcome {
+/// Saves a cancelled recording to History and deletes its audio. `asr` is
+/// `None` when the recording was not transcribed: the entry has no text.
+async fn save_cancelled(state: &AppState, events: &dyn PipelineEvents, job: &StopJob, asr: Option<AsrResult>) -> Outcome {
     if job.is_stale(state) {
         log::info!("Job {} is stale, discarding cancelled transcription", job.job_id);
         return Outcome::Stale;
     }
+    let (text, raw_text) = asr.map(|asr| (asr.text, asr.unboosted_text)).unwrap_or_default();
     let transcription = Transcription {
         id: job.recording_id(),
-        word_count: asr.text.split_whitespace().count(),
-        text: asr.text,
+        word_count: text.split_whitespace().count(),
+        text,
         duration_ms: job.duration_ms,
         created_at: chrono::Utc::now(),
         cancelled: true,
         capture_error: job.capture_error.clone(),
-        raw_text: asr.unboosted_text,
+        raw_text,
         cleanup_suggestion: None,
         llm_applied: false,
         llm_cleanup_status: LlmCleanupStatus::Idle,
@@ -1409,6 +1421,37 @@ mod tests {
         assert!(*events.recording_cancelled.lock().unwrap());
         assert!(events.transcriptions.lock().unwrap()[0].cancelled);
         assert_eq!(last_outcome(&events), Some(Outcome::Dismissed));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn a_cancelled_recording_is_not_sent_to_a_cloud_engine() {
+        // The engine fails if it is called: a cancelled recording must not reach it.
+        let state = test_state(
+            MockAudioCapture::sine_wave(),
+            MockAsrEngine::with_error("a cancelled recording was sent"),
+            None,
+            Box::new(MockPasteBackend::new()),
+        );
+        state.cloud_speech.store(true, Ordering::SeqCst);
+        let events = CollectingEvents::new();
+        begin(&state, &events).unwrap();
+        let audio = state.recording_audio_path.lock().unwrap().clone().expect("a recording has a file");
+
+        assert!(cancel_and_complete(&state, &events).await);
+
+        let transcription = events.transcriptions.lock().unwrap()[0].clone();
+        assert!(transcription.cancelled);
+        assert_eq!((transcription.text.as_str(), transcription.word_count, transcription.raw_text), ("", 0, None));
+        assert_eq!(last_outcome(&events), Some(Outcome::Dismissed));
+        assert!(events.failures_of(FailureKind::Transcription).is_empty());
+        assert!(!audio.exists(), "the recording is deleted once History has the entry");
+        assert_eq!(state.get_state(), AppStateEnum::Idle);
+
+        // A dictation that ends normally is sent.
+        begin(&state, &events).unwrap();
+        assert!(stop(&state, &events).await);
+        assert_eq!(events.failures_of(FailureKind::Transcription).len(), 1);
     }
 
     // --- Test 5: State machine guards ---

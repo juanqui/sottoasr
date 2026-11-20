@@ -45,7 +45,7 @@
 </script>
 <section class="setting-card">
   <h3>History and recordings</h3>
-  <p class="setting-hint">Choose how long SottoASR keeps what you dictate. Nothing leaves your Mac.</p>
+  <p class="setting-hint">Choose how long SottoASR keeps what you dictate on your Mac.</p>
   {#each retention as item (item.key)}
     {@const days = settingsStore.current[item.key]}
     {@const savedDays = settingsStore.saved?.[item.key] ?? 0}
@@ -78,7 +78,7 @@
 </section>
 <section class="setting-card">
   <h3>Local models</h3>
-  <p class="setting-hint">Speech recognition uses Parakeet Ultra. Recordings and transcripts stay on your Mac.</p>
+  <p class="setting-hint">{settingsStore.saved?.speech_engine === 'aws_transcribe' ? 'Speech recognition uses AWS Transcribe. SottoASR sends each completed dictation to AWS. History and kept recordings stay on your Mac.' : 'Speech recognition uses Parakeet Ultra. Recordings and transcripts stay on your Mac.'}</p>
   <div class="model-details">
     <span class="field-label">AI cleanup</span>
     {#if cleanup.status}
@@ -115,11 +115,4 @@
   .model-details { border-top:1px solid var(--border); margin-top:16px; padding-top:16px; }
   .model-details p { font-size:13px; overflow-wrap:anywhere; }
   .model-details a { display:block; font-size:12px; margin:12px 0; color:var(--accent-text); }
-  .mode-options { display:grid; gap:10px; margin-top:14px; }
-  .mode-option { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
-  .mode-option:has(input:checked) { border-color:var(--accent); }
-  .mode-option input { margin-top:2px; accent-color:var(--accent); }
-  .mode-option strong { display:block; color:var(--text-bright); font-size:13px; font-weight:500; }
-  .mode-option > span { flex:1; display:grid; gap:4px; }
-  .mode-option .mode-hint { color:var(--text-dim); font-size:12px; line-height:1.5; }
 </style>

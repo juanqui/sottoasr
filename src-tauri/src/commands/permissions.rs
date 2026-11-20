@@ -251,8 +251,9 @@ pub async fn open_microphone_settings() -> Result<(), String> {
 }
 
 /// Hosts the app links to. Anything else could be a page a compromised
-/// webview wants the user to trust.
-const OPEN_URL_HOSTS: [&str; 3] = ["huggingface.co", "github.com", "sottoasr.app"];
+/// webview wants the user to trust. The two AWS hosts are for the data-use
+/// and pricing pages of the optional cloud speech engine.
+const OPEN_URL_HOSTS: [&str; 5] = ["huggingface.co", "github.com", "sottoasr.app", "docs.aws.amazon.com", "aws.amazon.com"];
 
 fn checked_url(url: &str) -> Result<tauri::Url, String> {
     let parsed = tauri::Url::parse(url).map_err(|_| "This link is not a valid web address".to_string())?;
@@ -261,7 +262,7 @@ fn checked_url(url: &str) -> Result<tauri::Url, String> {
         && parsed.password().is_none()
         && parsed.host_str().is_some_and(|host| OPEN_URL_HOSTS.contains(&host));
     if !allowed {
-        return Err("SottoASR opens only HTTPS links to huggingface.co, github.com and sottoasr.app".into());
+        return Err(format!("SottoASR opens only HTTPS links to {}", OPEN_URL_HOSTS.join(", ")));
     }
     Ok(parsed)
 }
@@ -458,6 +459,8 @@ mod tests {
             "https://huggingface.co/mlx-community/model",
             "https://github.com/juanqui/sottoasr/releases",
             "https://SottoASR.app/help",
+            "https://docs.aws.amazon.com/transcribe/latest/dg/opt-out.html",
+            "https://aws.amazon.com/transcribe/pricing/",
         ] {
             assert!(checked_url(allowed).is_ok(), "{allowed}");
         }
@@ -467,6 +470,8 @@ mod tests {
             "https://github.com.example.com/",
             "https://evilgithub.com/",
             "https://api.github.com/",
+            "https://console.aws.amazon.com/",
+            "https://amazon.com/",
             "https://user@github.com/",
             "https://user:secret@huggingface.co/",
             "https://github.com@example.com/",

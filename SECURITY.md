@@ -20,9 +20,11 @@ transcripts, or your history file. Use synthetic examples.
 
 ## What SottoASR does on the network
 
-Speech recognition and transcript cleanup run on this Mac. SottoASR never
-sends audio or transcript text over the network. The app makes these outbound
-requests:
+By default, speech recognition and transcript cleanup run on this Mac, and
+SottoASR sends no audio or transcript text over the network. Settings has one
+optional cloud engine, AWS Transcribe. If you turn it on, SottoASR sends the
+audio of your dictations to Amazon Transcribe in the AWS Region that you
+select. The app makes these outbound requests:
 
 | Request | Destination | When |
 | --- | --- | --- |
@@ -31,14 +33,30 @@ requests:
 | Cleanup runtime packages | PyPI (`pypi.org`, `files.pythonhosted.org`), hash-locked wheels only | At launch with AI cleanup on, or when you turn cleanup on, if the runtime is missing or differs from the bundled lock file. Each time you repair the runtime. |
 | Cleanup model | `huggingface.co` (model information and files), pinned revision, verified by SHA-256 | When AI cleanup is on and the model is not downloaded: when you turn cleanup on, or at launch. |
 | Standalone Python | `github.com` (python-build-standalone release), pinned URL, verified by SHA-256 | When SottoASR builds, updates or repairs the cleanup runtime and no native arm64 Python 3.11 to 3.14 is installed. |
+| Dictation audio (AWS Transcribe only) | The Amazon Transcribe streaming endpoint of the selected Region (`transcribestreaming.<region>.amazonaws.com`), over TLS. The action is `transcribe:StartStreamTranscription`, signed with the credentials of your AWS profile. | Only when "AWS Transcribe" is selected in Settings → Dictation: after each completed dictation, when you recover a kept recording, and when you click "Test connection" (one second of silence). SottoASR sends a dictation after the recording ends, as 16 kHz 16-bit PCM. It does not send a cancelled recording. |
 
 These downloads follow HTTP redirects to the file servers of GitHub and
 Hugging Face. The cleanup model runs in a separate process with the Hugging
-Face offline mode on, so dictation itself makes no network request.
+Face offline mode on. Thus, in the default configuration, dictation makes no
+network request.
+
+SottoASR stores no AWS credentials. The AWS SDK for Rust reads your AWS files
+(`~/.aws/config` and `~/.aws/credentials`) when it signs a request. If your
+profile uses IAM Identity Center or assumes a role, the SDK first gets
+temporary credentials from AWS, as the AWS CLI does. If your profile has a
+`credential_process` command, the SDK runs that command with your user
+rights. Logs name the AWS profile and the Region, never a key or a token.
+
+By default, AWS can keep the audio that Amazon Transcribe processes to improve
+its services. An AWS Organizations opt-out policy stops that
+([opt-out](https://docs.aws.amazon.com/transcribe/latest/dg/opt-out.html)).
+AWS bills your account for each second of audio.
 
 The app windows cannot connect to other hosts: their content security policy
-allows only the app itself. The app opens links in your browser only for
-`https` addresses on `huggingface.co`, `github.com` and `sottoasr.app`.
+allows only the app itself. Only the Rust code of the app connects to AWS. The
+app opens links in your browser only for `https` addresses on
+`huggingface.co`, `github.com`, `sottoasr.app`, `docs.aws.amazon.com` and
+`aws.amazon.com`.
 
 ## Data on disk
 

@@ -83,6 +83,8 @@ pub fn run() {
             commands::setup::init_asr,
             commands::setup::redownload_speech_model,
             commands::setup::delete_previous_speech_model,
+            commands::speech::get_aws_transcribe_options,
+            commands::speech::test_aws_transcribe,
             commands::vocabulary::get_vocabulary_status,
             commands::vocabulary::prepare_vocabulary_model,
             commands::setup::download_model,
@@ -171,8 +173,10 @@ pub fn run() {
             // macOS, but this is harmless at startup before the user is interacting.
             hotkeys::manager::precreate_overlay(&handle);
 
-            // Check if onboarding is needed and open the setup window
-            let needs_setup = !asr::model::is_model_available();
+            // Check if onboarding is needed and open the setup window. A
+            // cloud speech engine needs no model, so it needs no download.
+            let cloud_speech = handle.state::<AppState>().cloud_speech();
+            let needs_setup = !cloud_speech && !asr::model::is_model_available();
             if needs_setup {
                 log::info!("First launch detected — opening onboarding window");
                 // Create the onboarding window
@@ -188,7 +192,11 @@ pub fn run() {
                 .build()
                 .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
             } else {
-                log::info!("Models available — ready to use");
+                if cloud_speech {
+                    log::info!("Cloud speech engine selected — no speech model to load");
+                } else {
+                    log::info!("Models available — ready to use");
+                }
                 // Initialize ASR in background
                 let asr_handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
@@ -286,7 +294,7 @@ pub fn run() {
                 }
             }
 
-            log::info!("SottoASR initialized (ASR backend: {})", asr::model::backend_name());
+            log::info!("SottoASR initialized (ASR backend: {})", commands::setup::backend_name(&handle.state::<AppState>()));
             Ok(())
         })
         .on_window_event(|window, event| {

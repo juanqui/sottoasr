@@ -1,6 +1,6 @@
 # SottoASR
 
-Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor.
+Local-first, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor. Local by default. An optional cloud engine, AWS Transcribe, works only after the user turns it on.
 
 ## Tech Stack
 
@@ -11,6 +11,7 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 | Frontend | Svelte 5 + TypeScript | Recording overlay UI, settings, onboarding |
 | ASR engine (default) | FluidAudio via fluidaudio-rs | CoreML/ANE speech-to-text (macOS) |
 | ASR engine (optional) | parakeet-rs (ONNX Runtime) | Cross-platform fallback via `asr-parakeet` feature |
+| Cloud speech engine (optional) | AWS SDK for Rust | Optional Amazon Transcribe engine, off by default |
 | Audio capture | cpal 0.16 | Cross-platform audio input |
 | Build tool | Vite 8 | Multi-page frontend bundling |
 
@@ -39,9 +40,10 @@ npm run check
 - **Menu bar / tray app only.** No Dock icon (`LSUIElement` + `ActivationPolicy::Accessory`). No main window by default.
 - **All audio capture and ASR inference in Rust.** Frontend is UI only — it never touches audio data or model inference.
 - **Dual ASR backend** via Cargo feature flags (`asr-fluidaudio` default, `asr-parakeet` optional).
+- **Optional cloud speech engine.** The `speech_engine` setting replaces the local engine with AWS Transcribe. Then no local speech model is in memory.
 - **Floating overlay window** with Canvas-based waveform (ring buffer + dynamic range normalization).
 - **Clipboard + CGEvent Cmd+V** for paste-at-cursor (requires Accessibility permission).
-- **Local-only processing.** No cloud APIs, no telemetry.
+- **Local by default.** Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry.
 - **Multi-page Vite setup** (separate HTML entries for overlay, history, settings, onboarding).
 - **Svelte 5 rune stores** use `.svelte.ts` extension (required for `$state()` compilation).
 
@@ -323,6 +325,6 @@ Every model upload MUST include a detailed model card (README.md). Use templates
 - **All audio processing happens in Rust**, not in the frontend.
 - **The app MUST remain menu-bar-only.** No Dock icon, no main window by default.
 - **Accessibility permissions are required** for paste-at-cursor. Handle missing permissions gracefully.
-- **Local-only processing is a hard constraint.** Never add features that send data externally.
+- **Local by default.** Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry.
 - **Experiment logs go in `docs/journals/`**, not alongside code.
 - **The website URL is `sottoasr.app`** (NOT sotto.app).

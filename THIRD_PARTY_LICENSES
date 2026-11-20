@@ -3,19 +3,21 @@ THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
 
 SottoASR incorporates third-party software components listed below.
 Generated: 2026-03-22
-Edited: 2026-11-19. Entries for packages that no longer ship were removed.
-The versions of the other packages are as of 2026-03-22.
+Edited: 2026-11-20. Entries for the AWS SDK for Rust and its HTTP stack were
+added. On 2026-11-19, entries for packages that no longer ship were removed.
+The versions of the added packages are as of 2026-11-20. The versions of the
+other packages are as of 2026-03-22.
 
 
 LICENSE SUMMARY
 ------------------------------------------------------------------------------
-Total packages: 650 (596 Rust, 54 JavaScript)
+Total packages: 691 (637 Rust, 54 JavaScript)
 
   License                                                 Count
   ------------------------------------------------------- -----
   (MIT OR Apache-2.0) AND Unicode-3.0                         1
   0BSD OR MIT OR Apache-2.0                                   1
-  Apache-2.0                                                 13
+  Apache-2.0                                                 35
   Apache-2.0 AND MIT                                          1
   Apache-2.0 WITH LLVM-exception                              1
   Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT        15
@@ -28,8 +30,8 @@ Total packages: 650 (596 Rust, 54 JavaScript)
   BSL-1.0                                                     2
   CC0-1.0 OR MIT-0 OR Apache-2.0                              1
   ISC                                                         3
-  MIT                                                       200
-  MIT OR Apache-2.0                                         335
+  MIT                                                       204
+  MIT OR Apache-2.0                                         350
   MIT OR Apache-2.0 OR LGPL-2.1-or-later                      2
   MIT OR Apache-2.0 OR Zlib                                   5
   MIT OR Zlib OR Apache-2.0                                   1
@@ -104,6 +106,11 @@ arboard 3.6.1
   License: MIT OR Apache-2.0
   Repository: https://github.com/1Password/arboard
 
+arc-swap 1.9.5
+  License: MIT OR Apache-2.0
+  Authors: Michal 'vorner' Vaner <vorner@vorner.cz>
+  Repository: https://github.com/vorner/arc-swap
+
 arrayvec 0.7.6
   License: MIT OR Apache-2.0
   Authors: bluss
@@ -129,6 +136,116 @@ autocfg 1.5.0
   Authors: Josh Stone <cuviper@gmail.com>
   Repository: https://github.com/cuviper/autocfg
 
+aws-config 1.13.3
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-credential-types 1.3.1
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-runtime 1.10.4
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-sdk-sso 1.122.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/awslabs/aws-sdk-rust
+
+aws-sdk-ssooidc 1.124.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/awslabs/aws-sdk-rust
+
+aws-sdk-sts 1.128.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/awslabs/aws-sdk-rust
+
+aws-sdk-transcribestreaming 1.129.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/awslabs/aws-sdk-rust
+
+aws-sigv4 1.6.6
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, David Barsky <me@davidbarsky.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-async 1.3.1
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, John DiSanti <jdisanti@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-eventstream 0.61.6
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, John DiSanti <jdisanti@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-http 0.64.3
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-http-client 1.5.3
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-json 0.65.1
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, John DiSanti <jdisanti@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-observability 0.3.1
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/awslabs/smithy-rs
+
+aws-smithy-query 0.64.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, John DiSanti <jdisanti@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-runtime 1.16.4
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Zelda Hessler <zhessler@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-runtime-api 1.22.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Zelda Hessler <zhessler@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-runtime-api-macros 1.2.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-schema 1.2.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-types 1.9.4
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-smithy-xml 0.64.1
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
+aws-types 1.7.0
+  License: Apache-2.0
+  Authors: AWS Rust SDK Team <aws-sdk-rust@amazon.com>, Russell Cohen <rcoh@amazon.com>
+  Repository: https://github.com/smithy-lang/smithy-rs
+
 base64 0.21.7
   License: MIT OR Apache-2.0
   Authors: Alice Maz <alice@alicemaz.com>, Marshall Pierce <marshall@mpierce.org>
@@ -138,6 +255,10 @@ base64 0.22.1
   License: MIT OR Apache-2.0
   Authors: Marshall Pierce <marshall@mpierce.org>
   Repository: https://github.com/marshallpierce/rust-base64
+
+base64-simd 0.8.0
+  License: MIT
+  Repository: https://github.com/Nugine/simd
 
 bindgen 0.72.1
   License: BSD-3-Clause
@@ -169,6 +290,11 @@ bitvec 1.0.1
   Repository: https://github.com/bitvecto-rs/bitvec
 
 block-buffer 0.10.4
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/utils
+
+block-buffer 0.12.1
   License: MIT OR Apache-2.0
   Authors: RustCrypto Developers
   Repository: https://github.com/RustCrypto/utils
@@ -236,6 +362,11 @@ bytes 1.11.1
   License: MIT
   Authors: Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>
   Repository: https://github.com/tokio-rs/bytes
+
+bytes-utils 0.1.4
+  License: Apache-2.0/MIT
+  Authors: Michal 'vorner' Vaner <vorner@vorner.cz>
+  Repository: https://github.com/vorner/bytes-utils
 
 cairo-rs 0.18.5
   License: MIT
@@ -315,10 +446,20 @@ clipboard-win 5.4.1
   Authors: Douman <douman@gmx.se>
   Repository: https://github.com/DoumanAsh/clipboard-win
 
+cmov 0.5.4
+  License: Apache-2.0 OR MIT
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/utils
+
 combine 4.6.7
   License: MIT
   Authors: Markus Westerlind <marwes91@gmail.com>
   Repository: https://github.com/Marwes/combine
+
+const-oid 0.10.3
+  License: Apache-2.0 OR MIT
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/formats
 
 convert_case 0.4.0
   License: MIT
@@ -374,6 +515,11 @@ cpufeatures 0.2.17
   Authors: RustCrypto Developers
   Repository: https://github.com/RustCrypto/utils
 
+cpufeatures 0.3.1
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/utils
+
 crc32fast 1.5.0
   License: MIT OR Apache-2.0
   Authors: Sam Rijs <srijs@airpost.net>, Alex Crichton <alex@alexcrichton.com>
@@ -397,6 +543,11 @@ crypto-common 0.1.7
   Authors: RustCrypto Developers
   Repository: https://github.com/RustCrypto/traits
 
+crypto-common 0.2.2
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/traits
+
 cssparser 0.29.6
   License: MPL-2.0
   Authors: Simon Sapin <simon.sapin@exyr.org>
@@ -416,6 +567,11 @@ ctor 0.2.9
   License: Apache-2.0 OR MIT
   Authors: Matt Mastracci <matthew@mastracci.com>
   Repository: https://github.com/mmastrac/rust-ctor
+
+ctutils 0.4.8
+  License: Apache-2.0 OR MIT
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/utils
 
 darling 0.23.0
   License: MIT
@@ -458,6 +614,11 @@ derive_more-impl 2.1.1
   Repository: https://github.com/JelteF/derive_more
 
 digest 0.10.7
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/traits
+
+digest 0.11.3
   License: MIT OR Apache-2.0
   Authors: RustCrypto Developers
   Repository: https://github.com/RustCrypto/traits
@@ -847,6 +1008,11 @@ hex 0.4.3
   Authors: KokaKiwi <kokakiwi@kokakiwi.net>
   Repository: https://github.com/KokaKiwi/rust-hex
 
+hmac 0.13.0
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/MACs
+
 hound 3.5.1
   License: Apache-2.0
   Authors: Ruud van Asseldonk <dev@veniogames.com>
@@ -881,6 +1047,11 @@ httparse 1.10.1
   License: MIT OR Apache-2.0
   Authors: Sean McArthur <sean@seanmonstar.com>
   Repository: https://github.com/seanmonstar/httparse
+
+hybrid-array 0.4.15
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/hybrid-array
 
 hyper 1.8.1
   License: MIT
@@ -1361,6 +1532,10 @@ os_pipe 1.2.3
   Authors: Jack O'Connor
   Repository: https://github.com/oconnor663/os_pipe.rs
 
+outref 0.5.2
+  License: MIT
+  Repository: https://github.com/Nugine/outref
+
 pango 0.18.3
   License: MIT
   Authors: The gtk-rs Project Developers
@@ -1706,6 +1881,11 @@ regex-automata 0.4.14
   Authors: The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>
   Repository: https://github.com/rust-lang/regex
 
+regex-lite 0.1.9
+  License: MIT OR Apache-2.0
+  Authors: The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>
+  Repository: https://github.com/rust-lang/regex
+
 regex-syntax 0.8.10
   License: MIT OR Apache-2.0
   Authors: The Rust Project Developers, Andrew Gallant <jamslam@gmail.com>
@@ -1888,7 +2068,17 @@ servo_arc 0.4.3
   Authors: The Servo Project Developers
   Repository: https://github.com/servo/stylo
 
+sha1 0.10.7
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/hashes
+
 sha2 0.10.9
+  License: MIT OR Apache-2.0
+  Authors: RustCrypto Developers
+  Repository: https://github.com/RustCrypto/hashes
+
+sha2 0.11.1
   License: MIT OR Apache-2.0
   Authors: RustCrypto Developers
   Repository: https://github.com/RustCrypto/hashes
@@ -2338,6 +2528,11 @@ url 2.5.8
   Authors: The rust-url developers
   Repository: https://github.com/servo/rust-url
 
+urlencoding 2.1.3
+  License: MIT
+  Authors: Kornel <kornel@geekhood.net>, Bertram Truong <b@bertramtruong.com>
+  Repository: https://github.com/kornelski/rust_urlencoding
+
 urlpattern 0.3.0
   License: MIT
   Authors: the Deno authors, crowlKats <crowlkats@toaxl.com>
@@ -2377,6 +2572,10 @@ version_check 0.9.5
   License: MIT/Apache-2.0
   Authors: Sergio Benitez <sb@sergio.bz>
   Repository: https://github.com/SergioBenitez/version_check
+
+vsimd 0.8.0
+  License: MIT
+  Repository: https://github.com/Nugine/simd
 
 vswhom 0.1.0
   License: MIT
@@ -2866,6 +3065,11 @@ xkeysym 0.2.1
   License: MIT OR Apache-2.0 OR Zlib
   Authors: John Nunley <jtnunley01@gmail.com>
   Repository: https://github.com/notgull/xkeysym
+
+xmlparser 0.13.6
+  License: MIT/Apache-2.0
+  Authors: Yevhenii Reizner <razrfalcon@gmail.com>
+  Repository: https://github.com/RazrFalcon/xmlparser
 
 yoke 0.8.1
   License: Unicode-3.0

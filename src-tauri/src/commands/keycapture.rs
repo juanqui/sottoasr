@@ -71,7 +71,7 @@ pub fn init_key_capture_thread(app: &AppHandle) {
             let mut attempt = 0u32;
             loop {
                 attempt += 1;
-                if attempt <= 3 || attempt % 12 == 0 {
+                if attempt <= 3 || attempt.is_multiple_of(12) {
                     // Log first 3 attempts, then every ~60s
                     log::info!("CGEventTap: attempt {} to create tap...", attempt);
                 }

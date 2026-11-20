@@ -1,7 +1,7 @@
 # SottoASR — Architecture & Design Document
 
-- **Version:** 3.0
-- **Date:** 2026-11-19
+- **Version:** 3.1
+- **Date:** 2026-11-20
 - **Status:** Implemented
 - **Author:** juanqui + Claude
 
@@ -34,13 +34,13 @@
 
 ## 1. Summary
 
-SottoASR is a local, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs Parakeet Ultra, moondream's post-training of NVIDIA Parakeet TDT v3, through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. Audio and transcript text never leave the Mac.
+SottoASR is a local-first, privacy-first automatic speech recognition (ASR) application for macOS. The user presses a system-wide hotkey, speaks, and SottoASR pastes the transcribed text at the cursor. The default backend runs Parakeet Ultra, moondream's post-training of NVIDIA Parakeet TDT v3, through FluidAudio on CoreML and the Apple Neural Engine. ONNX Runtime remains an optional backend. An optional cloud engine, Amazon Transcribe, replaces the local model only when the user selects it in Settings. In the default configuration, audio and transcript text never leave the Mac.
 
 The application lives only in the macOS menu bar (no Dock icon, no main window). It has two dictation modes: **press-and-hold** (hold the hotkey, speak, release to transcribe) and **toggle** (press once to start, press again to stop). A floating pill overlay with an audio waveform gives feedback during recording.
 
 After Stop, the recording goes through ASR, optional acoustic vocabulary, exact replacements and optional AI cleanup. Then SottoASR pastes or copies the text, and only after that saves it in History. A private WAV file on disk holds each recording until History saves it, so an interrupted dictation can be recovered.
 
-This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md) and the [change to Parakeet Ultra](../specs/2026-11-19-parakeet-ultra-default.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
+This version of the document describes the system after the [review remediation](../specs/2026-11-19-review-remediation.md), the [change to Parakeet Ultra](../specs/2026-11-19-parakeet-ultra-default.md) and the [optional AWS Transcribe engine](../specs/2026-11-20-aws-transcribe-cloud-mode.md). The [September vocabulary/settings specification](../specs/2026-09-08-vocabulary-settings-performance.md) and the [batched stop-path specification](../specs/2026-09-13-batched-stop-path-correction.md) give the details of vocabulary and cleanup.
 
 ---
 
@@ -49,14 +49,14 @@ This version of the document describes the system after the [review remediation]
 ### Design constraints
 
 Dictation products differ in local/cloud execution, vocabulary mechanisms, history,
-customization and cost. Sotto's requirements are local speech processing, explicit model setup, predictable
+customization and cost. Sotto's requirements are local speech processing by default, explicit model setup, predictable
 cursor delivery, recoverable history and a menu-bar interface. Current competitor
 vocabulary mechanisms and Apple's supported contextual APIs are documented with
 primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 
 ### Goals
 
-1. **Privacy-first**: All audio processing happens locally on the user's machine
+1. **Privacy-first**: By default, all audio processing happens locally on the user's machine. Audio leaves the Mac only through the cloud engine, and only after the user selects it
 2. **Low latency**: Transcription completes within 1-2 seconds of speech ending
 3. **Two dictation modes**: Press-and-hold for quick dictation, toggle for longer sessions
 4. **Invisible when idle**: Menu bar icon only, no Dock presence, no windows unless recording
@@ -68,7 +68,7 @@ primary sources in the [ASR research](../research/2026-09-08-vocabulary-asr.md).
 ### Non-Goals
 
 - Real-time streaming transcription (words appearing as spoken) — future enhancement
-- Cloud-based ASR fallback — strictly local
+- Automatic fallback to a cloud service — the cloud engine runs only when the user selects it. A failure of the local engine never sends audio to the cloud
 - Audio file transcription (file import) — future enhancement
 - Speaker diarization — future enhancement
 - Translation — future enhancement
@@ -93,7 +93,7 @@ flowchart TB
         HM["hotkeys/manager.rs (shortcuts, overlay panel, TauriEvents)"]
         PL["pipeline.rs (start, stop, cancel)"]
         AR["audio/ (cpal capture, WAV writer)"]
-        ASR["asr/ (FluidAudio bridge, Swift)"]
+        ASR["asr/ (FluidAudio bridge, optional AWS Transcribe)"]
         PM["paste/ (clipboard, Cmd+V)"]
         TH["History store (transcriptions.json)"]
         TM["tray/ and updater/"]
@@ -134,6 +134,7 @@ flowchart TB
 | Frontend framework | Svelte 5 | Small runtime, compiled reactivity. Source: [Svelte docs](https://svelte.dev/) |
 | ASR engine (macOS) | FluidAudio 0.18.3 via the vendored bridge `src-tauri/vendor/fluidaudio-rs` | CoreML/Apple Neural Engine, Parakeet Ultra (600M parameters, 25 languages). Models are pinned to fixed commits and verified by SHA-256. |
 | ASR engine (cross-platform) | parakeet-rs 0.3 (optional) | ONNX Runtime CPU fallback via the `asr-parakeet` feature flag |
+| Cloud speech engine (optional) | Amazon Transcribe streaming through the AWS SDK for Rust | Off by default. For Macs with little free memory: in this mode no local speech model is in memory. See [Cloud Speech Engine](#cloud-speech-engine-aws-transcribe). |
 | Audio capture | cpal 0.16 | Audio input in Rust. Version 0.16 holds a stream weakly in its disconnect listener. With 0.15.3, a microphone opened from the device list continued to run after its stream was dropped. |
 | Recording storage | Private WAV file per recording | A crash or a failed transcription keeps the audio for recovery |
 | One stop path | `pipeline.rs` | Hotkeys, IPC and tests drive the same functions. Tauri effects go through the `PipelineEvents` trait. |
@@ -171,7 +172,9 @@ flowchart TB
 | ASR (default) | `fluidaudio-rs` (vendored) | FluidAudio 0.18.3 | Swift bridge to FluidAudio on CoreML |
 | ASR (optional) | `parakeet-rs` | 0.3 | Parakeet TDT inference via ONNX Runtime (`asr-parakeet`) |
 | Audio capture | `cpal` | 0.16 | Microphone input |
-| Resampling | `rubato` | 0.16 | Resample to 16 kHz, `asr-parakeet` only |
+| Resampling | `rubato` | 0.16 | Resample to 16 kHz, for AWS Transcribe and `asr-parakeet` |
+| Cloud speech (optional) | `aws-config`, `aws-sdk-transcribestreaming` | 1.13 / 1.129 | AWS profiles and credentials, the Amazon Transcribe streaming client |
+| HTTPS for the AWS SDK | `aws-smithy-http-client` | 1.5 | rustls with the `ring` provider, which the app already links |
 | Audio encoding | `hound` | 3.5 | WAV file read/write |
 | Global shortcuts | `tauri-plugin-global-shortcut` | 2.x | System-wide hotkey registration |
 | Clipboard (History window) | `tauri-plugin-clipboard-manager` | 2.x | Copy from the History window |
@@ -210,6 +213,7 @@ The cleanup sidecar runs `mlx` 0.32.2, `mlx-lm` 0.31.3, `transformers` 5.3.0 and
 | Sidecar | The Python process that runs the cleanup model. Rust starts it and talks to it through stdin and stdout. |
 | Manifest | `model-manifest.json`, the SHA-256 and size of each speech and vocabulary model file |
 | Generation | A counter for each recording. A late key release or timer cannot stop a newer recording. |
+| Cloud mode | `speech_engine` is `aws_transcribe`. Amazon Transcribe replaces the local speech model. |
 
 ---
 
@@ -248,6 +252,7 @@ flowchart LR
 **Core process (Rust)** handles all sensitive and performance-critical operations:
 - Audio capture and the private WAV file
 - ASR model inference through the Swift bridge, which is linked into the process
+- In cloud mode, the request to Amazon Transcribe. The webviews never connect to AWS.
 - Clipboard writes, the clipboard snapshot and the restore
 - CGEvent posting (simulated paste)
 - Global hotkey registration and the key listener of the shortcut recorder
@@ -265,7 +270,7 @@ flowchart LR
 3. Start the key capture thread for the shortcut recorder.
 4. Register the shortcuts one by one. If one fails, open Settings with the title "SottoASR — Review Keyboard Shortcuts".
 5. Create the hidden overlay panel.
-6. If neither the current nor the previous speech model is on disk, open onboarding. Otherwise load ASR in the background. If only the previous model is on disk, the current one then downloads in the background ([section 9](#9-asr-engine-integration)).
+6. In cloud mode, mark the engine as ready at once: no onboarding, no model preparation. In local mode, if neither the current nor the previous speech model is on disk, open onboarding. Otherwise load ASR in the background. If only the previous model is on disk, the current one then downloads in the background ([section 9](#9-asr-engine-integration)).
 7. If AI cleanup is on, prepare and warm the sidecar in the background. An inconclusive runtime check is tried again after about 16, 30 and 60 seconds.
 8. Start the update checker and the retention timer (now, then every 6 hours).
 9. Sync the login item, but only if the settings file loaded.
@@ -316,6 +321,7 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | Permissions | `request_accessibility_permission`, `request_microphone_permission`, `check_all_permissions`, `open_accessibility_settings`, `fix_accessibility_permission`, `open_input_monitoring_settings`, `open_microphone_settings`, `open_url` |
 | Key capture | `start_key_capture`, `stop_key_capture` |
 | Speech model | `get_asr_backend`, `get_model_status`, `init_asr`, `redownload_speech_model`, `delete_previous_speech_model`, `download_model`, `complete_setup` |
+| Speech engine | `get_aws_transcribe_options`, `test_aws_transcribe` |
 | Vocabulary | `get_vocabulary_status`, `prepare_vocabulary_model` |
 | AI cleanup | `get_llm_status`, `prepare_llm_model`, `repair_llm_runtime`, `delete_llm_model` |
 | Updates | `check_app_update`, `perform_app_update`, `get_update_status` |
@@ -373,8 +379,10 @@ A start request while the state is `Transcribing`, `CleaningUp` or `Pasting` doe
 | `sound_cues` | `false` | System sounds for start, stop, cancel, busy and error |
 | `history_retention_days` | `0` | Delete history older than N days. 0 keeps it. |
 | `audio_retention_days` | `0` | Delete kept recordings older than N days. 0 keeps them. |
+| `speech_engine` | `local` | `local` (Parakeet Ultra on this Mac) or `aws_transcribe` |
+| `aws_transcribe` | `language` `en-US`, no other value | `profile`, `region`, `language` and `vocabulary_name` of the cloud engine. The file omits a key that has no value. |
 
-`validate` rejects empty required shortcuts, shortcuts that do not parse, duplicate shortcuts (alternates and Open Settings included), a push-to-talk key that the release poller cannot watch, retention values above 3,650 days, and a microphone name with control characters or more than 256 characters. It also validates the dictionary and the vocabulary.
+`validate` rejects empty required shortcuts, shortcuts that do not parse, duplicate shortcuts (alternates and Open Settings included), a push-to-talk key that the release poller cannot watch, retention values above 3,650 days, and a microphone name with control characters or more than 256 characters. It also validates the dictionary and the vocabulary. For the cloud engine, it requires a profile when `speech_engine` is `aws_transcribe`. It checks the profile name, the Region, the language and the custom vocabulary name in both modes.
 
 The model no longer has `model_path`, `language` or `max_history`. `persist_settings` still writes them with the fixed values `""`, `"auto"` and `500`, because earlier builds require these keys to parse the file. Without them, a rollback registers no hotkeys.
 
@@ -392,7 +400,7 @@ The model no longer has `model_path`, `language` or `max_history`. `persist_sett
 | `llm_cleanup_status` | Cleanup outcome (`Applied`, `Rejected`, `TimedOut`, `Unavailable` and more) |
 | `cleanup_suggestion`, `llm_applied` | Fields of earlier versions, still read |
 
-**`ModelStatus`** has `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning`, `notice` and `previous_model`. The warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3. `previous_model` (`name`, `size_bytes`) is set while Parakeet TDT v3 is still on disk and Parakeet Ultra is loaded with no file mismatch; the model dashboard then offers to delete it.
+**`ModelStatus`** has `engine`, `initializing`, `error`, `downloaded`, `loaded`, `path`, `name`, `size_bytes`, `integrity_warning`, `notice` and `previous_model`. `engine` is `local` or `aws_transcribe`. In cloud mode, `name` is "AWS Transcribe", `loaded` and `downloaded` are true, `path` is none, and `notice` is "SottoASR sends each dictation to Amazon Transcribe in (region) with the AWS profile (name)." In local mode, the warning is set when a speech model file that was already on disk differs from the manifest. `name` is "Parakeet Ultra (CoreML)" or "Parakeet TDT v3 (CoreML)", and `path` is the folder of the loaded model. `notice` is set while Parakeet Ultra is prepared in the background, and after a fallback to Parakeet TDT v3. `previous_model` (`name`, `size_bytes`) is set while Parakeet TDT v3 is still on disk and Parakeet Ultra is loaded with no file mismatch; the model dashboard then offers to delete it.
 
 ---
 
@@ -435,7 +443,7 @@ The toggle shortcut stops the recording when the state is Recording. Otherwise i
 
 The cancel shortcut (default `Escape`) is registered when a recording starts and unregistered when it stops or is cancelled. Thus `Escape` works normally in other apps.
 
-Cancel pastes nothing. The pipeline still transcribes the recording and saves it in History as cancelled. A cancelled recording that is too short to transcribe leaves an empty cancelled entry.
+Cancel pastes nothing. With the local engine, the pipeline still transcribes the recording and saves it in History as cancelled. In cloud mode, the pipeline does not send the recording: History keeps a cancelled entry without text, and the WAV is deleted ([Cloud Speech Engine](#cloud-speech-engine-aws-transcribe)). A cancelled recording that is too short to transcribe leaves an empty cancelled entry.
 
 ### Generations
 
@@ -565,11 +573,48 @@ In every case the audio is kept and the state returns to Idle.
 
 With vocabulary words saved, the bridge also runs the CTC 110M model and returns candidate scores and exact ranges beside the untouched TDT text. The Rust policy in `asr/vocabulary.rs` decides which substitutions are safe. For a recording of 30 s or less, the bridge decodes the audio once and gives the same samples to both models. Longer recordings keep the file path, because the SDK streams them from disk.
 
-Saving a changed, non-empty vocabulary prepares the vocabulary model. Dictation itself never downloads a model.
+Saving a changed, non-empty vocabulary prepares the vocabulary model. Dictation itself never downloads a model. In cloud mode the vocabulary model does not load, and the custom vocabulary of the AWS account applies instead.
 
 ### Performance Expectations
 
 On 2026-11-19, on an M2 Pro with 32 GB and CoreML CPU + Neural Engine, Parakeet Ultra had a median time per clip of 59.1 ms and 56.6 ms on the two sets of synthetic clips (Parakeet TDT v3: 58.4 ms and 55.1 ms). On LibriSpeech test-other, its peak resident memory was 644 MiB (Parakeet TDT v3: 487 MiB), and its total decode time was 254 s (Parakeet TDT v3: 225 s). On 2026-09-08, on an M4 with 32 GiB, Parakeet TDT v3 with CPU+ANE had a 62.70 ms warm median on short synthetic clips. The [Parakeet Ultra research](../research/2026-11-19-parakeet-ultra.md) and the [model measurements](../../benchmarks/asr/README.md) give the method and the limits.
+
+### Cloud Speech Engine (AWS Transcribe)
+
+The optional cloud engine sends the recording to Amazon Transcribe instead of loading a local model. It is off by default. The [AWS Transcribe specification](../specs/2026-11-20-aws-transcribe-cloud-mode.md) is the reference: it gives the measurements, the decisions, the error texts and the edge cases.
+
+**Settings.** `speech_engine` is `local` (default) or `aws_transcribe`. The `aws_transcribe` object holds `profile`, `region`, `language` (default `en-US`) and `vocabulary_name`. The AWS fields are in their own object, because the settings file still has the legacy top-level key `language`. `normalize` trims the three optional strings and turns an empty value into none.
+
+**Profiles, Regions and languages.** `asr/aws_profiles.rs` lists the profiles of `~/.aws/config` and `~/.aws/credentials`, or of the files that `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` name. It uses the parser of the AWS SDK and puts `default` first. `asr/aws_transcribe.rs` holds the Regions of the streaming endpoint table as a constant list. The languages are the language codes of the SDK. The Region in use is `aws_transcribe.region`, or else the Region of the profile. The user selects one language: the engine does not use language identification, because it returned no text for short dictations.
+
+**One engine object at a time.** `AppState.asr_engine` holds one boxed `AsrEngine`. `engine::create_engine(&Settings)` returns `TranscribeEngine` for `aws_transcribe`, else the local engine. `AppState.cloud_speech` records that the installed engine sends audio to a cloud service. In cloud mode no `FluidAudioEngine` exists in the process, and only that type can load Parakeet Ultra or the vocabulary model. Thus no local speech model and no vocabulary model is in memory. `AsrEngine` has no "unload" method: to release the models, the old engine object is dropped, and ARC frees them in the Swift bridge.
+
+**Engine change.** `update_settings` calls `speech::settings_saved` (`commands/speech.rs`). If `speech_engine` changed, or the `aws_transcribe` options changed while the cloud engine is selected, it starts a task that calls `speech::install_engine`. Thus Save does not wait:
+
+1. Take the engine lock. A transcription or a model load that runs finishes first.
+2. Make the engine for the settings of this moment, and put it in place of the old one. Set `cloud_speech`.
+3. Drop the old engine on a blocking worker.
+4. Cloud mode: mark the engine as loaded, clear the load error and emit `asr-init-complete`. Local mode: run `init_asr`, which verifies, downloads if necessary, and loads.
+
+Each task reads the settings when it has the lock, so two fast changes end in the state of the last one. A model load that already runs when the user saves cloud mode cannot stop, because CoreML blocks. It finishes, and then step 2 drops the model. In cloud mode, `init_asr` returns before any preparation, the vocabulary preparation returns at once, `install_vocabulary` on the cloud engine fails, and `get_vocabulary_status` reports `supported: false`.
+
+**The request.** `TranscribeEngine` implements `transcribe_file` as the local engine does, so the pipeline, recovery and the deadline do not change:
+
+1. Open the WAV with `hound`, mix the channels to mono, resample to 16 kHz with `Resampler16k` (`audio/resample.rs`) and convert to 16-bit PCM.
+2. Send `StartStreamTranscription` with the language, the sample rate, PCM, and the custom vocabulary name if one is set. The audio stream reads the file while the service accepts data, so the file is never in memory as a whole.
+3. Keep the first alternative of each final result. Join the results with a space, or with no separator for Japanese and Chinese.
+
+The request goes over TLS to `transcribestreaming.<region>.amazonaws.com`, with the IAM action `transcribe:StartStreamTranscription`. The engine builds the SDK client at the first request and keeps it. The request has its own time limit, shorter than the deadline of the pipeline, so it ends with its own error and releases the engine. If the request fails before the first result because of a connection error, the engine sends it once more. It does not retry service errors or credential errors.
+
+The audio goes after the recording ends, not while the user speaks. Thus a recording that the user cancels never leaves the Mac. The cost is the wait: on a 150 s recording the service worked at 4.3 times real time, so the wait after a dictation is about a quarter of its length, plus about 0.6 s.
+
+**Credentials.** SottoASR stores no AWS credentials. `ProfileFileCredentialsProvider` reads the selected profile only: no environment variables, no instance metadata. The SDK resolves static keys, IAM Identity Center, `credential_process` and assumed roles, and signs the request. A `credential_process` command runs through `/bin/sh` with the environment of the app. An app that Finder starts does not have the `PATH` of the shell, so the command needs its full path. Logs name the profile and the Region, never a key or a token.
+
+**Errors.** One function maps each SDK error to a sentence for the user, for example "AWS profile (name) cannot use Amazon Transcribe. It needs the permission transcribe:StartStreamTranscription." The pipeline shows the text and keeps the recording, as for a local failure. Section 4.6 of the specification lists each text.
+
+**Cancel.** In cloud mode, `pipeline::complete` does not transcribe a cancelled recording. `save_cancelled` writes a cancelled History entry without text, and the WAV is deleted after History saved the entry. In local mode, a cancelled recording is transcribed and History keeps the text, as before.
+
+**Commands.** `get_aws_transcribe_options` returns the profiles (name and Region), a profile load error, the Regions (code and name) and the language codes. `test_aws_transcribe(options)` sends one second of silence with the values in the Settings window, before Save, through a new client. It returns the Region and the time, or the error text. It does not touch the installed engine.
 
 ---
 
@@ -696,7 +741,7 @@ History is `~/Library/Application Support/com.sottoasr.app/transcriptions.json`.
 
 `commands/recovery.rs` lists every `sotto_<id>.wav` in `recordings/` that has no completed history entry and no receipt. An interrupted entry does not count as completed. At launch, SottoASR opens History when recordings wait for recovery or when the previous session did not end cleanly.
 
-- **Reprocess** transcribes the WAV with `transcribe_with_deadline`, runs cleanup if it is on, and saves the result in History. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
+- **Reprocess** transcribes the WAV with `transcribe_with_deadline` and the installed engine, runs cleanup if it is on, and saves the result in History. In cloud mode, this sends the recording to Amazon Transcribe. It never pastes. It keeps the WAV and writes a receipt, so the recording is not offered again.
 - **Show in Finder** reveals the WAV.
 - **Delete audio** deletes the WAV and its receipt.
 - Older recordings in the system temporary folder are copied into `recordings/`. The originals are not changed. If a legacy copy still exists when a recording is deleted, a tombstone receipt stops the next scan from importing it again.
@@ -724,7 +769,7 @@ The History window (680 × 760) shows 50 entries per page, newest first, with a 
 - `microphone_authorization()` reads the AVFoundation authorization status through the Objective-C runtime and never shows a prompt.
 - `request_microphone_permission` returns at once if the status is known. If it is not determined, it opens the default input device to make macOS show the prompt.
 - `check_all_permissions` reports Microphone, Accessibility (trusted, and the functional check) and Input Monitoring. "Restart needed" means trusted but not functional.
-- `open_url` opens only `https` links whose host is exactly `huggingface.co`, `github.com` or `sottoasr.app`, without user information. It runs `/usr/bin/open`.
+- `open_url` opens only `https` links whose host is exactly `huggingface.co`, `github.com`, `sottoasr.app`, `docs.aws.amazon.com` or `aws.amazon.com`, without user information. It runs `/usr/bin/open`.
 - System tools are started by their full path: `/usr/bin/open`, `/usr/bin/osascript`, `/usr/bin/tccutil`, `/usr/bin/curl`, `/usr/bin/shasum` and `/usr/bin/tar`.
 
 ---
@@ -760,6 +805,9 @@ The History window (680 × 760) shows 50 entries per page, newest first, with a 
 | App not Idle within 10 minutes after the background download | No reload. Parakeet Ultra loads at the next launch. |
 | Re-download or `init_asr` while the background upgrade runs | Refused by the preparation claim. The model in use is unaffected. |
 | Parakeet TDT v3 in use, and one of its files differs from the manifest | Loads with the warning. A confirmed re-download fetches Parakeet Ultra. |
+| AWS Transcribe request fails (credentials, permission, Region, connection, time limit) | The error text names the cause. The recording is kept for recovery. |
+| Start in cloud mode without a local model on disk | No onboarding and no download. Dictation works. |
+| Switch to cloud mode during a local model load | The load finishes, then the engine change drops the model |
 
 ### Paste Issues
 
@@ -814,9 +862,12 @@ sottoasr/
 │   │   ├── hotkeys/manager.rs      # Shortcuts, overlay panel, TauriEvents adapter
 │   │   ├── audio/                  # Capture, WAV writer, cues, resampling
 │   │   ├── asr/                    # Engines, model preparation, integrity
+│   │   │   ├── aws_transcribe.rs   # AWS Transcribe engine (optional, cloud)
+│   │   │   └── aws_profiles.rs     # AWS profile list
 │   │   ├── paste/                  # Paste, pasteboard snapshot and restore
 │   │   ├── llm/                    # Cleanup sidecar, download, planner, validation
 │   │   ├── commands/               # IPC handlers
+│   │   │   └── speech.rs           # AWS options, connection test, engine change
 │   │   ├── tray/, updater/         # Menu bar and updates
 │   │   └── state.rs, models.rs, persistence.rs, dictionary.rs, process.rs, relaunch.rs
 │   ├── sidecar/                    # llm_cleanup.py, requirements.in, requirements.lock
@@ -842,6 +893,7 @@ sottoasr/
 | Settings | Duplicate shortcuts and invalid replacement rows are refused. The written file still parses for a build that requires the legacy keys. Reset backs up the file and refuses unless Idle. `open_url` rejects other hosts. The tray handler is registered once. |
 | History | Delete and clear remove audio and receipts. Retention removes only expired entries, measures from the save, keeps interrupted audio and never touches the active recording. A deleted legacy recording is not imported again. |
 | Cleanup | The lock and the sidecar pins agree. Every lock entry has a hash, and the install requires hashes. A drifted runtime is stale. Repair replaces a runtime whose interpreter link is broken. A stalled download fails after the stall limit. Dispatch stops on a transport failure and on the budget. Repeated number words stay. |
+| AWS Transcribe | Settings defaults and rules, the profile list from sample files, the audio source, the error text from built SDK errors, the engine selection and change, cancel in cloud mode. No test calls AWS. |
 
 ### Other Tests
 
@@ -872,6 +924,7 @@ PR CI (`.github/workflows/ci.yml`) runs all of these except the Swift bridge pro
 - [ ] Microphone and Accessibility prompts appear in onboarding
 - [ ] App does not appear in Dock (LSUIElement)
 - [ ] Paste works in: Terminal, VS Code, Chrome, Safari, Slack, Notes
+- [ ] With AWS Transcribe selected, **Test connection** answers, a dictation is transcribed, and a cancelled recording is not sent
 
 A development build shares the data folder and the global shortcuts of an installed SottoASR. Quit the installed app before manual tests.
 
@@ -881,8 +934,10 @@ A development build shares the data folder and the global shortcuts of an instal
 
 ### Privacy
 
-- **No audio or text over the network.** SottoASR never sends recordings or transcript text over the network. Speech recognition runs in the app process. The cleanup sidecar runs with the Hugging Face offline mode on.
-- **Network requests.** The app connects to GitHub for update checks and downloads, and for the standalone Python when no Python 3.11 to 3.14 is installed. It connects to Hugging Face for the speech, vocabulary and cleanup models, and to PyPI for the cleanup runtime. [SECURITY.md](../../SECURITY.md) lists each request and when it happens.
+- **Local by default.** In the default configuration, SottoASR sends no recordings or transcript text over the network. Speech recognition runs in the app process. The cleanup sidecar runs with the Hugging Face offline mode on.
+- **Optional cloud engine.** Only with AWS Transcribe selected, the Rust code sends audio over TLS to the Amazon Transcribe streaming endpoint of the selected Region: the audio of each completed dictation after the recording ends, a kept recording that the user recovers, and one second of silence for a connection test. It never sends a cancelled recording, History, or the text that the service returned. By default, AWS can keep the audio to improve its services, unless an AWS Organizations opt-out policy applies. The Settings notice says so.
+- **AWS credentials.** SottoASR stores none. The AWS SDK for Rust reads the AWS files of the user, and can run a `credential_process` command from them with the rights of the user, as the AWS CLI does.
+- **Network requests.** The app connects to GitHub for update checks and downloads, and for the standalone Python when no Python 3.11 to 3.14 is installed. It connects to Hugging Face for the speech, vocabulary and cleanup models, and to PyPI for the cleanup runtime. With AWS Transcribe selected, it also connects to AWS. [SECURITY.md](../../SECURITY.md) lists each request and when it happens.
 - **Pinned downloads.** The speech and vocabulary models are pinned to fixed commits and verified against `model-manifest.json`. The cleanup model is pinned to one revision and each file is verified by SHA-256. The runtime installs only wheels whose SHA-256 matches `requirements.lock`. The standalone Python is pinned by URL and SHA-256, and extracted only after the hash matches. App updates are verified against the signing key in the app.
 - **No telemetry.** No analytics, crash reporting or usage tracking.
 - **Clipboard.** The transient transcript is excluded from clipboard history and from Universal Clipboard. Restored items keep their original types, including sensitivity markers.
@@ -890,7 +945,7 @@ A development build shares the data folder and the global shortcuts of an instal
 
 ### Webview Restrictions
 
-- The content security policy allows connections only to the app itself (`connect-src 'self' ipc: tauri: asset: https://asset.localhost`).
+- The content security policy allows connections only to the app itself (`connect-src 'self' ipc: tauri: asset: https://asset.localhost`). Only Rust code connects to AWS.
 - `capabilities/default.json` grants only `core:default`, `core:window:allow-close` and `log:default` to all windows. `history.json` adds clipboard text writes for the History window. `settings-close.json` adds `allow-destroy` for the Settings window.
 - Application commands can be called from every window. All windows load first-party content under the same policy.
 
@@ -905,6 +960,7 @@ A development build shares the data folder and the global shortcuts of an instal
 - Both workflows pin each action to a full commit SHA. Secrets are declared only in the steps that sign the app.
 - `cargo audit` runs in CI. `src-tauri/.cargo/audit.toml` ignores six `zip` advisories, because `zip` is built only for Windows. CI fails if `cargo tree -i zip --target aarch64-apple-darwin` prints a dependency. The fixed `zip` needs Tauri 2.12, so Tauri stays on 2.11 for now.
 - `npm audit --omit=dev` blocks both workflows.
+- The AWS SDK for Rust and its HTTP stack add 42 crates. `cargo audit` covers them. The SDK client uses `ring`, so the app links no second TLS library.
 
 ---
 
@@ -918,11 +974,11 @@ A development build shares the data folder and the global shortcuts of an instal
 | CPU (idle) | <0.1% | Activity Monitor |
 | Startup time | <1 second | Time from launch to tray icon visible |
 | Recording latency | <50 ms | Time from hotkey press to audio capture start |
-| Transcription latency | <1.5s for 10s audio | Time from recording stop to text pasted, without cleanup |
+| Transcription latency (local engine) | <1.5s for 10s audio | Time from recording stop to text pasted, without cleanup |
 | Bundle size | <15 MB (without model) | Built .app size |
 | Speech model size | 632 MB | Parakeet Ultra CoreML bundles (`model-manifest.json`) |
 
-The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front.
+The paste path waits 30 ms after the clipboard write and 50 ms after `Cmd+V`. It waits for activation only when the target app is not in front. With AWS Transcribe, the wait after a dictation is about a quarter of its length, plus about 0.6 s.
 
 ---
 
@@ -985,6 +1041,7 @@ These notes record the review passes of the original design (version 1, March 20
 | Svelte frontend | ✅ Complete | Seven windows, components call the wrappers in `tauri.ts` |
 | ASR — FluidAudio (macOS) | ✅ Complete | CoreML/ANE, pinned and verified models |
 | ASR — parakeet-rs (cross-platform) | ✅ Complete | ONNX Runtime CPU, feature-flagged, pinned and verified model |
+| ASR — AWS Transcribe (cloud, optional) | ✅ Complete | Off by default. AWS profile of the user, no local model in memory |
 | Audio capture pipeline | ✅ Complete | Microphone selection, private WAV checkpoints, stall watchdog |
 | Paste at cursor | ✅ Complete | CGEvent `Cmd+V`, full clipboard snapshot and restore |
 | AI cleanup | ✅ Complete | Python sidecar, hash-locked runtime, pinned MiniCPM5 2B |

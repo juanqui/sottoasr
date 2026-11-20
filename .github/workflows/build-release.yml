@@ -50,8 +50,8 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
-      - name: Install verified Rust 1.94.0
-        uses: dtolnay/rust-toolchain@46ce8032f0e3e2d70554c4eb1961fc1ca5fde79f # 1.94.0 branch
+      - name: Install verified Rust 1.96.0
+        uses: dtolnay/rust-toolchain@3cfd829add0beb9cf7406e52147d74ad3db19d01 # 1.96.0 branch
         with:
           targets: ${{ matrix.target }}
           components: clippy

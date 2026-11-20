@@ -143,7 +143,7 @@ pub fn apply(text: &str, entries: &[DictionaryEntry]) -> String {
         }
         let matched = aliases.iter().find(|entry| {
             let end = offset + entry.heard.len();
-            next_protected.map_or(true, |range| end <= range.start)
+            next_protected.is_none_or(|range| end <= range.start)
                 && text
                     .get(offset..end)
                     .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&entry.heard))

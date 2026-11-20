@@ -3,46 +3,127 @@ use rubato::{FftFixedIn, Resampler};
 pub const TARGET_RATE: u32 = 16_000;
 const CHUNK_SIZE: usize = 1024;
 
-/// Resamples mono audio to 16 kHz. The output starts at the first input
-/// sample (the resampler's delay is trimmed) and covers the whole input,
-/// including the tail still inside the filter when the input ends.
+/// Resamples mono audio to 16 kHz in pieces, so a long recording is never in
+/// memory as a whole. The output starts at the first input sample (the
+/// resampler's delay is trimmed) and, after `finish`, covers the whole
+/// input, including the tail still inside the filter when the input ends.
+pub struct Resampler16k {
+    /// `None` at 16 kHz: samples pass through.
+    filter: Option<Filter>,
+}
+
+struct Filter {
+    resampler: FftFixedIn<f32>,
+    source_rate: u32,
+    buffer: Vec<Vec<f32>>,
+    /// Input that does not fill a block yet.
+    pending: Vec<f32>,
+    /// Output samples of the filter delay that are still to drop.
+    skip: usize,
+    received: u64,
+    produced: u64,
+}
+
+impl Resampler16k {
+    pub fn new(source_rate: u32) -> Result<Self, String> {
+        if source_rate == TARGET_RATE {
+            return Ok(Self { filter: None });
+        }
+        let resampler = FftFixedIn::<f32>::new(source_rate as usize, TARGET_RATE as usize, CHUNK_SIZE, 1, 1)
+            .map_err(|e| format!("Failed to create resampler: {}", e))?;
+        Ok(Self { filter: Some(Filter {
+            skip: resampler.output_delay(),
+            buffer: resampler.output_buffer_allocate(true),
+            resampler,
+            source_rate,
+            pending: Vec::with_capacity(CHUNK_SIZE),
+            received: 0,
+            produced: 0,
+        }) })
+    }
+
+    /// Appends the 16 kHz samples that `samples` completes to `output`.
+    pub fn push(&mut self, samples: &[f32], output: &mut Vec<f32>) -> Result<(), String> {
+        let Some(filter) = &mut self.filter else {
+            output.extend_from_slice(samples);
+            return Ok(());
+        };
+        filter.received += samples.len() as u64;
+        let mut samples = samples;
+        // Complete the block left from the previous call first.
+        if !filter.pending.is_empty() {
+            let take = (CHUNK_SIZE - filter.pending.len()).min(samples.len());
+            filter.pending.extend_from_slice(&samples[..take]);
+            samples = &samples[take..];
+            if filter.pending.len() < CHUNK_SIZE {
+                return Ok(());
+            }
+            let block = std::mem::take(&mut filter.pending);
+            filter.process(Some(&block), false, output)?;
+            filter.pending = block;
+            filter.pending.clear();
+        }
+        let mut blocks = samples.chunks_exact(CHUNK_SIZE);
+        for block in &mut blocks {
+            filter.process(Some(block), false, output)?;
+        }
+        filter.pending.extend_from_slice(blocks.remainder());
+        Ok(())
+    }
+
+    /// Appends the rest: the last partial block and the tail in the filter.
+    pub fn finish(&mut self, output: &mut Vec<f32>) -> Result<(), String> {
+        let Some(filter) = &mut self.filter else { return Ok(()) };
+        if !filter.pending.is_empty() {
+            let block = std::mem::take(&mut filter.pending);
+            filter.process(Some(&block), true, output)?;
+        }
+        // Zero input pushes the delayed tail out of the filter.
+        while filter.produced < filter.expected() {
+            filter.process(None, true, output)?;
+        }
+        Ok(())
+    }
+}
+
+impl Filter {
+    /// The output length for the input so far: the rate ratio, rounded up.
+    fn expected(&self) -> u64 {
+        (self.received * TARGET_RATE as u64).div_ceil(self.source_rate as u64)
+    }
+
+    /// Runs one block (`None`: silence that moves the tail out) and appends
+    /// its output without the filter delay. `last` also stops at the
+    /// expected length.
+    fn process(&mut self, block: Option<&[f32]>, last: bool, output: &mut Vec<f32>) -> Result<(), String> {
+        let written = match block {
+            Some(block) if block.len() == CHUNK_SIZE => {
+                self.resampler.process_into_buffer(&[block], self.buffer.as_mut_slice(), None)
+            }
+            Some(block) => self.resampler.process_partial_into_buffer(Some(&[block]), self.buffer.as_mut_slice(), None),
+            None => self.resampler.process_partial_into_buffer(None::<&[&[f32]]>, self.buffer.as_mut_slice(), None),
+        }.map_err(|e| format!("Resampling error: {}", e))?.1;
+        let skipped = self.skip.min(written);
+        self.skip -= skipped;
+        let mut ready = &self.buffer[0][skipped..written];
+        if last {
+            let room = self.expected().saturating_sub(self.produced) as usize;
+            ready = &ready[..ready.len().min(room)];
+        }
+        output.extend_from_slice(ready);
+        self.produced += ready.len() as u64;
+        Ok(())
+    }
+}
+
+/// Resamples a whole mono recording to 16 kHz.
+#[cfg(any(feature = "asr-parakeet", test))]
 pub fn resample_to_16khz(samples: &[f32], source_rate: u32) -> Result<Vec<f32>, String> {
-    if source_rate == TARGET_RATE {
-        return Ok(samples.to_vec());
-    }
-    if samples.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut resampler = FftFixedIn::<f32>::new(source_rate as usize, TARGET_RATE as usize, CHUNK_SIZE, 1, 1)
-        .map_err(|e| format!("Failed to create resampler: {}", e))?;
-    let delay = resampler.output_delay();
-    let expected = (samples.len() as u64 * TARGET_RATE as u64).div_ceil(source_rate as u64) as usize;
-    let mut buffer = resampler.output_buffer_allocate(true);
-    let mut output = Vec::with_capacity(delay + expected + buffer[0].len());
-    let error = |e: rubato::ResampleError| format!("Resampling error: {}", e);
-
-    let mut chunks = samples.chunks_exact(CHUNK_SIZE);
-    for chunk in &mut chunks {
-        let input: [&[f32]; 1] = [chunk];
-        let (_, written) = resampler.process_into_buffer(&input[..], buffer.as_mut_slice(), None).map_err(error)?;
-        output.extend_from_slice(&buffer[0][..written]);
-    }
-    let remainder: [&[f32]; 1] = [chunks.remainder()];
-    if !remainder[0].is_empty() {
-        let (_, written) = resampler.process_partial_into_buffer(Some(&remainder[..]), buffer.as_mut_slice(), None)
-            .map_err(error)?;
-        output.extend_from_slice(&buffer[0][..written]);
-    }
-    // Zero input pushes the delayed tail out of the filter.
-    while output.len() < delay + expected {
-        let (_, written) = resampler.process_partial_into_buffer(None::<&[&[f32]]>, buffer.as_mut_slice(), None)
-            .map_err(error)?;
-        output.extend_from_slice(&buffer[0][..written]);
-    }
-    output.truncate(delay + expected);
-    output.copy_within(delay.., 0);
-    output.truncate(expected);
+    let mut resampler = Resampler16k::new(source_rate)?;
+    let expected = (samples.len() as u64 * TARGET_RATE as u64).div_ceil(source_rate.max(1) as u64) as usize;
+    let mut output = Vec::with_capacity(expected);
+    resampler.push(samples, &mut output)?;
+    resampler.finish(&mut output)?;
     Ok(output)
 }
 
@@ -117,5 +198,28 @@ mod tests {
     #[test]
     fn empty_input_returns_empty() {
         assert!(resample_to_16khz(&[], 48000).unwrap().is_empty());
+    }
+
+    #[test]
+    fn pieces_of_any_size_give_the_output_of_the_whole_recording() {
+        for rate in [44_100_u32, 48_000, 192_000, 8_000] {
+            let samples: Vec<f32> = (0..rate as usize + 777).map(|index| tone(rate, index)).collect();
+            let whole = resample_to_16khz(&samples, rate).unwrap();
+            // A block boundary inside a piece, pieces smaller than a block,
+            // and an empty piece.
+            for sizes in [[4_800, 4_800, 4_800], [1, 1_023, 1_025], [333, 0, 4_096]] {
+                let mut resampler = Resampler16k::new(rate).unwrap();
+                let (mut output, mut rest) = (Vec::new(), samples.as_slice());
+                for size in sizes.iter().cycle() {
+                    if rest.is_empty() { break; }
+                    let (piece, after) = rest.split_at((*size).min(rest.len()));
+                    resampler.push(piece, &mut output).unwrap();
+                    rest = after;
+                }
+                assert!(output.len() < whole.len(), "the tail waits for the end at {rate} Hz");
+                resampler.finish(&mut output).unwrap();
+                assert_eq!(output, whole, "{rate} Hz in pieces of {sizes:?}");
+            }
+        }
     }
 }

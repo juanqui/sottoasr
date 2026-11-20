@@ -62,6 +62,20 @@ export interface DictionaryEntry {
 	replacement: string;
 }
 
+export type SpeechEngine = 'local' | 'aws_transcribe';
+
+/** Options of the AWS Transcribe engine. The backend omits the optional keys that have no value. */
+export interface AwsTranscribeSettings {
+	/** Profile name in ~/.aws/config or ~/.aws/credentials. */
+	profile?: string | null;
+	/** Null or absent: the Region of the profile. */
+	region?: string | null;
+	/** AWS language code, such as `en-US`. */
+	language: string;
+	/** Name of a custom vocabulary in the AWS account. */
+	vocabulary_name?: string | null;
+}
+
 export interface Settings {
 	push_to_talk_shortcut: string;
 	push_to_talk_shortcut_alt?: string | null;
@@ -87,6 +101,8 @@ export interface Settings {
 	history_retention_days: number;
 	/** Days to keep retained recordings; 0 keeps them until the user deletes them. */
 	audio_retention_days: number;
+	speech_engine: SpeechEngine;
+	aws_transcribe: AwsTranscribeSettings;
 }
 
 /** A speech model that earlier releases used and that is still on disk. */
@@ -96,6 +112,7 @@ export interface PreviousModel {
 }
 
 export interface ModelStatus {
+	engine?: SpeechEngine;
 	initializing?: boolean;
 	error?: string | null;
 	downloaded: boolean;
@@ -299,6 +316,41 @@ export function deletePreviousSpeechModel(): Promise<number> {
 
 export function completeSetup(): Promise<SetupResult> {
 	return invoke("complete_setup");
+}
+
+// ---- AWS Transcribe commands ----
+
+export interface AwsProfile {
+	name: string;
+	region: string | null;
+}
+
+export interface AwsRegion {
+	code: string;
+	name: string;
+}
+
+export interface AwsTranscribeOptions {
+	profiles: AwsProfile[];
+	/** Why the AWS files could not be read; null when they were read or are absent. */
+	profiles_error: string | null;
+	regions: AwsRegion[];
+	/** AWS language codes, such as `en-US`. */
+	languages: string[];
+}
+
+export interface AwsTranscribeTest {
+	region: string;
+	seconds: number;
+}
+
+export function getAwsTranscribeOptions(): Promise<AwsTranscribeOptions> {
+	return invoke("get_aws_transcribe_options");
+}
+
+/** Send one second of silence with these options. Rejects with a sentence for the user. */
+export function testAwsTranscribe(options: AwsTranscribeSettings): Promise<AwsTranscribeTest> {
+	return invoke("test_aws_transcribe", { options });
 }
 
 // ---- LLM transcript cleanup commands ----

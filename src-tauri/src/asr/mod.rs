@@ -1,5 +1,7 @@
 pub mod engine;
 pub mod model;
+pub mod aws_profiles;
+pub mod aws_transcribe;
 
 #[cfg(feature = "asr-fluidaudio")]
 pub mod fluidaudio_backend;

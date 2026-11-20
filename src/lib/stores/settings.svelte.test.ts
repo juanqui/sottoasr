@@ -110,6 +110,59 @@ describe('replacement rows', () => {
   });
 });
 
+describe('speech engine', () => {
+  const aws = { profile:'work', region:null, language:'en-US', vocabulary_name:null };
+  it('defaults to the local engine, also for a file without the engine keys', async () => {
+    expect(createDefaultSettings().speech_engine).toBe('local');
+    expect(createDefaultSettings().aws_transcribe).toEqual({ profile:null, region:null, language:'en-US', vocabulary_name:null });
+    const { speech_engine: _engine, aws_transcribe: _aws, ...older } = createDefaultSettings();
+    vi.mocked(getSettings).mockResolvedValueOnce(older as Settings);
+    await store.load();
+    expect(store.current.speech_engine).toBe('local');
+    expect(store.current.aws_transcribe).toEqual(createDefaultSettings().aws_transcribe);
+    expect(store.dirty).toBe(false);
+  });
+  it('treats a no-op AWS edit as clean when the backend omits the empty AWS options', async () => {
+    // The backend omits `None` values and may write the keys in another order.
+    vi.mocked(getSettings).mockResolvedValueOnce({ ...createDefaultSettings(), speech_engine:'aws_transcribe', aws_transcribe:{ language:'en-US', profile:'work' } });
+    await store.load();
+    expect(JSON.stringify(store.current.aws_transcribe)).toBe(JSON.stringify(aws));
+    store.update('aws_transcribe', { ...store.current.aws_transcribe, vocabulary_name:null });
+    expect(store.dirty).toBe(false);
+    store.update('aws_transcribe', { ...store.current.aws_transcribe, region:'us-west-2' });
+    vi.mocked(updateSettings).mockImplementationOnce(async (settings) => ({ settings:{ ...settings, aws_transcribe:{ language:'en-US', region:'us-west-2', profile:'work' } }, warnings:[] }));
+    await store.save();
+    expect(store.dirty).toBe(false);
+    store.update('aws_transcribe', { ...store.current.aws_transcribe, vocabulary_name:null });
+    expect(store.dirty).toBe(false);
+  });
+  it('blocks Save while AWS Transcribe has no profile', async () => {
+    await store.load();
+    store.update('speech_engine', 'aws_transcribe');
+    expect(store.validationError).toBe('Choose an AWS profile for AWS Transcribe.');
+    await expect(store.save()).rejects.toThrow('Choose an AWS profile for AWS Transcribe.');
+    expect(updateSettings).not.toHaveBeenCalled();
+    store.update('aws_transcribe', { ...store.current.aws_transcribe, profile:'  ' });
+    expect(store.validationError).toBe('Choose an AWS profile for AWS Transcribe.');
+    store.update('aws_transcribe', aws);
+    expect(store.validationError).toBe('');
+    // The local engine needs no profile.
+    store.update('aws_transcribe', createDefaultSettings().aws_transcribe);
+    store.update('speech_engine', 'local');
+    expect(store.validationError).toBe('');
+  });
+  it('sends trimmed AWS options, with an empty value as null', async () => {
+    await store.load();
+    store.update('speech_engine', 'aws_transcribe');
+    store.update('aws_transcribe', { profile:' work ', region:'', language:'en-US', vocabulary_name:'  ' });
+    vi.mocked(updateSettings).mockImplementationOnce(async (settings) => ({ settings, warnings:[] }));
+    await store.save();
+    expect(vi.mocked(updateSettings).mock.calls[0][0].aws_transcribe).toEqual(aws);
+    expect(store.current.aws_transcribe).toEqual(aws);
+    expect(store.dirty).toBe(false);
+  });
+});
+
 describe('unreadable settings file', () => {
   it('offers a reset only when the backend reports why loading failed', async () => {
     vi.mocked(getSettings).mockRejectedValueOnce('Settings unavailable');

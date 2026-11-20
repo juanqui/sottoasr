@@ -1,12 +1,12 @@
 [package]
 name = "sottoasr"
 version = "0.12.1"
-description = "SottoASR — Local, privacy-first speech-to-text for macOS"
+description = "SottoASR — Local-first, privacy-first speech-to-text for macOS"
 authors = ["Juan Villa <juan@villafam.com>"]
 license = "MIT"
 repository = "https://github.com/juanqui/sottoasr"
 edition = "2021"
-rust-version = "1.80.0"
+rust-version = "1.94.1"
 
 [lib]
 name = "sottoasr_lib"
@@ -36,8 +36,8 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.
 # running after the stream was dropped.
 cpal = "0.16"
 hound = "3.5"
-# Resampling to 16 kHz, needed only by the ONNX backend
-rubato = { version = "0.16", optional = true }
+# Resampling to 16 kHz, for the ONNX backend and for AWS Transcribe
+rubato = "0.16"
 
 # ASR backends (selected via features)
 # FluidAudio: CoreML with CPU/Neural Engine execution on Apple Silicon
@@ -47,8 +47,20 @@ parakeet-rs = { version = "0.3", optional = true }
 
 # HTTP client and SHA-256 for model downloads (parakeet-rs)
 reqwest = { version = "0.12", features = ["stream"], optional = true }
-futures-util = { version = "0.3", optional = true }
 sha2 = { version = "0.10", optional = true }
+
+# AWS Transcribe: the optional cloud speech engine. The SDK's default HTTPS
+# client builds aws-lc; this app already links ring through rustls, so the
+# client is built with ring and the SDK defaults are off.
+aws-config = { version = "1.13", default-features = false, features = ["rt-tokio", "credentials-process", "sso"] }
+aws-sdk-transcribestreaming = { version = "1.129", default-features = false, features = ["rt-tokio"] }
+aws-smithy-http-client = { version = "1.5", features = ["default-client", "rustls-ring"] }
+# The error type of a credential provider, to give each cause its own message
+aws-credential-types = "1.3"
+# File system and environment types of the profile loader
+aws-types = "1.3"
+# The audio event stream of a Transcribe request; also model downloads (parakeet-rs)
+futures-util = "0.3"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
@@ -81,7 +93,7 @@ default = ["custom-protocol", "asr-fluidaudio", "llm-cleanup"]
 # FluidAudio: macOS only, CoreML/Apple Neural Engine, best performance
 asr-fluidaudio = ["dep:fluidaudio-rs"]
 # parakeet-rs: Cross-platform, ONNX Runtime CPU, wider compatibility
-asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:futures-util", "dep:rubato", "dep:sha2"]
+asr-parakeet = ["dep:parakeet-rs", "dep:reqwest", "dep:sha2"]
 
 # Optional conservative cleanup with a stock local instruction model (Python sidecar)
 llm-cleanup = []

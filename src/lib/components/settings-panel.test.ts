@@ -7,11 +7,11 @@ const { listeners, onClose, closeWindow } = vi.hoisted(() => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ onCloseRequested:onClose, close:closeWindow }) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen:vi.fn(async (name:string, callback:(event:unknown)=>void) => { listeners.set(name,callback); return () => listeners.delete(name); }) }));
-vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getSettingsLoadError:vi.fn(), resetSettings:vi.fn(), listInputDevices:vi.fn(), checkAllPermissions:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn() }));
+vi.mock('../utils/tauri', async (importOriginal) => ({ ...await importOriginal<typeof import('../utils/tauri')>(), getSettings:vi.fn(), updateSettings:vi.fn(), getSettingsLoadError:vi.fn(), resetSettings:vi.fn(), listInputDevices:vi.fn(), checkAllPermissions:vi.fn(), getLlmStatus:vi.fn(), prepareLlmModel:vi.fn(), getVocabularyStatus:vi.fn(), getModelStatus:vi.fn(), getAwsTranscribeOptions:vi.fn() }));
 import SettingsPanel from './settings-panel.svelte';
 import { listen } from '@tauri-apps/api/event';
 import { settingsStore, createDefaultSettings } from '../stores/settings.svelte';
-import { getSettings, updateSettings, getSettingsLoadError, resetSettings, listInputDevices, checkAllPermissions, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus } from '../utils/tauri';
+import { getSettings, updateSettings, getSettingsLoadError, resetSettings, listInputDevices, checkAllPermissions, getLlmStatus, prepareLlmModel, getVocabularyStatus, getModelStatus, getAwsTranscribeOptions } from '../utils/tauri';
 import type { LlmStatus } from '../utils/tauri';
 const status:LlmStatus = { available:true, unavailable_reason:null, downloaded:false, downloading:false, loaded:false, preparing:false, setup_error:null, model_name:'Test cleanup', model_path:null, model_url:'https://example.com/model', download_size_mb:227, last_cleanup_status:{kind:'idle'} };
 let component:ReturnType<typeof mount>|undefined;
@@ -27,6 +27,7 @@ beforeEach(() => {
   vi.mocked(updateSettings).mockImplementation(async (settings) => ({ settings, warnings:[] }));
   vi.mocked(getLlmStatus).mockResolvedValue({...status});
   vi.mocked(getVocabularyStatus).mockResolvedValue({supported:true, downloaded:false, loaded:false, preparing:false, download_size_mb:300, error:null});
+  vi.mocked(getAwsTranscribeOptions).mockResolvedValue({ profiles:[{ name:'work', region:'us-west-2' }], profiles_error:null, regions:[{ code:'us-west-2', name:'US West (Oregon)' }], languages:['en-US'] });
   settingsStore.loaded = false;
   listeners.clear();
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
@@ -204,6 +205,24 @@ it('keeps a saved microphone that is not connected and marks it unavailable', as
   expect(settingsStore.dirty).toBe(false);
   select.value = ''; select.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
   expect(settingsStore.current.input_device).toBeNull();
+});
+
+it('blocks Save until AWS Transcribe has a profile, and says so when the window closes', async () => {
+  await render(); button('Dictation').click(); flushSync();
+  expect(target.querySelector('h3')?.textContent).toBe('Speech recognition');
+  target.querySelector<HTMLInputElement>('input[name="speech-engine"][value="aws_transcribe"]')!.click(); flushSync();
+  expect(button('Save').disabled).toBe(true);
+  expect(target.querySelector('.footer-feedback')?.textContent).toContain('Choose an AWS profile for AWS Transcribe.');
+  onClose.mock.calls[0][0]({ preventDefault:vi.fn() }); flushSync();
+  expect(closeDialog().textContent).toContain('AWS Transcribe needs an AWS profile. Choose one in Dictation to save, or discard this draft.');
+  button('Keep editing').click(); flushSync();
+  const profile = target.querySelector<HTMLSelectElement>('select')!;
+  await vi.waitFor(() => expect(Array.from(profile.options).map((option) => option.value)).toEqual(['', 'work']));
+  profile.value = 'work'; profile.dispatchEvent(new Event('change', { bubbles:true })); flushSync();
+  expect(button('Save').disabled).toBe(false);
+  button('Save').click();
+  await vi.waitFor(() => expect(updateSettings).toHaveBeenCalledOnce());
+  expect(vi.mocked(updateSettings).mock.calls[0][0]).toMatchObject({ speech_engine:'aws_transcribe', aws_transcribe:{ profile:'work', region:null, language:'en-US', vocabulary_name:null } });
 });
 
 it('warns before a retention choice deletes older transcripts and recordings', async () => {

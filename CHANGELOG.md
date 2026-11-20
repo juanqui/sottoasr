@@ -2,6 +2,24 @@
 
 All notable changes to SottoASR are documented in this file.
 
+## [Unreleased]
+
+SottoASR can use Amazon Transcribe in place of the local speech model. This engine is optional and off by default: SottoASR stays local by default.
+
+### Added
+- An optional cloud speech engine, AWS Transcribe. In Settings → Dictation → Speech recognition, select "AWS Transcribe" in place of "On this Mac". Then select an AWS profile from `~/.aws/config` or `~/.aws/credentials`, a Region and one language. If you have a custom vocabulary in your AWS account, you can type its name. SottoASR stores no AWS credentials: the AWS SDK reads your AWS files, also for IAM Identity Center and `credential_process` profiles. A `credential_process` command needs its full path, because an app that Finder starts does not have the `PATH` of your shell.
+- In this mode, no speech model and no vocabulary model is in memory. SottoASR sends the audio of each completed dictation to Amazon Transcribe after the recording ends, and the audio of a kept recording when you reprocess it. AWS bills your account for each second of audio, and by default AWS can keep the audio to improve its services. The wait after a dictation is about a quarter of its length, plus about 0.6 s. Vocabulary assistance does not run. Exact replacements and AI cleanup still run on this Mac.
+- "Test connection" in Settings sends one second of silence to Amazon Transcribe with the values in the window, before you save. It shows the time and the Region, or an error that tells you what to fix, for example a missing permission or an expired sign-in.
+
+### Changed
+- With AWS Transcribe selected, a cancelled recording is not sent to AWS. SottoASR deletes it, and History keeps a cancelled entry without text. With the local engine, History keeps the transcript of a cancelled recording, as before.
+- The documents, the website, the setup window and the About window now say "local by default" in place of "local only". In the default configuration, no audio or text leaves your Mac.
+- Settings → Vocabulary and Settings → Advanced name the speech engine that is in use. With AWS Transcribe, the Vocabulary tab says that vocabulary assistance needs the local model.
+
+### Infrastructure
+- The AWS SDK for Rust is a new dependency. It adds 42 crates, all from the SDK and its HTTP stack. Each one has the Apache-2.0 license, the MIT license, or both. `THIRD_PARTY_LICENSES` lists them. The SDK uses the `ring` TLS provider that the app already links.
+- The minimum Rust version is 1.94.1, because the AWS SDK needs it. CI uses Rust 1.96.0. Two expressions changed to the forms that Clippy asks for at this Rust version.
+
 ## [0.12.1] — 2026-11-19
 
 Settings can delete the previous speech model, and "Restart Now" starts SottoASR again after an update.

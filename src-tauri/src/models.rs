@@ -13,6 +13,54 @@ fn default_llm_cleanup_status() -> LlmCleanupStatus {
     LlmCleanupStatus::Idle
 }
 
+fn default_aws_language() -> String {
+    "en-US".into()
+}
+
+/// Where speech is recognized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechEngine {
+    /// Parakeet Ultra on this Mac.
+    #[default]
+    Local,
+    /// Amazon Transcribe: the audio of each dictation goes to AWS.
+    AwsTranscribe,
+}
+
+/// Options of the Amazon Transcribe engine. They stay saved while the local
+/// engine is selected.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AwsTranscribeSettings {
+    /// A profile of `~/.aws/config` or `~/.aws/credentials`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// `None` uses the region of the profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default = "default_aws_language")]
+    pub language: String,
+    /// The name of a custom vocabulary in the AWS account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vocabulary_name: Option<String>,
+}
+
+impl Default for AwsTranscribeSettings {
+    fn default() -> Self {
+        Self { profile: None, region: None, language: default_aws_language(), vocabulary_name: None }
+    }
+}
+
+impl AwsTranscribeSettings {
+    /// Trims each value. An empty optional value becomes `None`.
+    pub fn normalize(&mut self) {
+        for value in [&mut self.profile, &mut self.region, &mut self.vocabulary_name] {
+            *value = value.take().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty());
+        }
+        self.language = self.language.trim().to_owned();
+    }
+}
+
 /// How the cleanup model proposes its edits to the frozen validator.
 ///
 /// `Retype` (default, production behavior): the model outputs the cleaned
@@ -152,6 +200,11 @@ pub struct Settings {
     /// until the user deletes them.
     #[serde(default)]
     pub audio_retention_days: u32,
+    /// The local model (default) or a cloud service.
+    #[serde(default)]
+    pub speech_engine: SpeechEngine,
+    #[serde(default)]
+    pub aws_transcribe: AwsTranscribeSettings,
 }
 
 impl Settings {
@@ -173,6 +226,7 @@ impl Settings {
         self.input_device = self.input_device.take()
             .map(|name| name.trim().to_owned())
             .filter(|name| !name.is_empty());
+        self.aws_transcribe.normalize();
         Ok(())
     }
 
@@ -224,7 +278,12 @@ impl Settings {
             }
         }
         crate::dictionary::validate(&self.dictionary)?;
-        crate::asr::vocabulary::validate(&self.vocabulary)
+        crate::asr::vocabulary::validate(&self.vocabulary)?;
+        crate::asr::aws_transcribe::validate(&self.aws_transcribe)?;
+        if self.speech_engine == SpeechEngine::AwsTranscribe && self.aws_transcribe.profile.is_none() {
+            return Err("Choose an AWS profile for AWS Transcribe.".into());
+        }
+        Ok(())
     }
 }
 
@@ -252,6 +311,8 @@ impl Default for Settings {
             sound_cues: false,
             history_retention_days: 0,
             audio_retention_days: 0,
+            speech_engine: SpeechEngine::default(),
+            aws_transcribe: AwsTranscribeSettings::default(),
         }
     }
 }
@@ -307,6 +368,9 @@ pub struct ModelStatus {
     /// serves. Settings offers to delete it.
     #[serde(default)]
     pub previous_model: Option<PreviousModel>,
+    /// The engine that transcribes. With a cloud engine no model is loaded.
+    #[serde(default)]
+    pub engine: SpeechEngine,
 }
 
 #[cfg(test)]
@@ -353,9 +417,10 @@ mod tests {
         // A legacy history limit must never become a deletion policy.
         assert_eq!(loaded.history_retention_days, 0);
         assert_eq!(loaded.audio_retention_days, 0);
-        let saved = serde_json::to_string(&loaded).unwrap();
+        // Only the top level counts: the AWS options have their own `language`.
+        let saved = serde_json::to_value(&loaded).unwrap();
         for legacy in ["model_path", "language", "max_history"] {
-            assert!(!saved.contains(legacy), "{legacy} must not be written back");
+            assert!(saved.get(legacy).is_none(), "{legacy} must not be written back");
         }
     }
 
@@ -510,6 +575,58 @@ mod tests {
         assert!(s.push_to_talk_shortcut_alt.is_none());
         assert!(s.toggle_shortcut_alt.is_none());
         assert!(s.cancel_shortcut_alt.is_none());
+        // A file of an earlier version selects no engine: the local model is
+        // used. Its legacy `language` key is not the AWS language.
+        assert_eq!(s.speech_engine, SpeechEngine::Local);
+        assert_eq!(s.aws_transcribe, AwsTranscribeSettings::default());
+        assert_eq!(s.aws_transcribe.language, "en-US");
+    }
+
+    #[test]
+    fn the_local_engine_is_the_default_and_the_cloud_engine_needs_a_profile() {
+        assert_eq!(Settings::default().speech_engine, SpeechEngine::Local);
+        assert_eq!(serde_json::to_value(Settings::default()).unwrap()["speech_engine"], "local");
+
+        let mut cloud = Settings { speech_engine: SpeechEngine::AwsTranscribe, ..Default::default() };
+        assert_eq!(cloud.validate().unwrap_err(), "Choose an AWS profile for AWS Transcribe.");
+        // Spaces only is no profile.
+        cloud.aws_transcribe.profile = Some("   ".into());
+        cloud.normalize().unwrap();
+        assert_eq!(cloud.validate().unwrap_err(), "Choose an AWS profile for AWS Transcribe.");
+        cloud.aws_transcribe.profile = Some("  work ".into());
+        cloud.aws_transcribe.vocabulary_name = Some(String::new());
+        cloud.normalize().unwrap();
+        assert_eq!(cloud.validate(), Ok(()));
+        assert_eq!(cloud.aws_transcribe.profile.as_deref(), Some("work"));
+        assert_eq!(cloud.aws_transcribe.vocabulary_name, None);
+
+        // The AWS options are examined in local mode too, but no profile is needed.
+        let local = Settings { aws_transcribe: AwsTranscribeSettings { region: Some("nowhere-1".into()), ..Default::default() }, ..Default::default() };
+        assert!(local.validate().unwrap_err().contains("Region"));
+    }
+
+    #[test]
+    fn the_speech_engine_and_its_options_survive_a_round_trip() {
+        let saved = Settings {
+            speech_engine: SpeechEngine::AwsTranscribe,
+            aws_transcribe: AwsTranscribeSettings {
+                profile: Some("work".into()),
+                region: Some("eu-west-1".into()),
+                language: "de-DE".into(),
+                vocabulary_name: Some("team-words".into()),
+            },
+            ..Default::default()
+        };
+        let json = serde_json::to_value(&saved).unwrap();
+        assert_eq!(json["speech_engine"], "aws_transcribe");
+        assert_eq!(json["aws_transcribe"], serde_json::json!({
+            "profile": "work", "region": "eu-west-1", "language": "de-DE", "vocabulary_name": "team-words"
+        }));
+        assert_eq!(serde_json::from_value::<Settings>(json).unwrap(), saved);
+        // Values that are not set are left out, and a missing or null value reads as not set.
+        assert_eq!(serde_json::to_value(AwsTranscribeSettings::default()).unwrap(), serde_json::json!({ "language": "en-US" }));
+        let partial: AwsTranscribeSettings = serde_json::from_str(r#"{"profile": null, "region": "us-east-2"}"#).unwrap();
+        assert_eq!(partial, AwsTranscribeSettings { region: Some("us-east-2".into()), ..Default::default() });
     }
 
     // --- AppStateEnum serde ---

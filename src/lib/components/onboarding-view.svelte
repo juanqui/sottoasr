@@ -219,7 +219,7 @@
       <div class="icon-large">🎙</div>
       <h1>Welcome to SottoASR</h1>
       <p class="subtitle">
-        Local, privacy-first speech-to-text for macOS.
+        Local-first, privacy-first speech-to-text for macOS.
         Press a hotkey, speak, and text appears at your cursor.
       </p>
 
@@ -227,8 +227,8 @@
         <div class="feature">
           <span class="feature-icon">🔒</span>
           <div>
-            <strong>100% Local</strong>
-            <span>Audio never leaves your Mac</span>
+            <strong>Local by default</strong>
+            <span>Audio stays on your Mac unless you choose a cloud engine</span>
           </div>
         </div>
         <div class="feature">

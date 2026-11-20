@@ -1,12 +1,13 @@
 # SottoASR
 
-Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor.
+Local-first, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text appears at your cursor. Local by default. An optional cloud engine, AWS Transcribe, works only after the user turns it on.
 
 ## Tech Stack
 - Tauri v2 (Rust backend)
 - Svelte 5 + TypeScript (frontend)
 - FluidAudio via fluidaudio-rs (CoreML/ANE — default macOS backend)
 - parakeet-rs (ONNX Runtime — cross-platform fallback via `asr-parakeet` feature flag)
+- AWS SDK for Rust (optional Amazon Transcribe engine)
 - cpal 0.16 (audio capture)
 - Vite 8 (build tool)
 
@@ -22,9 +23,10 @@ Local, privacy-first speech-to-text for macOS. Press a hotkey, speak, and text a
 - Menu bar / tray app only (no Dock icon — `LSUIElement` + `ActivationPolicy::Accessory`)
 - All audio capture and ASR inference in Rust (frontend is UI only)
 - Dual ASR backend via Cargo feature flags (`asr-fluidaudio` default, `asr-parakeet` optional)
+- Optional cloud speech engine: the `speech_engine` setting replaces the local engine with AWS Transcribe (no local speech model in memory)
 - Floating overlay window with Canvas-based waveform (ring buffer + dynamic range normalization)
 - Clipboard + CGEvent Cmd+V for paste-at-cursor (requires Accessibility permission)
-- Local-only processing (no cloud APIs, no telemetry)
+- Local by default. Audio or text leaves the Mac only through a feature that the user turned on, and that the interface names. No telemetry.
 - Multi-page Vite setup (separate HTML entries for overlay, history, settings, onboarding)
 - Svelte 5 rune stores use `.svelte.ts` extension (required for `$state()` compilation)
 

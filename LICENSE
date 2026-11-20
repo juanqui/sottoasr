@@ -26,7 +26,7 @@ THIRD-PARTY NOTICES
 
 SottoASR incorporates open-source software components. The principal
 dependencies and their licenses are listed below. For the comprehensive
-per-package listing (660+ packages), see the THIRD_PARTY_LICENSES file
+per-package listing (690+ packages), see the THIRD_PARTY_LICENSES file
 in the root of this repository.
 
 
@@ -68,6 +68,11 @@ parakeet-rs - ONNX Runtime ASR bindings
   License: MIT
   Copyright (c) parakeet-rs contributors
   https://github.com/jmg049/parakeet-rs
+
+AWS SDK for Rust - Optional Amazon Transcribe engine
+  License: Apache-2.0
+  Copyright (c) Amazon.com, Inc. or its affiliates
+  https://github.com/awslabs/aws-sdk-rust
 
 cpal - Cross-platform audio capture
   License: Apache-2.0
@@ -141,11 +146,11 @@ serde - Serialization framework
 NOTABLE LICENSE CATEGORIES
 --------------------------
 
-The majority of dependencies (545+) are dual-licensed MIT OR Apache-2.0.
+The majority of dependencies (560+) are dual-licensed MIT OR Apache-2.0.
 Additional license types used by dependencies include:
 
-  MIT ................ 201 packages
-  Apache-2.0 ......... 13 packages (sole-licensed)
+  MIT ................ 205 packages
+  Apache-2.0 ......... 35 packages (sole-licensed)
   BSD-3-Clause ........ 5 packages
   MPL-2.0 ............. 9 packages (file-level copyleft; see note below)
   Unicode-3.0 ........ 18 packages (ICU4X libraries)

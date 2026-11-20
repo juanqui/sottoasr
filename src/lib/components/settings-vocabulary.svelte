@@ -48,7 +48,11 @@
     <p class="setting-hint">No vocabulary words yet. Add a word above to get started.</p>
   {/if}
   {#if vocabulary.status?.supported === false}
-    <p class="setting-hint">Audio-assisted vocabulary is unavailable with this speech engine. Your words are saved; exact replacements below still work.</p>
+    {#if settingsStore.saved?.speech_engine === 'aws_transcribe'}
+      <p class="setting-hint">Vocabulary assistance works with the local speech model only. Exact replacements still apply. For AWS Transcribe, use a custom vocabulary (Dictation tab).</p>
+    {:else}
+      <p class="setting-hint">Audio-assisted vocabulary is unavailable with this speech engine. Your words are saved; exact replacements below still work.</p>
+    {/if}
   {:else if vocabulary.pending || vocabulary.status?.preparing}
     <p class="setting-hint" role="status">Preparing vocabulary support in the background. Dictation remains available.</p>
   {:else if vocabulary.status?.loaded}

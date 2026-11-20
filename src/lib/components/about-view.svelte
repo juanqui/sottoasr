@@ -13,6 +13,7 @@
         { name: 'NVIDIA Parakeet TDT v3', desc: 'Base model of Parakeet Ultra', license: 'CC-BY-4.0' },
         { name: 'FluidAudio', desc: 'CoreML/ANE inference engine (Swift)', license: 'Apache-2.0' },
         { name: 'parakeet-rs', desc: 'ONNX Runtime Rust bindings', license: 'MIT' },
+        { name: 'AWS SDK for Rust', desc: 'Amazon Transcribe client for the optional cloud engine', license: 'Apache-2.0' },
         { name: 'cpal', desc: 'Cross-platform audio capture', license: 'Apache-2.0' },
         { name: 'hound', desc: 'WAV encoding/decoding', license: 'Apache-2.0' },
         { name: 'rubato', desc: 'Audio resampling', license: 'MIT' },
@@ -48,10 +49,10 @@
     <h1>SottoASR</h1>
     <p class="version">Version {version}</p>
 
-    <p class="tagline">Local, privacy-first speech-to-text for macOS</p>
+    <p class="tagline">Local-first, privacy-first speech-to-text for macOS</p>
     <p class="detail">
-      All processing happens on-device.<br />
-      No audio or text is ever sent to a cloud service.
+      By default, all processing happens on this Mac.<br />
+      Audio goes to a cloud service only if you choose AWS Transcribe in Settings.
     </p>
   </div>
 

@@ -24,7 +24,7 @@ datasets:
 
 **5-bit MLX-quantized** version of the [SottoASR transcript cleanup model](https://huggingface.co/juanquivilla/sotto-cleanup-lfm25-350m), optimized for inference on **Apple Silicon** (M1/M2/M3/M4). This is the **recommended deployment variant** — it delivers near-full-precision quality at 3x smaller size.
 
-This model powers on-device transcript cleanup in [SottoASR](https://sottoasr.app) — a local, privacy-first speech-to-text application for macOS.
+This model powers on-device transcript cleanup in [SottoASR](https://sottoasr.app) — a local-first, privacy-first speech-to-text application for macOS.
 
 ## Key Specs
 

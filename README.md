@@ -1,8 +1,8 @@
 # SottoASR
 
-**Local, privacy-first speech-to-text for macOS.**
+**Local-first, privacy-first speech-to-text for macOS.**
 
-Press a hotkey, speak, and text appears at your cursor. Speech recognition runs locally through CoreML, and optional cleanup uses MLX on the GPU. Your recordings stay on this Mac.
+Press a hotkey, speak, and text appears at your cursor. By default, speech recognition runs locally through CoreML, optional cleanup uses MLX on the GPU, and your recordings stay on this Mac. An optional cloud engine, [AWS Transcribe](#aws-transcribe-optional), works only after you turn it on.
 
 <!-- ![SottoASR screenshot](docs/images/screenshot.png) -->
 
@@ -21,7 +21,8 @@ Press a hotkey, speak, and text appears at your cursor. Speech recognition runs 
 - **Optional AI cleanup** -- remove clear fillers and accidental repeats locally with MiniCPM5 2B. The original stays in History. Off by default.
 - **Onboarding flow** -- guided first-launch setup with automatic model download and progress
 - **Dark and light appearance** -- follows the macOS setting
-- **Fully local** -- powered by FluidAudio (CoreML/Apple Neural Engine) with the Parakeet Ultra model
+- **Local by default** -- powered by FluidAudio (CoreML/Apple Neural Engine) with the Parakeet Ultra model
+- **Optional cloud engine** -- [AWS Transcribe](#aws-transcribe-optional) with your own AWS account, for Macs with little free memory. Off by default.
 
 ## Requirements
 
@@ -30,6 +31,7 @@ Press a hotkey, speak, and text appears at your cursor. Speech recognition runs 
 - About 630 MB of disk space for the speech model, which onboarding downloads automatically
 - Optional acoustic vocabulary: about 103 MB, prepared when you save your first words
 - Optional AI cleanup: about 1.4 GB for the cleanup model, plus its Python runtime. You do not need to install Python. If no native arm64 Python 3.11 to 3.14 is installed, SottoASR downloads its own copy.
+- Optional AWS Transcribe: an AWS account and an internet connection
 - Microphone permission
 - Accessibility permission (for paste-at-cursor)
 
@@ -37,7 +39,7 @@ Press a hotkey, speak, and text appears at your cursor. Speech recognition runs 
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.80+ (CI uses 1.94)
+- [Rust](https://rustup.rs/) 1.94.1+ (CI uses 1.96.0)
 - [Node.js](https://nodejs.org/) 20.19+ or 22.12+ (CI uses 24)
 - Xcode or the Xcode Command Line Tools (`xcode-select --install`), for the Swift compiler
 - Tauri CLI: `cargo install tauri-cli --version "^2"`
@@ -69,7 +71,7 @@ This produces `SottoASR.app` and a `.dmg` installer in `src-tauri/target/release
 |---|---|---|
 | `Cmd+Shift+Space` | Push-to-talk | Hold to record, release to transcribe and paste |
 | `Cmd+Shift+D` | Toggle | Press to start recording, press again to stop and paste |
-| `Escape` | -- | Cancel the current recording. Nothing is pasted. History keeps the transcript, marked as cancelled. |
+| `Escape` | -- | Cancel the current recording. Nothing is pasted. With the local engine, History keeps the transcript, marked as cancelled. With AWS Transcribe, SottoASR does not send the recording, and History keeps a cancelled entry without text. |
 | `Cmd+Shift+,` | -- | Open Settings |
 
 You can change each shortcut in **Settings → General**. Push to talk, toggle and cancel can also have an alternate shortcut. SottoASR registers the cancel shortcut only while it records, so `Escape` works normally in other apps.
@@ -84,7 +86,7 @@ Hotkey pressed
     → (AI cleanup on) warm the resident cleanup model with fixed text
     → Disk worker writes a private WAV file and checkpoints it about once per second
 Stop
-  → Parakeet Ultra recognizes the full recording through CoreML
+  → Parakeet Ultra recognizes the full recording through CoreML (or Amazon Transcribe, if you selected it)
     → Optional acoustic vocabulary checks saved words against the audio
       → Exact replacements apply once
         → Optional cleanup processes bounded text windows in batches of up to 16
@@ -114,6 +116,43 @@ Cleanup is off by default. A failed, rejected, or incomplete window leaves its r
 
 If cleanup reports a runtime problem, click **Repair cleanup runtime** at the top of Settings. A repair builds a new runtime beside the old one and replaces the old one only after the new one passes its check.
 
+## AWS Transcribe (optional)
+
+SottoASR transcribes on this Mac by default. If your Mac has little free memory, or you prefer a cloud service, you can use Amazon Transcribe instead. In this mode, SottoASR loads no speech model and no vocabulary model, and it sends the audio of each completed dictation to AWS with your own AWS account. On an M2 Pro, the system used about 600 MB less memory with AWS Transcribe than with Parakeet Ultra loaded and in use. AWS Transcribe is off until you turn it on.
+
+### Setup
+
+1. Create or pick an AWS profile in `~/.aws/config` or `~/.aws/credentials`. Profiles with static keys, IAM Identity Center or `credential_process` work. A `credential_process` command needs its full path, because an app that Finder starts does not have the `PATH` of your shell.
+2. Give the profile the IAM permission `transcribe:StartStreamTranscription`.
+3. Open **Settings → Dictation**. Under **Speech recognition**, select **AWS Transcribe**.
+4. Select the **AWS profile**, the **Region** and the **Language**. If you have a custom vocabulary in your AWS account, type its name in **Custom vocabulary**. It must be for the same Region and language.
+5. Click **Test connection**. SottoASR sends one second of silence to Amazon Transcribe and shows the result.
+6. Click **Save**.
+
+To go back, select **On this Mac** and click **Save**. SottoASR then loads Parakeet Ultra again. If the model is not on disk, SottoASR downloads it first.
+
+### What SottoASR sends
+
+- After a recording ends, SottoASR sends the audio of that dictation as 16 kHz 16-bit PCM over TLS. The destination is the Amazon Transcribe streaming endpoint of the selected Region (`transcribestreaming.<region>.amazonaws.com`).
+- When you reprocess a kept recording in History, SottoASR sends that recording.
+- **Test connection** sends one second of silence.
+- SottoASR does not send a cancelled recording. It deletes the recording, and History keeps a cancelled entry without text.
+
+SottoASR stores no AWS credentials. The AWS SDK for Rust reads your AWS files when it signs a request. [SECURITY.md](SECURITY.md) lists each network request.
+
+### Cost and data use
+
+- AWS bills your account for each second of audio. See [Amazon Transcribe pricing](https://aws.amazon.com/transcribe/pricing/).
+- By default, AWS can keep the audio to improve its services. An AWS Organizations opt-out policy stops that. See [the opt-out page of AWS](https://docs.aws.amazon.com/transcribe/latest/dg/opt-out.html).
+
+### Limits
+
+- One language. SottoASR does not use the automatic language identification of Amazon Transcribe.
+- The wait after a dictation is about a quarter of the length of the dictation, plus about 0.6 s. On a 150 s recording, Amazon Transcribe worked at 4.3 times real time.
+- Vocabulary assistance (**Words you use**) does not run, because it needs the local model. Exact replacements and AI cleanup still run on this Mac. For names and terms, use a custom vocabulary in your AWS account.
+- AWS Transcribe needs an internet connection. If a request fails, SottoASR shows the error and keeps the recording, so that you can reprocess it from History.
+- A new installation starts with the local engine, and its setup window downloads Parakeet Ultra (about 630 MB). You can select AWS Transcribe after the setup.
+
 ## Settings
 
 Settings has four tabs. A status area above the tabs shows the speech model and AI cleanup.
@@ -121,7 +160,7 @@ Settings has four tabs. A status area above the tabs shows the speech model and 
 | Tab | Contents |
 |---|---|
 | General | Keyboard shortcuts, **Launch at login**, **Check for updates** |
-| Dictation | **Microphone**, **Sound cues**, **AI transcript cleanup**, **Paste automatically**, **Restore clipboard**, **Return to the original app**, **Show recording overlay** |
+| Dictation | **Speech recognition**, **Microphone**, **Sound cues**, **AI transcript cleanup**, **Paste automatically**, **Restore clipboard**, **Return to the original app**, **Show recording overlay** |
 | Vocabulary | **Words you use** (up to 100) and **Exact replacements** (up to 200) |
 | Advanced | **Keep transcripts** and **Keep recordings**, permission status, local models, and the AI cleanup strategy |
 
@@ -136,7 +175,7 @@ If a speech or vocabulary model file differs from the verified release, dictatio
 If a dictation fails or is interrupted, or SottoASR exits during one, History lists the recording for recovery. At launch, SottoASR opens History when recordings wait for recovery. Each row shows the date, the duration and the audio path.
 
 1. Click **Show in Finder** to locate a recording.
-2. Click **Reprocess** to transcribe it locally and save the result in History.
+2. Click **Reprocess** to transcribe it with the selected speech engine and save the result in History. With AWS Transcribe, this sends the recording to AWS.
 3. Copy the recovered transcript when you are ready. Recovery never pastes automatically.
 4. To remove a recording that you do not need, click **Delete audio**.
 
@@ -172,7 +211,7 @@ Restart SottoASR after you grant access.
 
 ## Privacy
 
-Speech recognition and cleanup run on this Mac. SottoASR never sends audio or transcript text over the network. It connects to GitHub for app updates and for the optional standalone Python, to Hugging Face for models, and to PyPI for the cleanup runtime. [SECURITY.md](SECURITY.md) lists each request and when it happens.
+By default, speech recognition and cleanup run on this Mac, and SottoASR sends no audio or transcript text over the network. If you turn on [AWS Transcribe](#aws-transcribe-optional), SottoASR sends the audio of each completed dictation to AWS. It does not send History, or the text that AWS returns. SottoASR also connects to GitHub for app updates and for the optional standalone Python, to Hugging Face for models, and to PyPI for the cleanup runtime. [SECURITY.md](SECURITY.md) lists each request and when it happens.
 
 ## Tech Stack
 
@@ -182,6 +221,7 @@ Speech recognition and cleanup run on this Mac. SottoASR never sends audio or tr
 | Frontend | [Svelte 5](https://svelte.dev/) + TypeScript |
 | ASR engine (default) | [FluidAudio](https://github.com/FluidInference/FluidAudio) via the [vendored ASR bridge](src-tauri/vendor/fluidaudio-rs/README.md) (CoreML / Apple Neural Engine) |
 | ASR engine (optional) | [parakeet-rs](https://github.com/altunenes/parakeet-rs) (ONNX Runtime, cross-platform) |
+| Cloud speech engine (optional) | [AWS SDK for Rust](https://github.com/awslabs/aws-sdk-rust) (optional Amazon Transcribe engine) |
 | AI cleanup (optional) | Python sidecar with [MLX](https://github.com/ml-explore/mlx) and mlx-lm |
 | Audio capture | [cpal](https://github.com/RustAudioGroup/cpal) 0.16 |
 | Build tool | [Vite](https://vitejs.dev/) 8 |
